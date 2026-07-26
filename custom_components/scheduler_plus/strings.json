@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Scheduler+",
+        "description": "Scheduler+ is a visual scheduling engine for lights and climate devices. Individual schedules are created afterwards from the Scheduler+ dashboard."
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Test-only dependencies for Scheduler+.
+#
+# pytest-homeassistant-custom-component bundles the Home Assistant core test
+# harness (the `hass` fixture, MockConfigEntry, config entry setup helpers)
+# and pins its own compatible pytest / pytest-asyncio versions internally,
+# so those are not listed separately here.
+#
+# TODO: pin an exact version once CI is set up, matching the minimum
+# Home Assistant version this integration targets (see the "homeassistant"
+# key in hacs.json).
+pytest-homeassistant-custom-component
