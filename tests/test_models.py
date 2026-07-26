@@ -1,0 +1,87 @@
+"""Unit tests for Scheduler+ domain models."""
+
+from __future__ import annotations
+
+from custom_components.scheduler_plus.const import DeviceType, TimeProviderType
+from custom_components.scheduler_plus.models import Rule, Schedule, TimeSpec, Weekday
+
+
+def test_time_spec_round_trip() -> None:
+    """TimeSpec should survive a to_dict/from_dict round trip unchanged."""
+    spec = TimeSpec(provider=TimeProviderType.SUNSET, params={"offset_minutes": -15})
+
+    restored = TimeSpec.from_dict(spec.to_dict())
+
+    assert restored == spec
+
+
+def test_time_spec_to_dict_defaults_to_empty_params() -> None:
+    """A TimeSpec with no params should serialize to an empty params dict."""
+    spec = TimeSpec(provider=TimeProviderType.FIXED)
+
+    assert spec.to_dict() == {"provider": "fixed", "params": {}}
+
+
+def test_rule_round_trip() -> None:
+    """Rule should survive a to_dict/from_dict round trip unchanged."""
+    rule = Rule(
+        id="rule-1",
+        name="Weekdays",
+        enabled=True,
+        days=frozenset({Weekday.MONDAY, Weekday.TUESDAY}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+        action={"brightness": 255},
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+
+
+def test_rule_to_dict_sorts_days() -> None:
+    """Serialized days must be sorted, since frozenset iteration order is not."""
+    rule = Rule(
+        id="rule-1",
+        name="Weekend",
+        days=frozenset({Weekday.SUNDAY, Weekday.SATURDAY}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "08:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "22:00"}),
+    )
+
+    assert rule.to_dict()["days"] == ["sat", "sun"]
+
+
+def test_schedule_round_trip() -> None:
+    """Schedule should survive a to_dict/from_dict round trip, including nested rules."""
+    rule = Rule(
+        id="rule-1",
+        name="Weekdays",
+        days=frozenset({Weekday.MONDAY}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+    )
+    schedule = Schedule(
+        id="sched-1",
+        name="Office Lights",
+        device_type=DeviceType.LIGHT,
+        entities=["light.office"],
+        rules=[rule],
+    )
+
+    restored = Schedule.from_dict(schedule.to_dict())
+
+    assert restored == schedule
+
+
+def test_schedule_defaults_enabled_and_rules() -> None:
+    """A Schedule constructed without enabled/rules should default to True/[]."""
+    schedule = Schedule(
+        id="sched-1",
+        name="Lobby Lights",
+        device_type=DeviceType.LIGHT,
+        entities=["light.lobby"],
+    )
+
+    assert schedule.enabled is True
+    assert schedule.rules == []

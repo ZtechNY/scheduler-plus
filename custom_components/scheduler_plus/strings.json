@@ -6,5 +6,17 @@
         "description": "Scheduler+ is a visual scheduling engine for lights and climate devices. Individual schedules are created afterwards from the Scheduler+ dashboard."
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "schedule_enabled": {
+        "name": "Enabled"
+      }
+    },
+    "sensor": {
+      "schedule_next_event": {
+        "name": "Next event"
+      }
+    }
   }
 }

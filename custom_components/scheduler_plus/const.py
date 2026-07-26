@@ -9,9 +9,8 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "scheduler_plus"
 
-# Platforms forwarded from the config entry. Populated as platform modules
-# (sensor.py, binary_sensor.py, ...) are implemented.
-PLATFORMS: Final[list[Platform]] = []
+# Platforms forwarded from the config entry.
+PLATFORMS: Final[list[Platform]] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 # Home Assistant Storage helper configuration. Bump STORAGE_VERSION and add a
 # migration function whenever the persisted schema shape changes.

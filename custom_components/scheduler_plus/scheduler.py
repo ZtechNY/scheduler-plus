@@ -106,6 +106,39 @@ class SchedulerEngine:
                 unsub()
         self._unsub_rules.clear()
 
+    async def async_get_next_event(
+        self, schedule: Schedule
+    ) -> tuple[datetime, str] | None:
+        """Return the soonest upcoming (when, "on" | "off") for `schedule`.
+
+        Read-only: reuses _async_resolve_occurrence but never schedules or
+        fires anything. Returns None if the schedule has no enabled rules,
+        or none of them resolve to a future occurrence.
+        """
+        now = dt_util.now()
+        soonest: tuple[datetime, str] | None = None
+
+        for rule in schedule.rules:
+            if not rule.enabled:
+                continue
+
+            for days_ago in (1, 0):
+                reference_date = (now - timedelta(days=days_ago)).date()
+                occurrence = await self._async_resolve_occurrence(
+                    rule, reference_date
+                )
+                if occurrence is None:
+                    continue
+
+                on_at, off_at = occurrence
+                for when, label in ((on_at, "on"), (off_at, "off")):
+                    if when <= now:
+                        continue
+                    if soonest is None or when < soonest[0]:
+                        soonest = (when, label)
+
+        return soonest
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Re-scan schedules whenever the coordinator's data changes."""
@@ -134,7 +167,16 @@ class SchedulerEngine:
                 continue
 
             for rule in schedule.rules:
-                await self._async_refresh_rule(schedule, rule, device_handler, now)
+                try:
+                    await self._async_refresh_rule(
+                        schedule, rule, device_handler, now
+                    )
+                except Exception:  # noqa: BLE001 - isolate one rule's failure
+                    _LOGGER.exception(
+                        "Failed to refresh rule '%s' in schedule '%s'",
+                        rule.name,
+                        schedule.name,
+                    )
 
     async def _async_refresh_rule(
         self,
@@ -166,9 +208,20 @@ class SchedulerEngine:
             for entity_id in schedule.entities:
                 if on_at <= now:
                     # Restarted/reloaded mid-window: catch the device up now.
-                    await device_handler.async_turn_on(
-                        self.hass, entity_id, rule.action
-                    )
+                    # Caught broadly and isolated per entity (e.g. an entity
+                    # still unavailable right after HA startup) so one
+                    # failure can't abort scheduling for other entities,
+                    # rules, or schedules in the same refresh pass.
+                    try:
+                        await device_handler.async_turn_on(
+                            self.hass, entity_id, rule.action
+                        )
+                    except Exception:  # noqa: BLE001
+                        _LOGGER.exception(
+                            "Failed to catch up '%s' to on for rule '%s'",
+                            entity_id,
+                            rule.name,
+                        )
                 else:
                     unsub_list.append(
                         self._schedule_turn_on(
