@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import PLATFORMS
 from .coordinator import SchedulerPlusCoordinator
+from .scheduler import SchedulerEngine
 from .storage import SchedulerPlusStore
 from .websocket import async_register_websocket_commands
 
-type SchedulerPlusConfigEntry = ConfigEntry[SchedulerPlusCoordinator]
+
+@dataclass
+class SchedulerPlusData:
+    """Runtime data owned by a Scheduler+ config entry."""
+
+    coordinator: SchedulerPlusCoordinator
+    engine: SchedulerEngine
+
+
+type SchedulerPlusConfigEntry = ConfigEntry[SchedulerPlusData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -34,7 +46,10 @@ async def async_setup_entry(
     coordinator = SchedulerPlusCoordinator(hass, store)
     await coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = coordinator
+    engine = SchedulerEngine(hass, coordinator)
+    await engine.async_start()
+
+    entry.runtime_data = SchedulerPlusData(coordinator=coordinator, engine=engine)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -45,4 +60,7 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: SchedulerPlusConfigEntry
 ) -> bool:
     """Unload a Scheduler+ config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        entry.runtime_data.engine.async_stop()
+    return unload_ok
