@@ -127,7 +127,9 @@ export class SchedulerPlusCard extends LitElement {
         </div>
         <div class="content">${this._renderContent()}</div>
         <div class="card-actions">
-          <mwc-button @click=${this._openAddDialog}>Add schedule</mwc-button>
+          <button type="button" class="btn btn-primary" @click=${this._openAddDialog}>
+            Add schedule
+          </button>
         </div>
       </ha-card>
       <scheduler-plus-schedule-editor
@@ -268,6 +270,28 @@ export class SchedulerPlusCard extends LitElement {
     }
     .content {
       padding: 0 16px 16px;
+    }
+    .btn {
+      font: inherit;
+      font-weight: 500;
+      font-size: 14px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
+    }
+    .btn-primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .btn-primary:hover {
+      filter: brightness(0.95);
     }
     .placeholder {
       padding: 16px 0;

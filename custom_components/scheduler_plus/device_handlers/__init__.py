@@ -14,11 +14,13 @@ from ..const import DeviceType
 from .base import DeviceHandler, DeviceHandlerRegistry
 from .climate import ClimateDeviceHandler
 from .light import LightDeviceHandler
+from .switch import SwitchDeviceHandler
 
 DEFAULT_DEVICE_HANDLERS = DeviceHandlerRegistry(
     {
         DeviceType.LIGHT: LightDeviceHandler(),
         DeviceType.CLIMATE: ClimateDeviceHandler(),
+        DeviceType.SWITCH: SwitchDeviceHandler(),
     }
 )
 

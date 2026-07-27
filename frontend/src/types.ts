@@ -4,13 +4,14 @@
  * exact shapes that arrive over the websocket API as JSON.
  */
 
-export type DeviceType = "light" | "climate";
+export type DeviceType = "light" | "climate" | "switch";
 
-export const DEVICE_TYPES: readonly DeviceType[] = ["light", "climate"];
+export const DEVICE_TYPES: readonly DeviceType[] = ["light", "climate", "switch"];
 
 export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   light: "Light",
   climate: "Climate",
+  switch: "Switch",
 };
 
 export type TimeProviderType = "fixed" | "sunrise" | "sunset" | "yidcal";

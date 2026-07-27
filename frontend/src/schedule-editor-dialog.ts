@@ -1,6 +1,7 @@
 import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 
 import type { HomeAssistant, RuleInput, ScheduleInput } from "./api";
@@ -184,13 +185,16 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           </div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 
-          <ha-textfield
-            label="Name"
+          <label class="field-label" for="schedule-name">Name</label>
+          <input
+            id="schedule-name"
+            type="text"
+            class="native-input"
             .value=${this._name}
-            @input=${(e: InputEvent) => {
+            @input=${(e: Event) => {
               this._name = (e.target as HTMLInputElement).value;
             }}
-          ></ha-textfield>
+          />
 
           <label class="field-label" for="device-type">Device type</label>
           <select
@@ -236,17 +240,24 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                 </div>
               `,
             )}
-            <ha-entity-picker
-              .hass=${this.hass}
-              .includeDomains=${[this._deviceType]}
-              @value-changed=${(e: CustomEvent<{ value?: string }>) =>
-                this._addEntity(e.detail.value)}
-            ></ha-entity-picker>
+            ${keyed(
+              this._entities.length,
+              html`
+                <ha-entity-picker
+                  .hass=${this.hass}
+                  .includeDomains=${[this._deviceType]}
+                  @value-changed=${(e: CustomEvent<{ value?: string }>) =>
+                    this._addEntity(e.detail.value)}
+                ></ha-entity-picker>
+              `,
+            )}
           </div>
 
           <div class="rules-header">
             <label class="field-label">Rules</label>
-            <mwc-button @click=${this._openAddRuleDialog}>Add rule</mwc-button>
+            <button type="button" class="btn" @click=${this._openAddRuleDialog}>
+              Add rule
+            </button>
           </div>
           ${this._rules.length === 0
             ? html`<div class="placeholder">No rules yet.</div>`
@@ -257,8 +268,15 @@ export class SchedulerPlusScheduleEditor extends LitElement {
               `}
 
           <div class="dialog-actions">
-            <mwc-button @click=${this._closeDialog}>Cancel</mwc-button>
-            <mwc-button .disabled=${this._saving} @click=${this._save}>Save</mwc-button>
+            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              ?disabled=${this._saving}
+              @click=${this._save}
+            >
+              Save
+            </button>
           </div>
         </div>
       </ha-dialog>
@@ -314,6 +332,32 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       padding-top: 8px;
       border-top: 1px solid var(--divider-color);
     }
+    .btn {
+      font: inherit;
+      font-weight: 500;
+      font-size: 14px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .btn-primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .btn-primary:hover {
+      filter: brightness(0.95);
+    }
     .error {
       color: var(--error-color);
     }
@@ -321,7 +365,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       font-size: 0.85em;
       color: var(--secondary-text-color);
     }
-    .native-select {
+    .native-select,
+    .native-input {
       font: inherit;
       color: var(--primary-text-color);
       background: var(--card-background-color);

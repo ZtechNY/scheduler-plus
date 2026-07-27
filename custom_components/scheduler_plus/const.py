@@ -27,6 +27,7 @@ class DeviceType(StrEnum):
 
     LIGHT = "light"
     CLIMATE = "climate"
+    SWITCH = "switch"
 
 
 class TimeProviderType(StrEnum):

@@ -95,11 +95,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._brightnessPct = Math.round((brightness / 255) * 100);
       this._useTransition = rule?.action.transition !== undefined;
       this._transitionSeconds = (rule?.action.transition as number | undefined) ?? 0;
-    } else {
+    } else if (deviceType === "climate") {
       this._hvacMode = (rule?.action.hvac_mode as string | undefined) ?? "heat";
       this._useTargetTemperature = rule?.action.target_temperature !== undefined;
       this._targetTemperature = (rule?.action.target_temperature as number | undefined) ?? 70;
     }
+    // Switches have no action-specific state to populate - Rule.action is
+    // always {} for a switch rule.
 
     this._error = undefined;
     this._open = true;
@@ -126,20 +128,21 @@ export class SchedulerPlusRuleEditor extends LitElement {
       return;
     }
 
-    const action: Action =
-      this._deviceType === "light"
-        ? {
-            ...(this._setBrightness
-              ? { brightness: Math.round((this._brightnessPct / 100) * 255) }
-              : {}),
-            ...(this._useTransition ? { transition: this._transitionSeconds } : {}),
-          }
-        : {
-            hvac_mode: this._hvacMode,
-            ...(this._useTargetTemperature
-              ? { target_temperature: this._targetTemperature }
-              : {}),
-          };
+    let action: Action = {};
+    if (this._deviceType === "light") {
+      action = {
+        ...(this._setBrightness
+          ? { brightness: Math.round((this._brightnessPct / 100) * 255) }
+          : {}),
+        ...(this._useTransition ? { transition: this._transitionSeconds } : {}),
+      };
+    } else if (this._deviceType === "climate") {
+      action = {
+        hvac_mode: this._hvacMode,
+        ...(this._useTargetTemperature ? { target_temperature: this._targetTemperature } : {}),
+      };
+    }
+    // Switches have no action - action stays {}.
 
     this._onSave?.({
       id: this._rule?.id,
@@ -163,13 +166,16 @@ export class SchedulerPlusRuleEditor extends LitElement {
           <div class="dialog-title">${this._rule ? "Edit rule" : "Add rule"}</div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 
-          <ha-textfield
-            label="Name"
+          <label class="field-label" for="rule-name">Name</label>
+          <input
+            id="rule-name"
+            type="text"
+            class="native-input"
             .value=${this._name}
-            @input=${(e: InputEvent) => {
+            @input=${(e: Event) => {
               this._name = (e.target as HTMLInputElement).value;
             }}
-          ></ha-textfield>
+          />
 
           <ha-formfield label="Enabled">
             <ha-switch
@@ -206,13 +212,11 @@ export class SchedulerPlusRuleEditor extends LitElement {
             (spec) => (this._offTime = spec),
           )}
 
-          ${this._deviceType === "light"
-            ? this._renderLightAction()
-            : this._renderClimateAction()}
+          ${this._renderActionFields()}
 
           <div class="dialog-actions">
-            <mwc-button @click=${this._closeDialog}>Cancel</mwc-button>
-            <mwc-button @click=${this._save}>Save</mwc-button>
+            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button type="button" class="btn btn-primary" @click=${this._save}>Save</button>
           </div>
         </div>
       </ha-dialog>
@@ -274,6 +278,18 @@ export class SchedulerPlusRuleEditor extends LitElement {
     `;
   }
 
+  private _renderActionFields() {
+    if (this._deviceType === "light") {
+      return this._renderLightAction();
+    }
+    if (this._deviceType === "climate") {
+      return this._renderClimateAction();
+    }
+    return html`
+      <span class="hint">Switches just turn on and off - nothing else to configure.</span>
+    `;
+  }
+
   private _renderLightAction() {
     return html`
       <ha-formfield label="Set brightness">
@@ -318,15 +334,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
       </span>
       ${this._useTransition
         ? html`
-            <ha-textfield
-              label="Fade duration (seconds)"
+            <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
+            <input
+              id="fade-duration"
               type="number"
+              class="native-input"
               .value=${String(this._transitionSeconds)}
-              @input=${(e: InputEvent) => {
+              @input=${(e: Event) => {
                 this._transitionSeconds =
                   Number((e.target as HTMLInputElement).value) || 0;
               }}
-            ></ha-textfield>
+            />
           `
         : nothing}
     `;
@@ -358,15 +376,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
       </ha-formfield>
       ${this._useTargetTemperature
         ? html`
-            <ha-textfield
-              label="Target temperature"
+            <label class="field-label" for="target-temperature">Target temperature</label>
+            <input
+              id="target-temperature"
               type="number"
+              class="native-input"
               .value=${String(this._targetTemperature)}
-              @input=${(e: InputEvent) => {
+              @input=${(e: Event) => {
                 this._targetTemperature =
                   Number((e.target as HTMLInputElement).value) || 0;
               }}
-            ></ha-textfield>
+            />
           `
         : nothing}
     `;
@@ -390,6 +410,32 @@ export class SchedulerPlusRuleEditor extends LitElement {
       gap: 8px;
       padding-top: 8px;
       border-top: 1px solid var(--divider-color);
+    }
+    .btn {
+      font: inherit;
+      font-weight: 500;
+      font-size: 14px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .btn-primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .btn-primary:hover {
+      filter: brightness(0.95);
     }
     .error {
       color: var(--error-color);
