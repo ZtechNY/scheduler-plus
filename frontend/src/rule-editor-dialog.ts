@@ -1,7 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 
-import type { RuleInput } from "./api";
+import type { HomeAssistant, Preferences, RuleInput } from "./api";
+import { fetchPreferences } from "./api";
 import type { Action, DeviceType, TimeProviderType, TimeSpec, Weekday } from "./types";
 import {
   TIME_PROVIDER_LABELS,
@@ -30,6 +31,19 @@ const CLIMATE_HVAC_MODE_LABELS: Record<ClimateHvacMode, string> = {
 };
 
 /**
+ * Fallback preferences used until fetchPreferences() resolves (or if it
+ * fails) - matches the backend's own defaults in const.py, so the presets
+ * work identically before the user has ever opened Scheduler+'s options
+ * flow (Settings > Devices & Services > Scheduler+ > Configure).
+ */
+const DEFAULT_PREFERENCES: Preferences = {
+  weekday_days: ["mon", "tue", "wed", "thu", "fri"],
+  weekend_days: ["sat", "sun"],
+  working_hours_start: "09:00",
+  working_hours_end: "17:00",
+};
+
+/**
  * Dialog for adding or editing a single Rule (days/on-time/off-time/action)
  * within a schedule. Purely local state: unlike the schedule editor, a rule
  * has no independent websocket command of its own - create_schedule and
@@ -39,7 +53,11 @@ const CLIMATE_HVAC_MODE_LABELS: Record<ClimateHvacMode, string> = {
  */
 @customElement("scheduler-plus-rule-editor")
 export class SchedulerPlusRuleEditor extends LitElement {
+  @property({ attribute: false }) hass!: HomeAssistant;
+
   @state() private _open = false;
+
+  @state() private _preferences: Preferences = DEFAULT_PREFERENCES;
 
   @state() private _deviceType: DeviceType = "light";
 
@@ -82,6 +100,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._deviceType = deviceType;
     this._rule = rule;
     this._onSave = onSave;
+    void this._loadPreferences();
 
     this._name = rule?.name ?? "";
     this._enabled = rule?.enabled ?? true;
@@ -107,6 +126,15 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._open = true;
   }
 
+  private async _loadPreferences(): Promise<void> {
+    try {
+      this._preferences = await fetchPreferences(this.hass);
+    } catch {
+      // Keep DEFAULT_PREFERENCES - the presets still work, just with the
+      // hardcoded Mon-Fri/Sat-Sun/9-5 split instead of the user's own.
+    }
+  }
+
   private _closeDialog = (): void => {
     this._open = false;
   };
@@ -115,6 +143,28 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._days = this._days.includes(day)
       ? this._days.filter((d) => d !== day)
       : [...this._days, day];
+  };
+
+  private _applyDayPreset = (days: readonly Weekday[]): void => {
+    this._days = [...days];
+  };
+
+  /**
+   * "After hours": every day, on at the end of the working day and off at
+   * the start of the next one - the common porch-light/security use case.
+   */
+  private _applyAfterHoursPreset = (): void => {
+    this._days = [...WEEKDAYS];
+    this._onTime = {
+      provider: "fixed",
+      // Selector.TimeSelector values include seconds ("17:00:00"); the
+      // fixed time provider only accepts "HH:MM".
+      params: { time: this._preferences.working_hours_end.slice(0, 5) },
+    };
+    this._offTime = {
+      provider: "fixed",
+      params: { time: this._preferences.working_hours_start.slice(0, 5) },
+    };
   };
 
   private _save = (): void => {
@@ -187,6 +237,28 @@ export class SchedulerPlusRuleEditor extends LitElement {
           </ha-formfield>
 
           <label class="field-label">Days</label>
+          <div class="day-presets">
+            <button type="button" class="btn" @click=${() => this._applyDayPreset(WEEKDAYS)}>
+              Every day
+            </button>
+            <button
+              type="button"
+              class="btn"
+              @click=${() => this._applyDayPreset(this._preferences.weekday_days)}
+            >
+              Weekdays
+            </button>
+            <button
+              type="button"
+              class="btn"
+              @click=${() => this._applyDayPreset(this._preferences.weekend_days)}
+            >
+              Weekend
+            </button>
+            <button type="button" class="btn" @click=${this._applyAfterHoursPreset}>
+              After hours
+            </button>
+          </div>
           <div class="days">
             ${WEEKDAYS.map(
               (day) => html`
@@ -452,6 +524,15 @@ export class SchedulerPlusRuleEditor extends LitElement {
       border: 1px solid var(--divider-color);
       border-radius: 4px;
       padding: 8px;
+    }
+    .day-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .day-presets .btn {
+      padding: 6px 12px;
+      font-size: 13px;
     }
     .native-input.offset {
       width: 80px;

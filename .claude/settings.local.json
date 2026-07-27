@@ -8,7 +8,10 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py tests/test_scheduler.py)",
-      "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/device_handlers/switch.py custom_components/scheduler_plus/device_handlers/__init__.py)"
+      "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/device_handlers/switch.py custom_components/scheduler_plus/device_handlers/__init__.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/config_flow.py custom_components/scheduler_plus/websocket.py)",
+      "Bash(python -c \"import json; json.load\\(open\\('custom_components/scheduler_plus/strings.json'\\)\\); json.load\\(open\\('custom_components/scheduler_plus/translations/en.json'\\)\\); print\\('JSON_OK'\\)\")",
+      "Bash(python -m py_compile custom_components/scheduler_plus/*.py custom_components/scheduler_plus/device_handlers/*.py custom_components/scheduler_plus/time_providers/*.py tests/*.py)"
     ]
   }
 }

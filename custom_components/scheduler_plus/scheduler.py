@@ -114,6 +114,13 @@ class SchedulerEngine:
         Read-only: reuses _async_resolve_occurrence but never schedules or
         fires anything. Returns None if the schedule is disabled, has no
         enabled rules, or none of them resolve to a future occurrence.
+
+        Unlike _async_refresh_all (which only ever needs today and
+        yesterday, since it re-runs every midnight to pick up each new
+        day), this looks from yesterday through 7 days ahead - enough to
+        guarantee checking every day-of-week at least once, so a rule
+        that e.g. only runs on Saturdays still reports its next occurrence
+        instead of appearing to have none just because today isn't Saturday.
         """
         if not schedule.enabled:
             return None
@@ -125,8 +132,8 @@ class SchedulerEngine:
             if not rule.enabled:
                 continue
 
-            for days_ago in (1, 0):
-                reference_date = (now - timedelta(days=days_ago)).date()
+            for days_offset in range(-1, 8):
+                reference_date = (now + timedelta(days=days_offset)).date()
                 occurrence = await self._async_resolve_occurrence(
                     rule, reference_date
                 )

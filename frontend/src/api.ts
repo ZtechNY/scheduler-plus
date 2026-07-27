@@ -4,7 +4,7 @@
  * `hass.callWS()` message directly.
  */
 
-import type { Rule, Schedule } from "./types";
+import type { Rule, Schedule, Weekday } from "./types";
 
 /** The minimal shape of one entity's state, as found in `hass.states`. */
 export interface HassEntityState {
@@ -83,4 +83,20 @@ export async function deleteSchedule(
     type: `${DOMAIN}/delete_schedule`,
     schedule_id: scheduleId,
   });
+}
+
+/**
+ * Scheduling preferences configured via Scheduler+'s options flow (Settings
+ * > Devices & Services > Scheduler+ > Configure). The rule editor uses
+ * these to power its Weekdays/Weekend/After hours quick-fill presets.
+ */
+export interface Preferences {
+  weekday_days: Weekday[];
+  weekend_days: Weekday[];
+  working_hours_start: string;
+  working_hours_end: string;
+}
+
+export async function fetchPreferences(hass: HomeAssistant): Promise<Preferences> {
+  return hass.callWS<Preferences>({ type: `${DOMAIN}/get_preferences` });
 }

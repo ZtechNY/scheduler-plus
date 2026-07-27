@@ -15,26 +15,43 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, DeviceType, TimeProviderType
+from .const import (
+    CONF_WEEKDAY_DAYS,
+    CONF_WEEKEND_DAYS,
+    CONF_WORKING_HOURS_END,
+    CONF_WORKING_HOURS_START,
+    DEFAULT_WEEKDAY_DAYS,
+    DEFAULT_WEEKEND_DAYS,
+    DEFAULT_WORKING_HOURS_END,
+    DEFAULT_WORKING_HOURS_START,
+    DOMAIN,
+    DeviceType,
+    TimeProviderType,
+)
 from .coordinator import SchedulerPlusCoordinator
 from .models import Rule, Schedule, Weekday
 from .storage import SchedulerPlusStoreData
 
 
-def _get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
-    """Return the coordinator for the single Scheduler+ config entry.
+def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
+    """Return the single Scheduler+ config entry, if set up.
 
     Looked up dynamically (rather than captured at registration time)
     because websocket commands are registered once in async_setup(), before
-    any config entry - and therefore any coordinator - necessarily exists.
+    any config entry necessarily exists.
     """
     entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries:
-        return None
-    return entries[0].runtime_data.coordinator
+    return entries[0] if entries else None
+
+
+def _get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
+    """Return the coordinator for the single Scheduler+ config entry."""
+    entry = _get_entry(hass)
+    return entry.runtime_data.coordinator if entry is not None else None
 
 
 _TIME_SPEC_SCHEMA = vol.Schema(
@@ -245,9 +262,46 @@ async def websocket_delete_schedule(
     connection.send_result(msg["id"], {})
 
 
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get_preferences"})
+@websocket_api.async_response
+async def websocket_get_preferences(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return the user's scheduling preferences.
+
+    Configured via Scheduler+'s options flow (Settings > Devices & Services
+    > Scheduler+ > Configure). The rule editor uses these to power its
+    Weekdays/Weekend/After hours quick-fill presets.
+    """
+    entry = _get_entry(hass)
+    if entry is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    options = entry.options
+    connection.send_result(
+        msg["id"],
+        {
+            "weekday_days": list(options.get(CONF_WEEKDAY_DAYS, DEFAULT_WEEKDAY_DAYS)),
+            "weekend_days": list(options.get(CONF_WEEKEND_DAYS, DEFAULT_WEEKEND_DAYS)),
+            "working_hours_start": options.get(
+                CONF_WORKING_HOURS_START, DEFAULT_WORKING_HOURS_START
+            ),
+            "working_hours_end": options.get(
+                CONF_WORKING_HOURS_END, DEFAULT_WORKING_HOURS_END
+            ),
+        },
+    )
+
+
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all Scheduler+ websocket commands."""
     websocket_api.async_register_command(hass, websocket_list_schedules)
     websocket_api.async_register_command(hass, websocket_create_schedule)
     websocket_api.async_register_command(hass, websocket_update_schedule)
     websocket_api.async_register_command(hass, websocket_delete_schedule)
+    websocket_api.async_register_command(hass, websocket_get_preferences)

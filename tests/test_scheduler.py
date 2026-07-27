@@ -14,7 +14,7 @@ without mocking the global clock.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -256,6 +256,30 @@ async def test_get_next_event_disabled_schedule_returns_none(
     next_event = await engine.async_get_next_event(schedule)
 
     assert next_event is None
+
+
+async def test_get_next_event_finds_occurrence_later_in_week(
+    engine: SchedulerEngine,
+) -> None:
+    """A rule active only a few days from now is still found.
+
+    Regression test: async_get_next_event previously only checked today and
+    yesterday (copying _async_refresh_all's window, which is fine there
+    since it re-runs every midnight) - a rule active on a day that isn't
+    today or yesterday would incorrectly report no next event at all.
+    """
+    now = dt_util.now()
+    future_date = (now + timedelta(days=3)).date()
+    future_weekday = list(Weekday)[future_date.weekday()]
+    rule = _make_rule(days=frozenset({future_weekday}))
+    schedule = _make_schedule(rule)
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is not None
+    when, label = next_event
+    assert when.date() == future_date
+    assert label == "on"
 
 
 async def test_refresh_all_skips_disabled_schedule(

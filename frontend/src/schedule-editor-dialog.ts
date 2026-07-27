@@ -280,7 +280,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           </div>
         </div>
       </ha-dialog>
-      <scheduler-plus-rule-editor></scheduler-plus-rule-editor>
+      <scheduler-plus-rule-editor .hass=${this.hass}></scheduler-plus-rule-editor>
     `;
   }
 

@@ -7,6 +7,20 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Scheduling preferences",
+        "description": "Used by the rule editor's quick-fill presets (Weekdays, Weekend, After hours).",
+        "data": {
+          "weekday_days": "Weekday days",
+          "weekend_days": "Weekend days",
+          "working_hours_start": "Working hours start",
+          "working_hours_end": "Working hours end"
+        }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "schedule_enabled": {
