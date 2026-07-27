@@ -4,7 +4,7 @@
  * `hass.callWS()` message directly.
  */
 
-import type { Rule, Schedule, Weekday } from "./types";
+import type { DeviceType, Rule, Schedule, Weekday } from "./types";
 
 /**
  * The slice of Home Assistant's frontend `hass` object this card depends
@@ -85,4 +85,29 @@ export interface Preferences {
 
 export async function fetchPreferences(hass: HomeAssistant): Promise<Preferences> {
   return hass.callWS<Preferences>({ type: `${DOMAIN}/get_preferences` });
+}
+
+/** One rule's on/off occurrence on a specific date, for the read-only Day view report. */
+export interface DayScheduleEvent {
+  schedule_id: string;
+  schedule_name: string;
+  device_type: DeviceType;
+  entities: string[];
+  rule_id: string;
+  rule_name: string;
+  on_at: string;
+  off_at: string;
+}
+
+export async function fetchDaySchedule(
+  hass: HomeAssistant,
+  date: string,
+  deviceType?: DeviceType,
+): Promise<DayScheduleEvent[]> {
+  const result = await hass.callWS<{ events: DayScheduleEvent[] }>({
+    type: `${DOMAIN}/get_day_schedule`,
+    date,
+    ...(deviceType ? { device_type: deviceType } : {}),
+  });
+  return result.events;
 }

@@ -450,6 +450,55 @@ async def test_refresh_rule_disabled_rule_schedules_nothing(
     assert rule.id not in engine._unsub_rules
 
 
+async def test_get_day_events_returns_occurrence_for_matching_rule(
+    engine: SchedulerEngine,
+) -> None:
+    """A schedule's enabled rule that applies on the date is included."""
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert len(events) == 1
+    found_rule, on_at, off_at = events[0]
+    assert found_rule is rule
+    assert on_at.date() == _MONDAY
+    assert off_at.date() == _MONDAY
+
+
+async def test_get_day_events_skips_inactive_weekday(
+    engine: SchedulerEngine,
+) -> None:
+    """A rule whose days don't include the requested date contributes nothing."""
+    rule = _make_rule(days=frozenset({Weekday.SUNDAY}))
+    schedule = _make_schedule(rule)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert events == []
+
+
+async def test_get_day_events_skips_disabled_rule(engine: SchedulerEngine) -> None:
+    """A disabled rule contributes nothing, even if its days would otherwise match."""
+    rule = _make_rule(enabled=False)
+    schedule = _make_schedule(rule)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert events == []
+
+
+async def test_get_day_events_skips_disabled_schedule(engine: SchedulerEngine) -> None:
+    """A disabled schedule contributes nothing, even with enabled rules."""
+    rule = _make_rule()
+    schedule = _make_schedule(rule)
+    schedule.enabled = False
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert events == []
+
+
 async def test_get_next_event_disabled_schedule_returns_none(
     engine: SchedulerEngine,
 ) -> None:

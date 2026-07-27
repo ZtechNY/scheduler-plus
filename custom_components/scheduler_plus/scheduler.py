@@ -150,6 +150,31 @@ class SchedulerEngine:
 
         return soonest
 
+    async def async_get_day_events(
+        self, schedule: Schedule, reference_date: date
+    ) -> list[tuple[Rule, datetime, datetime]]:
+        """Return (rule, on_at, off_at) for every enabled rule firing on `reference_date`.
+
+        Read-only, like async_get_next_event - resolves without scheduling
+        or firing anything. Powers the card's read-only day-agenda report:
+        unlike the engine's own scheduling decisions, this only ever
+        resolves exactly the requested date, not yesterday/tomorrow - a
+        report for a specific day should show exactly that day's
+        occurrences, not an overnight rule's bookkeeping window.
+        """
+        if not schedule.enabled:
+            return []
+
+        events: list[tuple[Rule, datetime, datetime]] = []
+        for rule in schedule.rules:
+            if not rule.enabled:
+                continue
+            occurrence = await self._async_resolve_occurrence(rule, reference_date)
+            if occurrence is not None:
+                on_at, off_at = occurrence
+                events.append((rule, on_at, off_at))
+        return events
+
     @staticmethod
     def _candidate_dates(rule: Rule, now: datetime) -> list[date]:
         """Reference dates worth resolving `rule` against for async_get_next_event.

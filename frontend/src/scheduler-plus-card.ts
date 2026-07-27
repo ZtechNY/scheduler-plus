@@ -1,10 +1,12 @@
-import { mdiDelete, mdiPencil } from "@mdi/js";
+import { mdiCalendarClock, mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./api";
 import { deleteSchedule, fetchSchedules, updateSchedule } from "./api";
 import "./card-editor";
+import "./day-view-dialog";
+import type { SchedulerPlusDayView } from "./day-view-dialog";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
@@ -65,6 +67,9 @@ export class SchedulerPlusCard extends LitElement {
 
   @query("scheduler-plus-schedule-editor")
   private _editor?: SchedulerPlusScheduleEditor;
+
+  @query("scheduler-plus-day-view")
+  private _dayView?: SchedulerPlusDayView;
 
   static getStubConfig(): SchedulerPlusCardConfig {
     return { type: "custom:scheduler-plus-card" };
@@ -161,12 +166,21 @@ export class SchedulerPlusCard extends LitElement {
     this._editor?.showDialog(schedule);
   };
 
+  private _openDayView = (): void => {
+    this._dayView?.showDialog();
+  };
+
   protected override render() {
     return html`
       <ha-card>
         <div class="header">
           ${this._renderBrandMark()}
           <span>${this._config?.title ?? "Scheduler+"}</span>
+          <ha-icon-button
+            .path=${mdiCalendarClock}
+            label="Day view"
+            @click=${this._openDayView}
+          ></ha-icon-button>
         </div>
         <div class="content">${this._renderContent()}</div>
         <div class="card-actions">
@@ -180,6 +194,10 @@ export class SchedulerPlusCard extends LitElement {
         .entityFilter=${this._config?.entities}
         @schedule-plus-saved=${this._refresh}
       ></scheduler-plus-schedule-editor>
+      <scheduler-plus-day-view
+        .hass=${this.hass}
+        .entityFilter=${this._config?.entities}
+      ></scheduler-plus-day-view>
     `;
   }
 
@@ -315,10 +333,16 @@ export class SchedulerPlusCard extends LitElement {
       flex: none;
     }
     .header span {
+      flex: 1;
+      min-width: 0;
       font-size: 1.5rem;
       font-weight: 500;
       line-height: 1.2;
       color: var(--ha-card-header-color, var(--primary-text-color));
+    }
+    .header ha-icon-button {
+      flex: none;
+      margin-right: -8px;
     }
     .content {
       padding: 0 16px 16px;

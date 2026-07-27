@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import date
 from typing import Any
 
 import voluptuous as vol
@@ -354,6 +355,64 @@ async def websocket_get_preferences(
     )
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/get_day_schedule",
+        vol.Required("date"): vol.Match(_DATE_RE),
+        vol.Optional("device_type"): vol.Coerce(DeviceType),
+    }
+)
+@websocket_api.async_response
+async def websocket_get_day_schedule(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return every rule occurrence on a given date, across all schedules.
+
+    Read-only reporting endpoint powering the card's Day view dialog.
+    Reuses the engine's own occurrence-resolution logic (weekday matching,
+    date filters, day conditions, time providers) via
+    SchedulerEngine.async_get_day_events, so the report always matches what
+    the engine would actually do instead of the frontend re-deriving that
+    logic independently.
+    """
+    entry = _get_entry(hass)
+    if entry is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    reference_date = date.fromisoformat(msg["date"])
+    device_type_filter: DeviceType | None = msg.get("device_type")
+    engine = entry.runtime_data.engine
+
+    events: list[dict[str, Any]] = []
+    for raw_schedule in entry.runtime_data.coordinator.data["schedules"]:
+        schedule = Schedule.from_dict(raw_schedule)
+        if device_type_filter is not None and schedule.device_type != device_type_filter:
+            continue
+
+        for rule, on_at, off_at in await engine.async_get_day_events(
+            schedule, reference_date
+        ):
+            events.append(
+                {
+                    "schedule_id": schedule.id,
+                    "schedule_name": schedule.name,
+                    "device_type": schedule.device_type.value,
+                    "entities": list(schedule.entities),
+                    "rule_id": rule.id,
+                    "rule_name": rule.name,
+                    "on_at": on_at.isoformat(),
+                    "off_at": off_at.isoformat(),
+                }
+            )
+
+    connection.send_result(msg["id"], {"events": events})
+
+
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all Scheduler+ websocket commands."""
     websocket_api.async_register_command(hass, websocket_list_schedules)
@@ -361,3 +420,4 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_update_schedule)
     websocket_api.async_register_command(hass, websocket_delete_schedule)
     websocket_api.async_register_command(hass, websocket_get_preferences)
+    websocket_api.async_register_command(hass, websocket_get_day_schedule)
