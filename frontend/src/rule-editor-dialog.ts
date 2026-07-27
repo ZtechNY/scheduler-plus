@@ -53,6 +53,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _offTime: TimeSpec = { provider: "fixed", params: { time: "21:00" } };
 
+  @state() private _setBrightness = false;
+
   @state() private _brightnessPct = 100;
 
   @state() private _useTransition = false;
@@ -88,6 +90,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
 
     if (deviceType === "light") {
+      this._setBrightness = rule?.action.brightness !== undefined;
       const brightness = (rule?.action.brightness as number | undefined) ?? 255;
       this._brightnessPct = Math.round((brightness / 255) * 100);
       this._useTransition = rule?.action.transition !== undefined;
@@ -126,7 +129,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
     const action: Action =
       this._deviceType === "light"
         ? {
-            brightness: Math.round((this._brightnessPct / 100) * 255),
+            ...(this._setBrightness
+              ? { brightness: Math.round((this._brightnessPct / 100) * 255) }
+              : {}),
             ...(this._useTransition ? { transition: this._transitionSeconds } : {}),
           }
         : {
@@ -153,12 +158,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
       return nothing;
     }
     return html`
-      <ha-dialog
-        open
-        .heading=${this._rule ? "Edit rule" : "Add rule"}
-        @closed=${this._closeDialog}
-      >
+      <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
+          <div class="dialog-title">${this._rule ? "Edit rule" : "Add rule"}</div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 
           <ha-textfield
@@ -207,14 +209,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
           ${this._deviceType === "light"
             ? this._renderLightAction()
             : this._renderClimateAction()}
-        </div>
 
-        <mwc-button slot="secondaryAction" @click=${this._closeDialog}>
-          Cancel
-        </mwc-button>
-        <mwc-button slot="primaryAction" @click=${this._save}>
-          Save
-        </mwc-button>
+          <div class="dialog-actions">
+            <mwc-button @click=${this._closeDialog}>Cancel</mwc-button>
+            <mwc-button @click=${this._save}>Save</mwc-button>
+          </div>
+        </div>
       </ha-dialog>
     `;
   }
@@ -276,19 +276,35 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   private _renderLightAction() {
     return html`
-      <label class="field-label">Brightness (${this._brightnessPct}%)</label>
-      <input
-        type="range"
-        min="1"
-        max="100"
-        class="native-input"
-        .value=${String(this._brightnessPct)}
-        @input=${(e: Event) => {
-          this._brightnessPct = Number((e.target as HTMLInputElement).value);
-        }}
-      />
+      <ha-formfield label="Set brightness">
+        <ha-switch
+          .checked=${this._setBrightness}
+          @change=${(e: Event) => {
+            this._setBrightness = (e.target as HTMLInputElement).checked;
+          }}
+        ></ha-switch>
+      </ha-formfield>
+      <span class="hint">
+        Off by default - the light just turns on at whatever brightness it
+        was last set to.
+      </span>
+      ${this._setBrightness
+        ? html`
+            <label class="field-label">Brightness (${this._brightnessPct}%)</label>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              class="native-input"
+              .value=${String(this._brightnessPct)}
+              @input=${(e: Event) => {
+                this._brightnessPct = Number((e.target as HTMLInputElement).value);
+              }}
+            />
+          `
+        : nothing}
 
-      <ha-formfield label="Use transition">
+      <ha-formfield label="Fade in gradually">
         <ha-switch
           .checked=${this._useTransition}
           @change=${(e: Event) => {
@@ -296,10 +312,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
           }}
         ></ha-switch>
       </ha-formfield>
+      <span class="hint">
+        Instead of snapping on instantly, the light ramps up to its target
+        level over the given number of seconds.
+      </span>
       ${this._useTransition
         ? html`
             <ha-textfield
-              label="Transition (seconds)"
+              label="Fade duration (seconds)"
               type="number"
               .value=${String(this._transitionSeconds)}
               @input=${(e: InputEvent) => {
@@ -358,6 +378,18 @@ export class SchedulerPlusRuleEditor extends LitElement {
       flex-direction: column;
       gap: 16px;
       min-width: 320px;
+    }
+    .dialog-title {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--primary-text-color);
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--divider-color);
     }
     .error {
       color: var(--error-color);

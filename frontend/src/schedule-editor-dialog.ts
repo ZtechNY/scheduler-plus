@@ -177,12 +177,11 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       return nothing;
     }
     return html`
-      <ha-dialog
-        open
-        .heading=${this._schedule ? "Edit schedule" : "Add schedule"}
-        @closed=${this._closeDialog}
-      >
+      <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
+          <div class="dialog-title">
+            ${this._schedule ? "Edit schedule" : "Add schedule"}
+          </div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 
           <ha-textfield
@@ -256,14 +255,12 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                   ${this._rules.map((rule, index) => this._renderRule(rule, index))}
                 </ul>
               `}
-        </div>
 
-        <mwc-button slot="secondaryAction" @click=${this._closeDialog}>
-          Cancel
-        </mwc-button>
-        <mwc-button slot="primaryAction" .disabled=${this._saving} @click=${this._save}>
-          Save
-        </mwc-button>
+          <div class="dialog-actions">
+            <mwc-button @click=${this._closeDialog}>Cancel</mwc-button>
+            <mwc-button .disabled=${this._saving} @click=${this._save}>Save</mwc-button>
+          </div>
+        </div>
       </ha-dialog>
       <scheduler-plus-rule-editor></scheduler-plus-rule-editor>
     `;
@@ -304,6 +301,18 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       flex-direction: column;
       gap: 16px;
       min-width: 320px;
+    }
+    .dialog-title {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--primary-text-color);
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--divider-color);
     }
     .error {
       color: var(--error-color);

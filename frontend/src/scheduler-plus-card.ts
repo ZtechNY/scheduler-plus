@@ -32,6 +32,14 @@ export interface SchedulerPlusCardConfig {
   title?: string;
 }
 
+/**
+ * Scheduler+'s brand color: fixed rather than tied to `--primary-color`,
+ * since the badge is the one consistent piece of the mark's identity across
+ * every Home Assistant theme it might render on - see the "Switch Mark"
+ * concept (two rocker switches, opposite states) chosen for the card icon.
+ */
+const BRAND_ACCENT = "#F2A93B";
+
 @customElement("scheduler-plus-card")
 export class SchedulerPlusCard extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
@@ -112,7 +120,11 @@ export class SchedulerPlusCard extends LitElement {
 
   protected override render() {
     return html`
-      <ha-card .header=${this._config?.title ?? "Scheduler+"}>
+      <ha-card>
+        <div class="header">
+          ${this._renderBrandMark()}
+          <span>${this._config?.title ?? "Scheduler+"}</span>
+        </div>
         <div class="content">${this._renderContent()}</div>
         <div class="card-actions">
           <mwc-button @click=${this._openAddDialog}>Add schedule</mwc-button>
@@ -122,6 +134,67 @@ export class SchedulerPlusCard extends LitElement {
         .hass=${this.hass}
         @schedule-plus-saved=${this._refresh}
       ></scheduler-plus-schedule-editor>
+    `;
+  }
+
+  /**
+   * Two rocker switches in opposite states, badged with a plus - Scheduler+'s
+   * mark. Line color follows `--primary-text-color` and fills follow
+   * `--card-background-color` so it reads correctly on any HA theme; only
+   * the badge keeps the fixed BRAND_ACCENT.
+   */
+  private _renderBrandMark() {
+    return html`
+      <svg class="brand-mark" viewBox="0 0 60 60" aria-hidden="true">
+        <rect
+          x="9"
+          y="13"
+          width="34"
+          height="14"
+          rx="7"
+          fill="var(--card-background-color)"
+          stroke="var(--primary-text-color)"
+          stroke-width="4"
+        />
+        <circle cx="37" cy="20" r="8.5" fill="var(--primary-text-color)" />
+        <rect
+          x="9"
+          y="31"
+          width="34"
+          height="14"
+          rx="7"
+          fill="var(--card-background-color)"
+          stroke="var(--primary-text-color)"
+          stroke-width="4"
+        />
+        <circle cx="15" cy="38" r="8.5" fill="var(--primary-text-color)" />
+        <circle
+          cx="47"
+          cy="47"
+          r="12"
+          fill=${BRAND_ACCENT}
+          stroke="var(--card-background-color)"
+          stroke-width="3.5"
+        />
+        <line
+          x1="41"
+          y1="47"
+          x2="53"
+          y2="47"
+          stroke="var(--card-background-color)"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <line
+          x1="47"
+          y1="41"
+          x2="47"
+          y2="53"
+          stroke="var(--card-background-color)"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+      </svg>
     `;
   }
 
@@ -176,6 +249,23 @@ export class SchedulerPlusCard extends LitElement {
   }
 
   static override styles = css`
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 16px 0;
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      flex: none;
+    }
+    .header span {
+      font-size: 1.5rem;
+      font-weight: 500;
+      line-height: 1.2;
+      color: var(--ha-card-header-color, var(--primary-text-color));
+    }
     .content {
       padding: 0 16px 16px;
     }
