@@ -405,6 +405,7 @@ async def websocket_get_day_schedule(
                     "entities": list(schedule.entities),
                     "rule_id": rule.id,
                     "rule_name": rule.name,
+                    "action": dict(rule.action),
                     "on_at": on_at.isoformat(),
                     "off_at": off_at.isoformat(),
                 }

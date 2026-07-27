@@ -14,6 +14,35 @@ export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   switch: "Switch",
 };
 
+/**
+ * Climate "on" HVAC modes a rule can select. "off" is deliberately
+ * excluded - a rule's off_time already turns the entity off via
+ * ClimateDeviceHandler.async_turn_off, so it's never a meaningful
+ * on-action. This is a UI-only concern: the backend's ClimateDeviceHandler
+ * forwards whatever string it's given straight to climate.set_hvac_mode
+ * without validating it against this list. Shared between the rule editor
+ * (to pick a mode) and the Day view report (to display one).
+ */
+export const CLIMATE_HVAC_MODES = [
+  "heat",
+  "cool",
+  "heat_cool",
+  "auto",
+  "dry",
+  "fan_only",
+] as const;
+
+export type ClimateHvacMode = (typeof CLIMATE_HVAC_MODES)[number];
+
+export const CLIMATE_HVAC_MODE_LABELS: Record<ClimateHvacMode, string> = {
+  heat: "Heat",
+  cool: "Cool",
+  heat_cool: "Heat/Cool",
+  auto: "Auto",
+  dry: "Dry",
+  fan_only: "Fan only",
+};
+
 export type TimeProviderType = "fixed" | "sunrise" | "sunset" | "yidcal";
 
 export const TIME_PROVIDER_TYPES: readonly TimeProviderType[] = [

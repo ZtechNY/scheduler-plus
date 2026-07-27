@@ -4,17 +4,27 @@
  * `hass.callWS()` message directly.
  */
 
-import type { DeviceType, Rule, Schedule, Weekday } from "./types";
+import type { Action, DeviceType, Rule, Schedule, Weekday } from "./types";
+
+/** The minimal shape of one entity's state, as found in `hass.states`. */
+export interface HassEntityState {
+  state: string;
+  attributes: Record<string, unknown>;
+}
 
 /**
  * The slice of Home Assistant's frontend `hass` object this card depends
  * on. Deliberately minimal: Home Assistant does not publish a small
  * standalone types package, so this interface only grows as the card
  * actually needs more of `hass`'s surface, rather than copying its entire
- * (large) real shape up front.
+ * (large) real shape up front. `states` is keyed directly by entity_id (no
+ * entity-registry lookup needed), unlike the `hass.entities` reverse
+ * lookup this card used to depend on for the next-event feature and no
+ * longer does.
  */
 export interface HomeAssistant {
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
+  states: Record<string, HassEntityState>;
 }
 
 const DOMAIN = "scheduler_plus";
@@ -95,6 +105,7 @@ export interface DayScheduleEvent {
   entities: string[];
   rule_id: string;
   rule_name: string;
+  action: Action;
   on_at: string;
   off_at: string;
 }

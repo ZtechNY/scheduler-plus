@@ -13,6 +13,8 @@ import type {
   Weekday,
 } from "./types";
 import {
+  CLIMATE_HVAC_MODES,
+  CLIMATE_HVAC_MODE_LABELS,
   DAY_CONDITION_LABELS,
   DAY_CONDITION_TYPES,
   RULE_DATE_MODE_LABELS,
@@ -22,25 +24,6 @@ import {
   WEEKDAYS,
   WEEKDAY_LABELS,
 } from "./types";
-
-/**
- * Fixed local list of climate "on" HVAC modes a rule can select. "off" is
- * deliberately excluded - a rule's off_time already turns the entity off via
- * ClimateDeviceHandler.async_turn_off, so it's never a meaningful on-action.
- * Kept here rather than in types.ts since it's a UI concern only: the
- * backend's ClimateDeviceHandler forwards whatever string it's given
- * straight to climate.set_hvac_mode without validating it against this list.
- */
-const CLIMATE_HVAC_MODES = ["heat", "cool", "heat_cool", "auto", "dry", "fan_only"] as const;
-type ClimateHvacMode = (typeof CLIMATE_HVAC_MODES)[number];
-const CLIMATE_HVAC_MODE_LABELS: Record<ClimateHvacMode, string> = {
-  heat: "Heat",
-  cool: "Cool",
-  heat_cool: "Heat/Cool",
-  auto: "Auto",
-  dry: "Dry",
-  fan_only: "Fan only",
-};
 
 /**
  * Fallback preferences used until fetchPreferences() resolves (or if it

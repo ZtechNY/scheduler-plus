@@ -4,7 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { DayScheduleEvent, HomeAssistant } from "./api";
 import { fetchDaySchedule } from "./api";
 import type { DeviceType } from "./types";
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS } from "./types";
+import { CLIMATE_HVAC_MODE_LABELS } from "./types";
 
 /** "YYYY-MM-DD" for the caller's local today, not UTC (unlike Date#toISOString). */
 function todayIso(): string {
@@ -20,7 +20,65 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-type DeviceTypeFilter = DeviceType | "all";
+/**
+ * Describes what an "on" occurrence actually does, e.g. "Heat · 70°" or
+ * "Brightness 60%". Returns undefined when the action has nothing worth
+ * calling out (a switch, or a light/climate rule with no extra params set)
+ * - the on/off time already conveys the whole story in that case.
+ */
+function formatAction(deviceType: DeviceType, action: Record<string, unknown>): string | undefined {
+  if (deviceType === "light") {
+    const parts: string[] = [];
+    if (typeof action.brightness === "number") {
+      parts.push(`Brightness ${Math.round((action.brightness / 255) * 100)}%`);
+    }
+    if (typeof action.transition === "number" && action.transition > 0) {
+      parts.push(`fade ${action.transition}s`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  }
+  if (deviceType === "climate") {
+    const parts: string[] = [];
+    if (typeof action.hvac_mode === "string") {
+      const labels: Record<string, string> = CLIMATE_HVAC_MODE_LABELS;
+      parts.push(labels[action.hvac_mode] ?? action.hvac_mode);
+    }
+    if (typeof action.target_temperature === "number") {
+      parts.push(`${action.target_temperature}°`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * How events group in the report. Light and switch are merged into one
+ * "Lights & Switches" bucket - most users don't think in terms of that
+ * technical distinction, they just think "things that turn on and off".
+ * Climate stays on its own since it's genuinely a different kind of
+ * control (HVAC mode/temperature, not just on/off).
+ */
+type ReportGroup = "devices" | "climate";
+
+const REPORT_GROUPS: readonly ReportGroup[] = ["devices", "climate"];
+
+const REPORT_GROUP_LABELS: Record<ReportGroup, string> = {
+  devices: "Lights & Switches",
+  climate: "Climate",
+};
+
+function reportGroupFor(deviceType: DeviceType): ReportGroup {
+  return deviceType === "climate" ? "climate" : "devices";
+}
+
+type ReportFilter = "all" | ReportGroup;
+
+const REPORT_FILTERS: readonly ReportFilter[] = ["all", ...REPORT_GROUPS];
+
+const REPORT_FILTER_LABELS: Record<ReportFilter, string> = {
+  all: "All",
+  ...REPORT_GROUP_LABELS,
+};
 
 /**
  * Read-only "Day view" report: pick a date (and optionally a device type),
@@ -40,7 +98,7 @@ export class SchedulerPlusDayView extends LitElement {
 
   @state() private _date = todayIso();
 
-  @state() private _deviceTypeFilter: DeviceTypeFilter = "all";
+  @state() private _reportFilter: ReportFilter = "all";
 
   @state() private _events: DayScheduleEvent[] = [];
 
@@ -50,7 +108,7 @@ export class SchedulerPlusDayView extends LitElement {
 
   public showDialog(): void {
     this._date = todayIso();
-    this._deviceTypeFilter = "all";
+    this._reportFilter = "all";
     this._open = true;
     void this._load();
   }
@@ -59,23 +117,34 @@ export class SchedulerPlusDayView extends LitElement {
     this._open = false;
   };
 
+  /** The entity's friendly name, falling back to its entity_id if unknown. */
+  private _entityName(entityId: string): string {
+    const friendlyName = this.hass.states[entityId]?.attributes.friendly_name;
+    return typeof friendlyName === "string" ? friendlyName : entityId;
+  }
+
   private async _load(): Promise<void> {
     this._loading = true;
     this._error = undefined;
     try {
-      const events = await fetchDaySchedule(
-        this.hass,
-        this._date,
-        this._deviceTypeFilter === "all" ? undefined : this._deviceTypeFilter,
-      );
-      // The device filter is a card-level (per-dashboard-page) concern, not
-      // something the backend endpoint needs to know about - filtered the
-      // same way the card's own schedule list already is.
+      // Always fetched unfiltered and split client-side by ReportGroup
+      // instead of passing device_type through to the backend - "Lights &
+      // Switches" spans two backend DeviceTypes, so there's no single
+      // value to send anyway.
+      const events = await fetchDaySchedule(this.hass, this._date);
+      const byGroup =
+        this._reportFilter === "all"
+          ? events
+          : events.filter((event) => reportGroupFor(event.device_type) === this._reportFilter);
+
+      // The card's own device filter is a card-level (per-dashboard-page)
+      // concern, not something the backend endpoint needs to know about -
+      // filtered the same way the card's own schedule list already is.
       const filter = this.entityFilter;
       this._events =
         filter && filter.length > 0
-          ? events.filter((event) => event.entities.some((id) => filter.includes(id)))
-          : events;
+          ? byGroup.filter((event) => event.entities.some((id) => filter.includes(id)))
+          : byGroup;
     } catch (err) {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -88,8 +157,8 @@ export class SchedulerPlusDayView extends LitElement {
     void this._load();
   };
 
-  private _handleDeviceTypeChange = (e: Event): void => {
-    this._deviceTypeFilter = (e.target as HTMLSelectElement).value as DeviceTypeFilter;
+  private _handleReportFilterChange = (e: Event): void => {
+    this._reportFilter = (e.target as HTMLSelectElement).value as ReportFilter;
     void this._load();
   };
 
@@ -118,12 +187,11 @@ export class SchedulerPlusDayView extends LitElement {
               <select
                 id="day-view-device-type"
                 class="native-select"
-                .value=${this._deviceTypeFilter}
-                @change=${this._handleDeviceTypeChange}
+                .value=${this._reportFilter}
+                @change=${this._handleReportFilterChange}
               >
-                <option value="all">All</option>
-                ${DEVICE_TYPES.map(
-                  (type) => html`<option value=${type}>${DEVICE_TYPE_LABELS[type]}</option>`,
+                ${REPORT_FILTERS.map(
+                  (filter) => html`<option value=${filter}>${REPORT_FILTER_LABELS[filter]}</option>`,
                 )}
               </select>
             </div>
@@ -150,20 +218,20 @@ export class SchedulerPlusDayView extends LitElement {
       return html`<div class="placeholder">No activity scheduled for this day.</div>`;
     }
 
-    const groups = DEVICE_TYPES.map((type) => ({
-      type,
+    const groups = REPORT_GROUPS.map((group) => ({
+      group,
       events: this._events
-        .filter((event) => event.device_type === type)
+        .filter((event) => reportGroupFor(event.device_type) === group)
         .sort((a, b) => a.on_at.localeCompare(b.on_at)),
-    })).filter((group) => group.events.length > 0);
+    })).filter((g) => g.events.length > 0);
 
     return html`
       ${groups.map(
-        (group) => html`
+        (g) => html`
           <div class="group">
-            <h3 class="group-title">${DEVICE_TYPE_LABELS[group.type]}</h3>
+            <h3 class="group-title">${REPORT_GROUP_LABELS[g.group]}</h3>
             <ul class="events">
-              ${group.events.map((event) => this._renderEvent(event))}
+              ${g.events.map((event) => this._renderEvent(event))}
             </ul>
           </div>
         `,
@@ -173,6 +241,7 @@ export class SchedulerPlusDayView extends LitElement {
 
   private _renderEvent(event: DayScheduleEvent) {
     const overnight = event.off_at.slice(0, 10) !== event.on_at.slice(0, 10);
+    const action = formatAction(event.device_type, event.action);
     return html`
       <li class="event">
         <span class="event-time">
@@ -180,7 +249,10 @@ export class SchedulerPlusDayView extends LitElement {
           ${overnight ? html`<span class="hint">(next day)</span>` : nothing}
         </span>
         <span class="event-name">${event.schedule_name} · ${event.rule_name}</span>
-        <span class="event-entities">${event.entities.join(", ")}</span>
+        ${action ? html`<span class="event-action">${action}</span>` : nothing}
+        <span class="event-entities">
+          ${event.entities.map((id) => this._entityName(id)).join(", ")}
+        </span>
       </li>
     `;
   }
@@ -267,6 +339,10 @@ export class SchedulerPlusDayView extends LitElement {
     .event-name {
       font-size: 0.9em;
       color: var(--primary-text-color);
+    }
+    .event-action {
+      font-size: 0.85em;
+      color: var(--primary-color);
     }
     .event-entities {
       font-size: 0.8em;
