@@ -4,6 +4,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./api";
 import { deleteSchedule, fetchSchedules } from "./api";
+import "./card-editor";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
@@ -35,6 +36,8 @@ function formatNextEvent(schedule: Schedule): string | undefined {
 export interface SchedulerPlusCardConfig {
   type: string;
   title?: string;
+  /** Only show schedules targeting at least one of these entities. Empty/unset shows all. */
+  entities?: string[];
 }
 
 /**
@@ -64,12 +67,32 @@ export class SchedulerPlusCard extends LitElement {
     return { type: "custom:scheduler-plus-card" };
   }
 
+  static getConfigElement(): HTMLElement {
+    return document.createElement("scheduler-plus-card-editor");
+  }
+
   setConfig(config: SchedulerPlusCardConfig): void {
     this._config = config;
   }
 
   getCardSize(): number {
-    return 2 + this._schedules.length;
+    return 2 + this._visibleSchedules.length;
+  }
+
+  /**
+   * Schedules to actually display: all of them, unless this card instance
+   * is configured with a device filter (`entities`), in which case only
+   * schedules targeting at least one of those devices show up - lets a
+   * dashboard page carry its own card instance scoped to just its devices.
+   */
+  private get _visibleSchedules(): Schedule[] {
+    const filter = this._config?.entities;
+    if (!filter || filter.length === 0) {
+      return this._schedules;
+    }
+    return this._schedules.filter((schedule) =>
+      schedule.entities.some((entityId) => filter.includes(entityId)),
+    );
   }
 
   override connectedCallback(): void {
@@ -199,12 +222,17 @@ export class SchedulerPlusCard extends LitElement {
     if (this._error) {
       return html`<div class="placeholder error">${this._error}</div>`;
     }
-    if (this._schedules.length === 0) {
-      return html`<div class="placeholder">No schedules yet.</div>`;
+    const visible = this._visibleSchedules;
+    if (visible.length === 0) {
+      const message =
+        this._schedules.length === 0
+          ? "No schedules yet."
+          : "No schedules for this card's selected devices.";
+      return html`<div class="placeholder">${message}</div>`;
     }
     return html`
       <ul class="schedules">
-        ${this._schedules.map((schedule) => this._renderSchedule(schedule))}
+        ${visible.map((schedule) => this._renderSchedule(schedule))}
       </ul>
     `;
   }
