@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./api";
-import { deleteSchedule, fetchSchedules } from "./api";
+import { deleteSchedule, fetchSchedules, updateSchedule } from "./api";
 import "./card-editor";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
@@ -59,6 +59,9 @@ export class SchedulerPlusCard extends LitElement {
   @state() private _loading = true;
 
   @state() private _error?: string;
+
+  /** Schedule ids with an in-flight quick-toggle, so only that row's switch disables. */
+  @state() private _pendingToggle = new Set<string>();
 
   @query("scheduler-plus-schedule-editor")
   private _editor?: SchedulerPlusScheduleEditor;
@@ -125,6 +128,31 @@ export class SchedulerPlusCard extends LitElement {
     await this._refresh();
   }
 
+  /**
+   * Flips a schedule's enabled state without opening the edit dialog.
+   * update_schedule replaces the whole schedule, so every other field is
+   * sent back unchanged - only `enabled` differs from what's already saved.
+   */
+  private _toggleScheduleEnabled = async (schedule: Schedule): Promise<void> => {
+    this._pendingToggle = new Set(this._pendingToggle).add(schedule.id);
+    try {
+      await updateSchedule(this.hass, schedule.id, {
+        name: schedule.name,
+        device_type: schedule.device_type,
+        entities: schedule.entities,
+        enabled: !schedule.enabled,
+        rules: schedule.rules,
+      });
+      await this._refresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      const next = new Set(this._pendingToggle);
+      next.delete(schedule.id);
+      this._pendingToggle = next;
+    }
+  };
+
   private _openAddDialog = (): void => {
     this._editor?.showDialog();
   };
@@ -149,6 +177,7 @@ export class SchedulerPlusCard extends LitElement {
       </ha-card>
       <scheduler-plus-schedule-editor
         .hass=${this.hass}
+        .entityFilter=${this._config?.entities}
         @schedule-plus-saved=${this._refresh}
       ></scheduler-plus-schedule-editor>
     `;
@@ -241,6 +270,11 @@ export class SchedulerPlusCard extends LitElement {
     const nextEvent = schedule.enabled ? formatNextEvent(schedule) : undefined;
     return html`
       <li class="schedule ${schedule.enabled ? "" : "disabled"}">
+        <ha-switch
+          .checked=${schedule.enabled}
+          ?disabled=${this._pendingToggle.has(schedule.id)}
+          @change=${() => this._toggleScheduleEnabled(schedule)}
+        ></ha-switch>
         <div class="schedule-info">
           <span class="schedule-name">${schedule.name}</span>
           <span class="schedule-meta">
@@ -327,9 +361,12 @@ export class SchedulerPlusCard extends LitElement {
     .schedule {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 12px;
       padding: 8px 0;
       border-bottom: 1px solid var(--divider-color);
+    }
+    .schedule ha-switch {
+      flex: none;
     }
     .schedule:last-child {
       border-bottom: none;
@@ -340,6 +377,8 @@ export class SchedulerPlusCard extends LitElement {
     .schedule-info {
       display: flex;
       flex-direction: column;
+      flex: 1;
+      min-width: 0;
     }
     .schedule-name {
       font-weight: 500;

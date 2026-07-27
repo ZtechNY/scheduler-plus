@@ -51,6 +51,14 @@ function formatTimeSpec(spec: TimeSpec): string {
 export class SchedulerPlusScheduleEditor extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
 
+  /**
+   * The owning card's own device filter (SchedulerPlusCardConfig.entities),
+   * if configured. When set, the Entities picker below only offers these
+   * devices instead of every entity in the given domain - so a card scoped
+   * to one dashboard page only ever lets you pick devices relevant to it.
+   */
+  @property({ attribute: false }) entityFilter?: string[];
+
   @state() private _schedule?: Schedule;
 
   @state() private _open = false;
@@ -86,6 +94,11 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   private _closeDialog = (): void => {
     this._open = false;
   };
+
+  /** ha-entity-picker's includeEntities, or undefined (no restriction) when no filter is set. */
+  private get _includeEntities(): string[] | undefined {
+    return this.entityFilter && this.entityFilter.length > 0 ? this.entityFilter : undefined;
+  }
 
   private _handleDeviceTypeChange = (event: Event): void => {
     this._deviceType = (event.target as HTMLSelectElement).value as DeviceType;
@@ -143,6 +156,17 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       return;
     }
     this._rules = this._rules.filter((_, i) => i !== index);
+  };
+
+  /**
+   * Flips a rule's enabled state in the local buffer without opening its
+   * edit dialog - like every other rule edit here, this only takes effect
+   * once the schedule itself is saved.
+   */
+  private _toggleRuleEnabled = (index: number): void => {
+    this._rules = this._rules.map((r, i) =>
+      i === index ? { ...r, enabled: !r.enabled } : r,
+    );
   };
 
   private _save = async (): Promise<void> => {
@@ -236,6 +260,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                     .hass=${this.hass}
                     .value=${entityId}
                     .includeDomains=${[this._deviceType]}
+                    .includeEntities=${this._includeEntities}
                     @value-changed=${(e: CustomEvent<{ value?: string }>) =>
                       this._updateEntity(index, e.detail.value)}
                   ></ha-entity-picker>
@@ -253,6 +278,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                 <ha-entity-picker
                   .hass=${this.hass}
                   .includeDomains=${[this._deviceType]}
+                  .includeEntities=${this._includeEntities}
                   @value-changed=${(e: CustomEvent<{ value?: string }>) =>
                     this._addEntity(e.detail.value)}
                 ></ha-entity-picker>
@@ -315,6 +341,10 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             : "";
     return html`
       <li class="rule ${rule.enabled ? "" : "disabled"}">
+        <ha-switch
+          .checked=${rule.enabled}
+          @change=${() => this._toggleRuleEnabled(index)}
+        ></ha-switch>
         <div class="rule-info">
           <span class="rule-name">${rule.name}</span>
           <span class="rule-meta">
@@ -428,9 +458,12 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     .rule {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 12px;
       padding: 8px 0;
       border-bottom: 1px solid var(--divider-color);
+    }
+    .rule ha-switch {
+      flex: none;
     }
     .rule:last-child {
       border-bottom: none;
@@ -441,6 +474,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     .rule-info {
       display: flex;
       flex-direction: column;
+      flex: 1;
+      min-width: 0;
     }
     .rule-name {
       font-weight: 500;
