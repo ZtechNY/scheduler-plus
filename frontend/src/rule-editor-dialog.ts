@@ -183,7 +183,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
 
-    if (deviceType === "light") {
+    if (deviceType === "light" || deviceType === "light_switch") {
       this._setBrightness = rule?.action.brightness !== undefined;
       const brightness = (rule?.action.brightness as number | undefined) ?? 255;
       this._brightnessPct = Math.round((brightness / 255) * 100);
@@ -332,7 +332,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
 
     let action: Action = {};
-    if (this._deviceType === "light") {
+    if (this._deviceType === "light" || this._deviceType === "light_switch") {
       action = {
         ...(this._setBrightness
           ? { brightness: Math.round((this._brightnessPct / 100) * 255) }
@@ -665,7 +665,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
   }
 
   private _renderActionFields() {
-    if (this._deviceType === "light") {
+    if (this._deviceType === "light" || this._deviceType === "light_switch") {
       return this._renderLightAction();
     }
     if (this._deviceType === "climate") {

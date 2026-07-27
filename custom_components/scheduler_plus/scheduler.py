@@ -4,9 +4,15 @@ Resolves each enabled Rule's on/off times for the current day (and, for
 overnight rules, the previous day) via the TimeProviderRegistry, schedules
 Home Assistant callbacks to fire at those moments, and dispatches the
 resulting on/off actions to the appropriate DeviceHandler. This module has
-no knowledge of what a "light" or "climate" entity is beyond the
-DeviceType key used to look up its handler - all device- and time-specific
-behavior lives behind the two plugin registries.
+no knowledge of what a "light" or "climate" entity is beyond each entity's
+own domain being used to look up its handler - all device- and time-
+specific behavior lives behind the two plugin registries.
+
+Device-handler dispatch is resolved per *entity* (_handler_for_entity),
+not once per schedule: a DeviceType.LIGHT_SWITCH schedule mixes light.*
+and switch.* entities together, and light.turn_on/switch.turn_on are not
+interchangeable services, so each entity needs its own handler lookup
+based on its actual domain.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
+from .const import DeviceType
 from .coordinator import SchedulerPlusCoordinator
 from .day_conditions import DEFAULT_DAY_CONDITIONS, DayConditionRegistry
 from .device_handlers import (
@@ -244,21 +251,9 @@ class SchedulerEngine:
             if not schedule.enabled:
                 continue
 
-            try:
-                device_handler = self._device_handlers.get(schedule.device_type)
-            except LookupError:
-                _LOGGER.error(
-                    "Schedule '%s' uses unsupported device type '%s'",
-                    schedule.name,
-                    schedule.device_type.value,
-                )
-                continue
-
             for rule in schedule.rules:
                 try:
-                    await self._async_refresh_rule(
-                        schedule, rule, device_handler, now
-                    )
+                    await self._async_refresh_rule(schedule, rule, now)
                 except Exception:  # noqa: BLE001 - isolate one rule's failure
                     _LOGGER.exception(
                         "Failed to refresh rule '%s' in schedule '%s'",
@@ -266,11 +261,31 @@ class SchedulerEngine:
                         schedule.name,
                     )
 
+    def _handler_for_entity(self, entity_id: str) -> DeviceHandler | None:
+        """Return the device handler for `entity_id`, based on its own domain.
+
+        Resolved per entity rather than once per schedule, so a
+        DeviceType.LIGHT_SWITCH schedule can mix light.* and switch.*
+        entities and still dispatch each one to the right service. Returns
+        None (logged by the caller) if the entity's domain has no
+        registered handler - e.g. stale data referencing a since-removed
+        device type, since normal validation at the websocket boundary
+        already prevents this for newly saved schedules.
+        """
+        domain = entity_id.split(".", 1)[0]
+        try:
+            device_type = DeviceType(domain)
+        except ValueError:
+            return None
+        try:
+            return self._device_handlers.get(device_type)
+        except LookupError:
+            return None
+
     async def _async_refresh_rule(
         self,
         schedule: Schedule,
         rule: Rule,
-        device_handler: DeviceHandler,
         now: datetime,
     ) -> None:
         """Cancel a rule's pending callbacks and reschedule its next occurrence(s)."""
@@ -300,6 +315,15 @@ class SchedulerEngine:
                 continue
 
             for entity_id in schedule.entities:
+                device_handler = self._handler_for_entity(entity_id)
+                if device_handler is None:
+                    _LOGGER.error(
+                        "No device handler for entity '%s' in schedule '%s'",
+                        entity_id,
+                        schedule.name,
+                    )
+                    continue
+
                 if rule.on_enabled:
                     if on_at <= now:
                         # Restarted/reloaded mid-window: catch the device up now.

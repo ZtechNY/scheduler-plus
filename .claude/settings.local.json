@@ -27,7 +27,9 @@
       "Bash(python3 -c ' *)",
       "Bash(python -c ' *)",
       "Bash(python -m py_compile custom_components/scheduler_plus/time_providers/__init__.py)",
-      "Bash(python -m py_compile tests/test_time_providers.py)"
+      "Bash(python -m py_compile tests/test_time_providers.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/websocket.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py)"
     ]
   }
 }

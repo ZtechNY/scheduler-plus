@@ -142,10 +142,24 @@ _SCHEDULE_FIELDS = {
 }
 
 
+_DEVICE_TYPE_DOMAINS: dict[DeviceType, tuple[str, ...]] = {
+    DeviceType.LIGHT: ("light",),
+    DeviceType.CLIMATE: ("climate",),
+    DeviceType.SWITCH: ("switch",),
+    DeviceType.LIGHT_SWITCH: ("light", "switch"),
+}
+
+
 def _mismatched_entities(device_type: DeviceType, entities: list[str]) -> list[str]:
-    """Return any entity_ids whose domain doesn't match `device_type`."""
-    expected_prefix = f"{device_type.value}."
-    return [entity_id for entity_id in entities if not entity_id.startswith(expected_prefix)]
+    """Return any entity_ids whose domain doesn't match `device_type`.
+
+    LIGHT_SWITCH allows either light.* or switch.* - see DeviceType's
+    docstring for why it's a domain *group*, not a single domain.
+    """
+    allowed_prefixes = tuple(f"{domain}." for domain in _DEVICE_TYPE_DOMAINS[device_type])
+    return [
+        entity_id for entity_id in entities if not entity_id.startswith(allowed_prefixes)
+    ]
 
 
 def _prepare_rule_data(raw: dict[str, Any]) -> dict[str, Any]:

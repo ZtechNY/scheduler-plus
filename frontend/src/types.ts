@@ -4,15 +4,37 @@
  * exact shapes that arrive over the websocket API as JSON.
  */
 
-export type DeviceType = "light" | "climate" | "switch";
+/**
+ * "light" and "switch" are still valid values (schedules created before
+ * the Light/Switch merge keep working, unmigrated), but are no longer
+ * offered when creating a new schedule - see DEVICE_TYPES.
+ */
+export type DeviceType = "light" | "climate" | "switch" | "light_switch";
 
-export const DEVICE_TYPES: readonly DeviceType[] = ["light", "climate", "switch"];
+/** Selectable when creating a NEW schedule. */
+export const DEVICE_TYPES: readonly DeviceType[] = ["light_switch", "climate"];
 
 export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   light: "Light",
   climate: "Climate",
   switch: "Switch",
+  light_switch: "Lights & Switches",
 };
+
+/**
+ * The real Home Assistant entity domain(s) each DeviceType allows - used to
+ * filter entity pickers. Not the same thing as DEVICE_TYPE_LABELS: e.g.
+ * "light_switch" is a single schedule-level choice but spans two domains.
+ */
+export const DEVICE_TYPE_DOMAINS: Record<DeviceType, string[]> = {
+  light: ["light"],
+  climate: ["climate"],
+  switch: ["switch"],
+  light_switch: ["light", "switch"],
+};
+
+/** Every entity domain Scheduler+ supports, for pickers not tied to one schedule's device type. */
+export const ALL_DEVICE_DOMAINS: readonly string[] = ["light", "climate", "switch"];
 
 /**
  * Climate "on" HVAC modes a rule can select. "off" is deliberately

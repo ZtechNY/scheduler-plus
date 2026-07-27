@@ -127,12 +127,17 @@ def _make_rule(
     )
 
 
-def _make_schedule(rule: Rule, *, entities: list[str] | None = None) -> Schedule:
+def _make_schedule(
+    rule: Rule,
+    *,
+    entities: list[str] | None = None,
+    device_type: DeviceType = DeviceType.LIGHT,
+) -> Schedule:
     """Build a single-rule Schedule targeting `entities` (default: one light)."""
     return Schedule(
         id="sched-1",
         name="Test schedule",
-        device_type=DeviceType.LIGHT,
+        device_type=device_type,
         entities=entities or ["light.test"],
         rules=[rule],
     )
@@ -140,13 +145,26 @@ def _make_schedule(rule: Rule, *, entities: list[str] | None = None) -> Schedule
 
 @pytest.fixture
 def fake_device_handler() -> FakeDeviceHandler:
-    """A fresh FakeDeviceHandler for each test."""
+    """A fresh FakeDeviceHandler for each test, registered for DeviceType.LIGHT."""
+    return FakeDeviceHandler()
+
+
+@pytest.fixture
+def fake_switch_handler() -> FakeDeviceHandler:
+    """A second, independent FakeDeviceHandler, registered for DeviceType.SWITCH.
+
+    Kept separate from fake_device_handler so a DeviceType.LIGHT_SWITCH
+    schedule's per-entity dispatch can be checked precisely: each handler's
+    own call log should only ever contain entities of its own domain.
+    """
     return FakeDeviceHandler()
 
 
 @pytest.fixture
 async def engine(
-    hass: HomeAssistant, fake_device_handler: FakeDeviceHandler
+    hass: HomeAssistant,
+    fake_device_handler: FakeDeviceHandler,
+    fake_switch_handler: FakeDeviceHandler,
 ) -> AsyncGenerator[SchedulerEngine, None]:
     """A SchedulerEngine wired to fake/HA-independent plugins.
 
@@ -168,7 +186,12 @@ async def engine(
             # SUNSET is deliberately left unregistered.
         }
     )
-    device_handlers = DeviceHandlerRegistry({DeviceType.LIGHT: fake_device_handler})
+    device_handlers = DeviceHandlerRegistry(
+        {
+            DeviceType.LIGHT: fake_device_handler,
+            DeviceType.SWITCH: fake_switch_handler,
+        }
+    )
     day_conditions = DayConditionRegistry(
         {
             DayConditionType.SHABBOS: FakeDayCondition(matches_date=_MONDAY),
@@ -418,7 +441,7 @@ async def test_refresh_rule_catches_up_when_inside_window(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
     # The off callback for the caught-up occurrence should still be pending.
@@ -433,11 +456,37 @@ async def test_refresh_rule_schedules_future_on_and_off(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
     assert fake_device_handler.turn_off_calls == []
     assert len(engine._unsub_rules[rule.id]) == 2
+
+
+async def test_refresh_rule_dispatches_per_entity_domain(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    fake_switch_handler: FakeDeviceHandler,
+) -> None:
+    """A LIGHT_SWITCH schedule sends each entity to its own domain's handler.
+
+    The whole point of DeviceType.LIGHT_SWITCH: light.* and switch.*
+    entities mixed in one schedule must each reach the correct HA service
+    (light.turn_on vs switch.turn_on aren't interchangeable), not whichever
+    single handler the schedule's device_type would have picked before.
+    """
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule,
+        entities=["light.test", "switch.test"],
+        device_type=DeviceType.LIGHT_SWITCH,
+    )
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
+    assert fake_switch_handler.turn_on_calls == [("switch.test", rule.action)]
 
 
 async def test_refresh_rule_disabled_rule_schedules_nothing(
@@ -448,7 +497,7 @@ async def test_refresh_rule_disabled_rule_schedules_nothing(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
     assert rule.id not in engine._unsub_rules
@@ -462,7 +511,7 @@ async def test_refresh_rule_on_only_schedules_future_on_only(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
     assert fake_device_handler.turn_off_calls == []
@@ -477,7 +526,7 @@ async def test_refresh_rule_on_only_catches_up_and_never_schedules_off(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
     # Off is never scheduled, and the catch-up itself isn't a pending
@@ -499,7 +548,7 @@ async def test_refresh_rule_on_only_ignores_stale_yesterday_occurrence(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 8, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
 
@@ -512,7 +561,7 @@ async def test_refresh_rule_off_only_schedules_future_off_only(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 15, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
     assert fake_device_handler.turn_off_calls == []
@@ -531,7 +580,7 @@ async def test_refresh_rule_off_only_skips_when_already_past(
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 23, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
-    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+    await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_off_calls == []
     assert rule.id not in engine._unsub_rules

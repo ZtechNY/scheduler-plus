@@ -21,13 +21,24 @@ STORAGE_KEY: Final = DOMAIN
 class DeviceType(StrEnum):
     """Device types a Schedule can target.
 
-    Identifiers only. The scheduling engine treats these as opaque keys into
-    a device-handler plugin registry and never branches on their meaning.
+    LIGHT/CLIMATE/SWITCH are opaque keys into the device-handler plugin
+    registry (device_handlers/__init__.py) - the engine never branches on
+    their meaning, it just dispatches to whichever handler is registered
+    for a given *entity's own domain* (SchedulerEngine._handler_for_entity),
+    resolved per entity rather than once per schedule.
+
+    LIGHT_SWITCH is different: it's a schedule-level tag meaning "this
+    schedule's entities may be light.* or switch.*, mixed together" (see
+    websocket.py's entity-domain validation) - it is never itself a
+    device-handler registry key, since a mixed schedule still dispatches
+    each entity to its own real handler (light.* -> LightDeviceHandler,
+    switch.* -> SwitchDeviceHandler) based on that entity's actual domain.
     """
 
     LIGHT = "light"
     CLIMATE = "climate"
     SWITCH = "switch"
+    LIGHT_SWITCH = "light_switch"
 
 
 class TimeProviderType(StrEnum):

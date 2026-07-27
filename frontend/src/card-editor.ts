@@ -4,7 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant } from "./api";
 import "./entity-multi-picker";
 import type { SchedulerPlusCardConfig } from "./scheduler-plus-card";
-import { DEVICE_TYPES } from "./types";
+import { ALL_DEVICE_DOMAINS } from "./types";
 
 /**
  * Visual editor for the Scheduler+ card, opened from Lovelace's own "Edit
@@ -62,7 +62,7 @@ export class SchedulerPlusCardEditor extends LitElement {
         <scheduler-plus-entity-multi-picker
           .hass=${this.hass}
           .value=${this._config.entities ?? []}
-          .domains=${DEVICE_TYPES}
+          .domains=${ALL_DEVICE_DOMAINS}
           @value-changed=${(e: CustomEvent<{ value: string[] }>) => {
             this._fireConfigChanged({ ...this._config!, entities: e.detail.value });
           }}

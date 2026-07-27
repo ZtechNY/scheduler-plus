@@ -11,6 +11,7 @@ import type { DeviceType, Schedule, TimeSpec, YidcalZmanType } from "./types";
 import {
   DAY_CONDITION_LABELS,
   DEVICE_TYPES,
+  DEVICE_TYPE_DOMAINS,
   DEVICE_TYPE_LABELS,
   TIME_PROVIDER_LABELS,
   WEEKDAYS,
@@ -85,7 +86,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
 
   @state() private _name = "";
 
-  @state() private _deviceType: DeviceType = "light";
+  @state() private _deviceType: DeviceType = "light_switch";
 
   @state() private _enabled = true;
 
@@ -103,7 +104,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   public showDialog(schedule?: Schedule): void {
     this._schedule = schedule;
     this._name = schedule?.name ?? "";
-    this._deviceType = schedule?.device_type ?? "light";
+    this._deviceType = schedule?.device_type ?? "light_switch";
     this._enabled = schedule?.enabled ?? true;
     this._entities = schedule ? [...schedule.entities] : [];
     this._rules = schedule ? schedule.rules.map((rule) => ({ ...rule })) : [];
@@ -247,7 +248,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           <scheduler-plus-entity-multi-picker
             .hass=${this.hass}
             .value=${this._entities}
-            .domains=${[this._deviceType]}
+            .domains=${DEVICE_TYPE_DOMAINS[this._deviceType]}
             .includeEntities=${this.entityFilter}
             @value-changed=${(e: CustomEvent<{ value: string[] }>) => {
               this._entities = e.detail.value;
