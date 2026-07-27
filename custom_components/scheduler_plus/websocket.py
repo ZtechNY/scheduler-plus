@@ -41,6 +41,7 @@ from .storage import SchedulerPlusStoreData
 
 
 _DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
+_TIME_RE = r"^\d{2}:\d{2}$"
 
 
 def _validate_date_range(value: Any) -> tuple[str, str]:
@@ -161,10 +162,15 @@ async def _async_persist(
     Notifying listeners (via async_set_updated_data) is what causes the
     SchedulerEngine to immediately rescan and reschedule based on the new
     data - the engine never has to be told about a change directly.
+    `user_preferences` is carried over unchanged - this function only ever
+    touches schedules, and coordinator.data is replaced wholesale, so
+    dropping it here would silently erase every user's saved preferences
+    the next time any schedule was created, updated, or deleted.
     """
     new_data: SchedulerPlusStoreData = {
         "version": coordinator.data["version"],
         "schedules": schedules,
+        "user_preferences": coordinator.data["user_preferences"],
     }
     coordinator.async_set_updated_data(new_data)
     await coordinator.async_save()
@@ -326,17 +332,28 @@ async def websocket_get_preferences(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Return the user's scheduling preferences.
+    """Return the calling user's own scheduling preferences.
 
-    Configured via Scheduler+'s options flow (Settings > Devices & Services
-    > Scheduler+ > Configure). The rule editor uses these to power its
-    Weekdays/Weekend/After hours quick-fill presets.
+    Each Home Assistant user can set their own weekday/weekend/working-
+    hours split (see websocket_set_preferences) rather than sharing one
+    org-wide value - this falls back to the admin-configured defaults from
+    Scheduler+'s options flow (Settings > Devices & Services > Scheduler+ >
+    Configure) only for a user who hasn't set their own yet. The rule
+    editor uses the result to power its Weekdays/Weekend/After hours
+    quick-fill presets.
     """
     entry = _get_entry(hass)
     if entry is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
         )
+        return
+
+    user_preferences = entry.runtime_data.coordinator.data["user_preferences"].get(
+        connection.user.id
+    )
+    if user_preferences is not None:
+        connection.send_result(msg["id"], user_preferences)
         return
 
     options = entry.options
@@ -353,6 +370,60 @@ async def websocket_get_preferences(
             ),
         },
     )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_preferences",
+        vol.Required("weekday_days"): vol.All(
+            cv.ensure_list, [vol.Coerce(Weekday)], vol.Length(min=1)
+        ),
+        vol.Required("weekend_days"): vol.All(
+            cv.ensure_list, [vol.Coerce(Weekday)], vol.Length(min=1)
+        ),
+        vol.Required("working_hours_start"): vol.Match(_TIME_RE),
+        vol.Required("working_hours_end"): vol.Match(_TIME_RE),
+    }
+)
+@websocket_api.async_response
+async def websocket_set_preferences(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Save the calling user's own scheduling preferences.
+
+    Stored per Home Assistant user (connection.user.id) in Scheduler+'s own
+    storage, not shared org-wide - each user gets their own weekday/
+    weekend/working-hours split, independent of the admin-only options
+    flow defaults (which remain the fallback for anyone who hasn't set
+    their own).
+    """
+    coordinator = _get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    preferences = {
+        "weekday_days": [day.value for day in msg["weekday_days"]],
+        "weekend_days": [day.value for day in msg["weekend_days"]],
+        "working_hours_start": msg["working_hours_start"],
+        "working_hours_end": msg["working_hours_end"],
+    }
+    new_data: SchedulerPlusStoreData = {
+        "version": coordinator.data["version"],
+        "schedules": coordinator.data["schedules"],
+        "user_preferences": {
+            **coordinator.data["user_preferences"],
+            connection.user.id: preferences,
+        },
+    }
+    coordinator.async_set_updated_data(new_data)
+    await coordinator.async_save()
+
+    connection.send_result(msg["id"], preferences)
 
 
 @websocket_api.websocket_command(
@@ -421,4 +492,5 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_update_schedule)
     websocket_api.async_register_command(hass, websocket_delete_schedule)
     websocket_api.async_register_command(hass, websocket_get_preferences)
+    websocket_api.async_register_command(hass, websocket_set_preferences)
     websocket_api.async_register_command(hass, websocket_get_day_schedule)

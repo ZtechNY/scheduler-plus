@@ -82,9 +82,12 @@ export async function deleteSchedule(
 }
 
 /**
- * Scheduling preferences configured via Scheduler+'s options flow (Settings
- * > Devices & Services > Scheduler+ > Configure). The rule editor uses
- * these to power its Weekdays/Weekend/After hours quick-fill presets.
+ * The signed-in user's own weekday/weekend/working-hours split, used by
+ * the rule editor to power its Weekdays/Weekend/After hours quick-fill
+ * presets. Each Home Assistant user has their own (set via
+ * updatePreferences/"My preferences" on the card); a user who hasn't set
+ * one yet gets the admin-configured fallback from Scheduler+'s options
+ * flow (Settings > Devices & Services > Scheduler+ > Configure) instead.
  */
 export interface Preferences {
   weekday_days: Weekday[];
@@ -95,6 +98,16 @@ export interface Preferences {
 
 export async function fetchPreferences(hass: HomeAssistant): Promise<Preferences> {
   return hass.callWS<Preferences>({ type: `${DOMAIN}/get_preferences` });
+}
+
+export async function updatePreferences(
+  hass: HomeAssistant,
+  preferences: Preferences,
+): Promise<Preferences> {
+  return hass.callWS<Preferences>({
+    type: `${DOMAIN}/set_preferences`,
+    ...preferences,
+  });
 }
 
 /** One rule's on/off occurrence on a specific date, for the read-only Day view report. */

@@ -23,15 +23,22 @@ class SchedulerPlusStoreData(TypedDict):
     Store helper's own version envelope, so future schema migrations of the
     `schedules` payload can be handled explicitly in async_load() without
     being constrained by Store's migrate-callback mechanics.
+
+    `user_preferences` holds each Home Assistant user's own weekday/weekend/
+    working-hours split (keyed by user_id), separate from the org-wide
+    defaults in the options flow (const.py's CONF_WEEKDAY_DAYS etc.) - a
+    per-user override, not a replacement, so it only needs an entry for
+    users who have actually set their own.
     """
 
     version: int
     schedules: list[dict[str, Any]]
+    user_preferences: dict[str, dict[str, Any]]
 
 
 def _default_data() -> SchedulerPlusStoreData:
     """Return the empty default payload for a fresh installation."""
-    return {"version": STORAGE_VERSION, "schedules": []}
+    return {"version": STORAGE_VERSION, "schedules": [], "user_preferences": {}}
 
 
 class SchedulerPlusStore:
@@ -44,10 +51,16 @@ class SchedulerPlusStore:
         )
 
     async def async_load(self) -> SchedulerPlusStoreData:
-        """Load persisted data, seeding defaults on first run."""
+        """Load persisted data, seeding defaults on first run.
+
+        `user_preferences` is filled in with `.setdefault()` rather than
+        assumed present, since data saved before this field existed won't
+        have it.
+        """
         data = await self._store.async_load()
         if data is None:
             return _default_data()
+        data.setdefault("user_preferences", {})
         return data
 
     async def async_save(self, data: SchedulerPlusStoreData) -> None:

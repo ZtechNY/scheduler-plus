@@ -10,8 +10,8 @@
   "options": {
     "step": {
       "init": {
-        "title": "Scheduling preferences",
-        "description": "Used by the rule editor's quick-fill presets (Weekdays, Weekend, After hours).",
+        "title": "Default scheduling preferences",
+        "description": "The fallback used by the rule editor's quick-fill presets (Weekdays, Weekend, After hours) for anyone who hasn't set their own under My Preferences on the Scheduler+ card. This does not override a user's own choice.",
         "data": {
           "weekday_days": "Weekday days",
           "weekend_days": "Weekend days",

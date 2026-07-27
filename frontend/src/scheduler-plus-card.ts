@@ -1,4 +1,4 @@
-import { mdiCalendarClock, mdiDelete, mdiPencil } from "@mdi/js";
+import { mdiAccountClock, mdiCalendarClock, mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
@@ -7,6 +7,8 @@ import { deleteSchedule, fetchSchedules, updateSchedule } from "./api";
 import "./card-editor";
 import "./day-view-dialog";
 import type { SchedulerPlusDayView } from "./day-view-dialog";
+import "./preferences-dialog";
+import type { SchedulerPlusPreferences } from "./preferences-dialog";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
@@ -70,6 +72,9 @@ export class SchedulerPlusCard extends LitElement {
 
   @query("scheduler-plus-day-view")
   private _dayView?: SchedulerPlusDayView;
+
+  @query("scheduler-plus-preferences")
+  private _preferences?: SchedulerPlusPreferences;
 
   static getStubConfig(): SchedulerPlusCardConfig {
     return { type: "custom:scheduler-plus-card" };
@@ -170,12 +175,21 @@ export class SchedulerPlusCard extends LitElement {
     this._dayView?.showDialog();
   };
 
+  private _openPreferences = (): void => {
+    this._preferences?.showDialog();
+  };
+
   protected override render() {
     return html`
       <ha-card>
         <div class="header">
           ${this._renderBrandMark()}
           <span>${this._config?.title ?? "Scheduler+"}</span>
+          <ha-icon-button
+            .path=${mdiAccountClock}
+            label="My preferences"
+            @click=${this._openPreferences}
+          ></ha-icon-button>
           <ha-icon-button
             .path=${mdiCalendarClock}
             label="Day view"
@@ -198,6 +212,7 @@ export class SchedulerPlusCard extends LitElement {
         .hass=${this.hass}
         .entityFilter=${this._config?.entities}
       ></scheduler-plus-day-view>
+      <scheduler-plus-preferences .hass=${this.hass}></scheduler-plus-preferences>
     `;
   }
 
@@ -342,6 +357,8 @@ export class SchedulerPlusCard extends LitElement {
     }
     .header ha-icon-button {
       flex: none;
+    }
+    .header ha-icon-button:last-child {
       margin-right: -8px;
     }
     .content {
