@@ -7,7 +7,7 @@ import { createSchedule, updateSchedule } from "./api";
 import "./entity-multi-picker";
 import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
-import type { DeviceType, Schedule, TimeSpec } from "./types";
+import type { DeviceType, Schedule, TimeSpec, YidcalZmanType } from "./types";
 import {
   DAY_CONDITION_LABELS,
   DEVICE_TYPES,
@@ -15,6 +15,7 @@ import {
   TIME_PROVIDER_LABELS,
   WEEKDAYS,
   WEEKDAY_LABELS,
+  YIDCAL_ZMAN_LABELS,
 } from "./types";
 
 /** Renders a fixed "HH:MM" as a 12-hour clock time, e.g. "06:00" -> "6:00 AM". */
@@ -27,16 +28,20 @@ function formatFixedTime(time: string): string {
   return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
 }
 
-/** Renders a TimeSpec for the rules list, e.g. "6:00 AM" or "Sunset +25". */
+/** Renders a TimeSpec for the rules list, e.g. "6:00 AM", "Sunset +25", or "הדלקות הנירות". */
 function formatTimeSpec(spec: TimeSpec): string {
   if (spec.provider === "fixed") {
     return formatFixedTime((spec.params.time as string | undefined) ?? "00:00");
   }
+  const label =
+    spec.provider === "yidcal"
+      ? (YIDCAL_ZMAN_LABELS[spec.params.zman as YidcalZmanType] ?? TIME_PROVIDER_LABELS.yidcal)
+      : TIME_PROVIDER_LABELS[spec.provider];
   const offset = (spec.params.offset_minutes as number | undefined) ?? 0;
   if (offset === 0) {
-    return TIME_PROVIDER_LABELS[spec.provider];
+    return label;
   }
-  return `${TIME_PROVIDER_LABELS[spec.provider]} ${offset > 0 ? "+" : ""}${offset}`;
+  return `${label} ${offset > 0 ? "+" : ""}${offset}`;
 }
 
 /** Renders a rule's on/off summary, accounting for on-only/off-only rules. */

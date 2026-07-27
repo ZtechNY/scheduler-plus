@@ -3,15 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, Preferences, RuleInput } from "./api";
 import { fetchPreferences } from "./api";
-import type {
-  Action,
-  DayConditionType,
-  DeviceType,
-  RuleDateMode,
-  TimeProviderType,
-  TimeSpec,
-  Weekday,
-} from "./types";
+import type { Action, DayConditionType, DeviceType, RuleDateMode, TimeSpec, Weekday } from "./types";
 import {
   CLIMATE_HVAC_MODES,
   CLIMATE_HVAC_MODE_LABELS,
@@ -20,7 +12,6 @@ import {
   RULE_DATE_MODE_LABELS,
   RULE_DATE_MODES,
   TIME_PROVIDER_LABELS,
-  TIME_PROVIDER_TYPES,
   WEEKDAYS,
   WEEKDAY_LABELS,
   YIDCAL_ZMAN_LABELS,
@@ -39,6 +30,50 @@ const DEFAULT_PREFERENCES: Preferences = {
   working_hours_start: "09:00",
   working_hours_end: "17:00",
 };
+
+/**
+ * Flattened options for the On time/Off time dropdown: every YidCal zman
+ * shows up as its own top-level entry (e.g. "הדלקות הנירות") rather than
+ * behind a nested "YidCal" -> "which zman" pair of dropdowns. The backend
+ * shape (TimeSpec.provider="yidcal", params.zman="candle_lighting") is
+ * unchanged - this is purely how the choice is presented, so as more
+ * zmanim are added later they each just become one more entry here.
+ */
+interface TimeOption {
+  key: string;
+  label: string;
+  makeSpec: () => TimeSpec;
+  matches: (spec: TimeSpec) => boolean;
+}
+
+const TIME_OPTIONS: readonly TimeOption[] = [
+  {
+    key: "fixed",
+    label: TIME_PROVIDER_LABELS.fixed,
+    makeSpec: () => ({ provider: "fixed", params: { time: "06:00" } }),
+    matches: (spec) => spec.provider === "fixed",
+  },
+  {
+    key: "sunrise",
+    label: TIME_PROVIDER_LABELS.sunrise,
+    makeSpec: () => ({ provider: "sunrise", params: { offset_minutes: 0 } }),
+    matches: (spec) => spec.provider === "sunrise",
+  },
+  {
+    key: "sunset",
+    label: TIME_PROVIDER_LABELS.sunset,
+    makeSpec: () => ({ provider: "sunset", params: { offset_minutes: 0 } }),
+    matches: (spec) => spec.provider === "sunset",
+  },
+  ...YIDCAL_ZMAN_TYPES.map(
+    (zman): TimeOption => ({
+      key: `yidcal:${zman}`,
+      label: YIDCAL_ZMAN_LABELS[zman],
+      makeSpec: () => ({ provider: "yidcal", params: { zman, offset_minutes: 0 } }),
+      matches: (spec) => spec.provider === "yidcal" && spec.params.zman === zman,
+    }),
+  ),
+];
 
 /** Renders a "YYYY-MM-DD" string as e.g. "Jul 26, 2026". */
 function formatDate(iso: string): string {
@@ -562,6 +597,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
     enabled: boolean,
     onToggle: (enabled: boolean) => void,
   ) {
+    const selectedKey = TIME_OPTIONS.find((option) => option.matches(spec))?.key ?? "fixed";
+
     return html`
       <div class="time-field">
         <ha-formfield label=${label}>
@@ -577,22 +614,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
               <div class="time-row">
                 <select
                   class="native-select"
-                  .value=${spec.provider}
+                  .value=${selectedKey}
                   @change=${(e: Event) => {
-                    const provider = (e.target as HTMLSelectElement)
-                      .value as TimeProviderType;
-                    let params: TimeSpec["params"] = { offset_minutes: 0 };
-                    if (provider === "fixed") {
-                      params = { time: "06:00" };
-                    } else if (provider === "yidcal") {
-                      params = { zman: "candle_lighting", offset_minutes: 0 };
+                    const key = (e.target as HTMLSelectElement).value;
+                    const option = TIME_OPTIONS.find((o) => o.key === key);
+                    if (option) {
+                      onChange(option.makeSpec());
                     }
-                    onChange({ provider, params });
                   }}
                 >
-                  ${TIME_PROVIDER_TYPES.map(
-                    (type) =>
-                      html`<option value=${type}>${TIME_PROVIDER_LABELS[type]}</option>`,
+                  ${TIME_OPTIONS.map(
+                    (option) => html`<option value=${option.key}>${option.label}</option>`,
                   )}
                 </select>
                 ${spec.provider === "fixed"
@@ -608,58 +640,23 @@ export class SchedulerPlusRuleEditor extends LitElement {
                           })}
                       />
                     `
-                  : spec.provider === "yidcal"
-                    ? html`
-                        <select
-                          class="native-select"
-                          .value=${(spec.params.zman as string | undefined) ??
-                          "candle_lighting"}
-                          @change=${(e: Event) =>
-                            onChange({
-                              ...spec,
-                              params: {
-                                ...spec.params,
-                                zman: (e.target as HTMLSelectElement).value,
-                              },
-                            })}
-                        >
-                          ${YIDCAL_ZMAN_TYPES.map(
-                            (zman) =>
-                              html`<option value=${zman}>${YIDCAL_ZMAN_LABELS[zman]}</option>`,
-                          )}
-                        </select>
-                        <input
-                          type="number"
-                          class="native-input offset"
-                          .value=${String(spec.params.offset_minutes ?? 0)}
-                          @input=${(e: Event) =>
-                            onChange({
-                              ...spec,
-                              params: {
-                                ...spec.params,
-                                offset_minutes:
-                                  Number((e.target as HTMLInputElement).value) || 0,
-                              },
-                            })}
-                        />
-                        <span class="hint">minutes</span>
-                      `
-                    : html`
-                        <input
-                          type="number"
-                          class="native-input offset"
-                          .value=${String(spec.params.offset_minutes ?? 0)}
-                          @input=${(e: Event) =>
-                            onChange({
-                              ...spec,
-                              params: {
-                                offset_minutes:
-                                  Number((e.target as HTMLInputElement).value) || 0,
-                              },
-                            })}
-                        />
-                        <span class="hint">minutes</span>
-                      `}
+                  : html`
+                      <input
+                        type="number"
+                        class="native-input offset"
+                        .value=${String(spec.params.offset_minutes ?? 0)}
+                        @input=${(e: Event) =>
+                          onChange({
+                            ...spec,
+                            params: {
+                              ...spec.params,
+                              offset_minutes:
+                                Number((e.target as HTMLInputElement).value) || 0,
+                            },
+                          })}
+                      />
+                      <span class="hint">minutes</span>
+                    `}
               </div>
             `
           : nothing}
