@@ -1,20 +1,43 @@
-import { mdiDelete } from "@mdi/js";
+import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { HomeAssistant, ScheduleInput } from "./api";
+import type { HomeAssistant, RuleInput, ScheduleInput } from "./api";
 import { createSchedule, updateSchedule } from "./api";
-import type { DeviceType, Schedule } from "./types";
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS } from "./types";
+import "./rule-editor-dialog";
+import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
+import type { DeviceType, Schedule, TimeSpec } from "./types";
+import { DEVICE_TYPES, DEVICE_TYPE_LABELS, TIME_PROVIDER_LABELS, WEEKDAYS, WEEKDAY_LABELS } from "./types";
+
+/** Renders a fixed "HH:MM" as a 12-hour clock time, e.g. "06:00" -> "6:00 AM". */
+function formatFixedTime(time: string): string {
+  const [hourStr, minuteStr] = time.split(":");
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+/** Renders a TimeSpec for the rules list, e.g. "6:00 AM" or "Sunset +25". */
+function formatTimeSpec(spec: TimeSpec): string {
+  if (spec.provider === "fixed") {
+    return formatFixedTime((spec.params.time as string | undefined) ?? "00:00");
+  }
+  const offset = (spec.params.offset_minutes as number | undefined) ?? 0;
+  if (offset === 0) {
+    return TIME_PROVIDER_LABELS[spec.provider];
+  }
+  return `${TIME_PROVIDER_LABELS[spec.provider]} ${offset > 0 ? "+" : ""}${offset}`;
+}
 
 /**
- * Dialog for creating or editing a schedule's top-level fields (name,
- * device type, enabled, entities). Rule editing (days/time/action) is not
- * part of this dialog yet - a schedule created here starts with no rules,
- * and editing an existing schedule preserves its rules unchanged, since
- * update_schedule replaces the whole schedule and there is not yet a UI
- * for touching rules individually.
+ * Dialog for creating or editing a schedule: its top-level fields (name,
+ * device type, enabled, entities) plus its rules. Rules are edited via the
+ * nested scheduler-plus-rule-editor dialog, but only ever committed to the
+ * server as part of this dialog's own Save - update_schedule replaces the
+ * whole schedule, so there is no separate per-rule websocket command.
  */
 @customElement("scheduler-plus-schedule-editor")
 export class SchedulerPlusScheduleEditor extends LitElement {
@@ -32,9 +55,14 @@ export class SchedulerPlusScheduleEditor extends LitElement {
 
   @state() private _entities: string[] = [];
 
+  @state() private _rules: RuleInput[] = [];
+
   @state() private _saving = false;
 
   @state() private _error?: string;
+
+  @query("scheduler-plus-rule-editor")
+  private _ruleEditor?: SchedulerPlusRuleEditor;
 
   public showDialog(schedule?: Schedule): void {
     this._schedule = schedule;
@@ -42,6 +70,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._deviceType = schedule?.device_type ?? "light";
     this._enabled = schedule?.enabled ?? true;
     this._entities = schedule ? [...schedule.entities] : [];
+    this._rules = schedule ? schedule.rules.map((rule) => ({ ...rule })) : [];
     this._error = undefined;
     this._open = true;
   }
@@ -53,8 +82,11 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   private _handleDeviceTypeChange = (event: Event): void => {
     this._deviceType = (event.target as HTMLSelectElement).value as DeviceType;
     // Entities picked for the previous device type would no longer match
-    // this one's domain, so they can't carry over.
+    // this one's domain, and existing rules' actions (brightness/transition
+    // vs hvac_mode/target_temperature) would no longer make sense either -
+    // neither can carry over.
     this._entities = [];
+    this._rules = [];
   };
 
   private _addEntity = (entityId: string | undefined): void => {
@@ -78,6 +110,33 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     );
   };
 
+  private _openAddRuleDialog = (): void => {
+    this._ruleEditor?.showDialog({
+      deviceType: this._deviceType,
+      onSave: (rule) => {
+        this._rules = [...this._rules, rule];
+      },
+    });
+  };
+
+  private _openEditRuleDialog = (index: number): void => {
+    this._ruleEditor?.showDialog({
+      deviceType: this._deviceType,
+      rule: this._rules[index],
+      onSave: (rule) => {
+        this._rules = this._rules.map((existing, i) => (i === index ? rule : existing));
+      },
+    });
+  };
+
+  private _removeRule = (index: number): void => {
+    const rule = this._rules[index];
+    if (!rule || !window.confirm(`Delete rule "${rule.name}"?`)) {
+      return;
+    }
+    this._rules = this._rules.filter((_, i) => i !== index);
+  };
+
   private _save = async (): Promise<void> => {
     const name = this._name.trim();
     if (!name) {
@@ -97,11 +156,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         device_type: this._deviceType,
         entities: this._entities,
         enabled: this._enabled,
-        // Preserve the schedule's existing rules verbatim - this dialog
-        // does not edit them, and update_schedule replaces the whole
-        // schedule, so omitting them would delete all of a schedule's
-        // rules on a simple rename.
-        rules: this._schedule?.rules ?? [],
+        rules: this._rules,
       };
       if (this._schedule) {
         await updateSchedule(this.hass, this._schedule.id, input);
@@ -189,6 +244,18 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                 this._addEntity(e.detail.value)}
             ></ha-entity-picker>
           </div>
+
+          <div class="rules-header">
+            <label class="field-label">Rules</label>
+            <mwc-button @click=${this._openAddRuleDialog}>Add rule</mwc-button>
+          </div>
+          ${this._rules.length === 0
+            ? html`<div class="placeholder">No rules yet.</div>`
+            : html`
+                <ul class="rules">
+                  ${this._rules.map((rule, index) => this._renderRule(rule, index))}
+                </ul>
+              `}
         </div>
 
         <mwc-button slot="secondaryAction" @click=${this._closeDialog}>
@@ -198,6 +265,36 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           Save
         </mwc-button>
       </ha-dialog>
+      <scheduler-plus-rule-editor></scheduler-plus-rule-editor>
+    `;
+  }
+
+  private _renderRule(rule: RuleInput, index: number) {
+    const days = [...rule.days]
+      .sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b))
+      .map((day) => WEEKDAY_LABELS[day].slice(0, 3))
+      .join(", ");
+    return html`
+      <li class="rule ${rule.enabled ? "" : "disabled"}">
+        <div class="rule-info">
+          <span class="rule-name">${rule.name}</span>
+          <span class="rule-meta">
+            ${days} · ${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}
+          </span>
+        </div>
+        <div class="row-actions">
+          <ha-icon-button
+            .path=${mdiPencil}
+            label="Edit rule"
+            @click=${() => this._openEditRuleDialog(index)}
+          ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiDelete}
+            label="Remove rule"
+            @click=${() => this._removeRule(index)}
+          ></ha-icon-button>
+        </div>
+      </li>
     `;
   }
 
@@ -235,6 +332,47 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     }
     .entity-row ha-entity-picker {
       flex: 1;
+    }
+    .rules-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .placeholder {
+      padding: 8px 0;
+      color: var(--secondary-text-color);
+    }
+    ul.rules {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .rule {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .rule:last-child {
+      border-bottom: none;
+    }
+    .rule.disabled .rule-name {
+      color: var(--disabled-text-color);
+    }
+    .rule-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .rule-name {
+      font-weight: 500;
+    }
+    .rule-meta {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+    }
+    .row-actions {
+      display: flex;
     }
   `;
 }

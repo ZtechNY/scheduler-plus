@@ -245,6 +245,19 @@ async def test_refresh_rule_disabled_rule_schedules_nothing(
     assert rule.id not in engine._unsub_rules
 
 
+async def test_get_next_event_disabled_schedule_returns_none(
+    engine: SchedulerEngine,
+) -> None:
+    """A disabled schedule reports no next event, even with enabled rules."""
+    rule = _make_rule()
+    schedule = _make_schedule(rule)
+    schedule.enabled = False
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is None
+
+
 async def test_refresh_all_skips_disabled_schedule(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:

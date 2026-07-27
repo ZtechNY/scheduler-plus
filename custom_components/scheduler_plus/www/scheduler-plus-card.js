@@ -1,18 +1,197 @@
-var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H,V)=>{for(var L=V>1?void 0:V?X1(C,H):C,r=M.length-1,e;r>=0;r--)(e=M[r])&&(L=(V?e(C,H,L):e(L))||L);return V&&L&&j1(C,H,L),L};var U="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";var l1="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";var Q=globalThis,G=Q.ShadowRoot&&(Q.ShadyCSS===void 0||Q.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,t1=Symbol(),n1=new WeakMap,R=class{constructor(C,H,V){if(this._$cssResult$=!0,V!==t1)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=C,this.t=H}get styleSheet(){let C=this.o,H=this.t;if(G&&C===void 0){let V=H!==void 0&&H.length===1;V&&(C=n1.get(H)),C===void 0&&((this.o=C=new CSSStyleSheet).replaceSync(this.cssText),V&&n1.set(H,C))}return C}toString(){return this.cssText}},Z1=M=>new R(typeof M=="string"?M:M+"",void 0,t1),D=(M,...C)=>{let H=M.length===1?M[0]:C.reduce((V,L,r)=>V+(e=>{if(e._$cssResult$===!0)return e.cssText;if(typeof e=="number")return e;throw Error("Value passed to 'css' function must be a 'css' function result: "+e+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(L)+M[r+1],M[0]);return new R(H,M,t1)},S1=(M,C)=>{if(G)M.adoptedStyleSheets=C.map(H=>H instanceof CSSStyleSheet?H:H.styleSheet);else for(let H of C){let V=document.createElement("style"),L=Q.litNonce;L!==void 0&&V.setAttribute("nonce",L),V.textContent=H.cssText,M.appendChild(V)}},A1=G?M=>M:M=>M instanceof CSSStyleSheet?(C=>{let H="";for(let V of C.cssRules)H+=V.cssText;return Z1(H)})(M):M;var{is:Y1,defineProperty:J1,getOwnPropertyDescriptor:C2,getOwnPropertyNames:H2,getOwnPropertySymbols:V2,getPrototypeOf:L2}=Object,z=globalThis,u1=z.trustedTypes,M2=u1?u1.emptyScript:"",r2=z.reactiveElementPolyfillSupport,E=(M,C)=>M,W={toAttribute(M,C){switch(C){case Boolean:M=M?M2:null;break;case Object:case Array:M=M==null?M:JSON.stringify(M)}return M},fromAttribute(M,C){let H=M;switch(C){case Boolean:H=M!==null;break;case Number:H=M===null?null:Number(M);break;case Object:case Array:try{H=JSON.parse(M)}catch{H=null}}return H}},K=(M,C)=>!Y1(M,C),s1={attribute:!0,type:String,converter:W,reflect:!1,useDefault:!1,hasChanged:K};Symbol.metadata??=Symbol("metadata"),z.litPropertyMetadata??=new WeakMap;var c=class extends HTMLElement{static addInitializer(C){this._$Ei(),(this.l??=[]).push(C)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(C,H=s1){if(H.state&&(H.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(C)&&((H=Object.create(H)).wrapped=!0),this.elementProperties.set(C,H),!H.noAccessor){let V=Symbol(),L=this.getPropertyDescriptor(C,V,H);L!==void 0&&J1(this.prototype,C,L)}}static getPropertyDescriptor(C,H,V){let{get:L,set:r}=C2(this.prototype,C)??{get(){return this[H]},set(e){this[H]=e}};return{get:L,set(e){let A=L?.call(this);r?.call(this,e),this.requestUpdate(C,A,V)},configurable:!0,enumerable:!0}}static getPropertyOptions(C){return this.elementProperties.get(C)??s1}static _$Ei(){if(this.hasOwnProperty(E("elementProperties")))return;let C=L2(this);C.finalize(),C.l!==void 0&&(this.l=[...C.l]),this.elementProperties=new Map(C.elementProperties)}static finalize(){if(this.hasOwnProperty(E("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(E("properties"))){let H=this.properties,V=[...H2(H),...V2(H)];for(let L of V)this.createProperty(L,H[L])}let C=this[Symbol.metadata];if(C!==null){let H=litPropertyMetadata.get(C);if(H!==void 0)for(let[V,L]of H)this.elementProperties.set(V,L)}this._$Eh=new Map;for(let[H,V]of this.elementProperties){let L=this._$Eu(H,V);L!==void 0&&this._$Eh.set(L,H)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(C){let H=[];if(Array.isArray(C)){let V=new Set(C.flat(1/0).reverse());for(let L of V)H.unshift(A1(L))}else C!==void 0&&H.push(A1(C));return H}static _$Eu(C,H){let V=H.attribute;return V===!1?void 0:typeof V=="string"?V:typeof C=="string"?C.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(C=>this.enableUpdating=C),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(C=>C(this))}addController(C){(this._$EO??=new Set).add(C),this.renderRoot!==void 0&&this.isConnected&&C.hostConnected?.()}removeController(C){this._$EO?.delete(C)}_$E_(){let C=new Map,H=this.constructor.elementProperties;for(let V of H.keys())this.hasOwnProperty(V)&&(C.set(V,this[V]),delete this[V]);C.size>0&&(this._$Ep=C)}createRenderRoot(){let C=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return S1(C,this.constructor.elementStyles),C}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(C=>C.hostConnected?.())}enableUpdating(C){}disconnectedCallback(){this._$EO?.forEach(C=>C.hostDisconnected?.())}attributeChangedCallback(C,H,V){this._$AK(C,V)}_$ET(C,H){let V=this.constructor.elementProperties.get(C),L=this.constructor._$Eu(C,V);if(L!==void 0&&V.reflect===!0){let r=(V.converter?.toAttribute!==void 0?V.converter:W).toAttribute(H,V.type);this._$Em=C,r==null?this.removeAttribute(L):this.setAttribute(L,r),this._$Em=null}}_$AK(C,H){let V=this.constructor,L=V._$Eh.get(C);if(L!==void 0&&this._$Em!==L){let r=V.getPropertyOptions(L),e=typeof r.converter=="function"?{fromAttribute:r.converter}:r.converter?.fromAttribute!==void 0?r.converter:W;this._$Em=L;let A=e.fromAttribute(H,r.type);this[L]=A??this._$Ej?.get(L)??A,this._$Em=null}}requestUpdate(C,H,V,L=!1,r){if(C!==void 0){let e=this.constructor;if(L===!1&&(r=this[C]),V??=e.getPropertyOptions(C),!((V.hasChanged??K)(r,H)||V.useDefault&&V.reflect&&r===this._$Ej?.get(C)&&!this.hasAttribute(e._$Eu(C,V))))return;this.C(C,H,V)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(C,H,{useDefault:V,reflect:L,wrapped:r},e){V&&!(this._$Ej??=new Map).has(C)&&(this._$Ej.set(C,e??H??this[C]),r!==!0||e!==void 0)||(this._$AL.has(C)||(this.hasUpdated||V||(H=void 0),this._$AL.set(C,H)),L===!0&&this._$Em!==C&&(this._$Eq??=new Set).add(C))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(H){Promise.reject(H)}let C=this.scheduleUpdate();return C!=null&&await C,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(let[L,r]of this._$Ep)this[L]=r;this._$Ep=void 0}let V=this.constructor.elementProperties;if(V.size>0)for(let[L,r]of V){let{wrapped:e}=r,A=this[L];e!==!0||this._$AL.has(L)||A===void 0||this.C(L,void 0,r,A)}}let C=!1,H=this._$AL;try{C=this.shouldUpdate(H),C?(this.willUpdate(H),this._$EO?.forEach(V=>V.hostUpdate?.()),this.update(H)):this._$EM()}catch(V){throw C=!1,this._$EM(),V}C&&this._$AE(H)}willUpdate(C){}_$AE(C){this._$EO?.forEach(H=>H.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(C)),this.updated(C)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(C){return!0}update(C){this._$Eq&&=this._$Eq.forEach(H=>this._$ET(H,this[H])),this._$EM()}updated(C){}firstUpdated(C){}};c.elementStyles=[],c.shadowRootOptions={mode:"open"},c[E("elementProperties")]=new Map,c[E("finalized")]=new Map,r2?.({ReactiveElement:c}),(z.reactiveElementVersions??=[]).push("2.1.2");var o1=globalThis,c1=M=>M,q=o1.trustedTypes,O1=q?q.createPolicy("lit-html",{createHTML:M=>M}):void 0,a1="$lit$",O=`lit$${Math.random().toFixed(9).slice(2)}$`,d1="?"+O,e2=`<${d1}>`,B=document,_=()=>B.createComment(""),I=M=>M===null||typeof M!="object"&&typeof M!="function",p1=Array.isArray,P1=M=>p1(M)||typeof M?.[Symbol.iterator]=="function",i1=`[ 	
-\f\r]`,N=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,h1=/-->/g,g1=/>/g,f=RegExp(`>|${i1}(?:([^\\s"'>=/]+)(${i1}*=${i1}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`,"g"),f1=/'/g,k1=/"/g,T1=/^(?:script|style|textarea|title)$/i,m1=M=>(C,...H)=>({_$litType$:M,strings:C,values:H}),Z=m1(1),Z2=m1(2),S2=m1(3),h=Symbol.for("lit-noChange"),p=Symbol.for("lit-nothing"),B1=new WeakMap,k=B.createTreeWalker(B,129);function y1(M,C){if(!p1(M)||!M.hasOwnProperty("raw"))throw Error("invalid template strings array");return O1!==void 0?O1.createHTML(C):C}var w1=(M,C)=>{let H=M.length-1,V=[],L,r=C===2?"<svg>":C===3?"<math>":"",e=N;for(let A=0;A<H;A++){let t=M[A],a,m,i=-1,d=0;for(;d<t.length&&(e.lastIndex=d,m=e.exec(t),m!==null);)d=e.lastIndex,e===N?m[1]==="!--"?e=h1:m[1]!==void 0?e=g1:m[2]!==void 0?(T1.test(m[2])&&(L=RegExp("</"+m[2],"g")),e=f):m[3]!==void 0&&(e=f):e===f?m[0]===">"?(e=L??N,i=-1):m[1]===void 0?i=-2:(i=e.lastIndex-m[2].length,a=m[1],e=m[3]===void 0?f:m[3]==='"'?k1:f1):e===k1||e===f1?e=f:e===h1||e===g1?e=N:(e=f,L=void 0);let o=e===f&&M[A+1].startsWith("/>")?" ":"";r+=e===N?t+e2:i>=0?(V.push(a),t.slice(0,i)+a1+t.slice(i)+O+o):t+O+(i===-2?A:o)}return[y1(M,r+(M[H]||"<?>")+(C===2?"</svg>":C===3?"</math>":"")),V]},$=class M{constructor({strings:C,_$litType$:H},V){let L;this.parts=[];let r=0,e=0,A=C.length-1,t=this.parts,[a,m]=w1(C,H);if(this.el=M.createElement(a,V),k.currentNode=this.el.content,H===2||H===3){let i=this.el.content.firstChild;i.replaceWith(...i.childNodes)}for(;(L=k.nextNode())!==null&&t.length<A;){if(L.nodeType===1){if(L.hasAttributes())for(let i of L.getAttributeNames())if(i.endsWith(a1)){let d=m[e++],o=L.getAttribute(i).split(O),x=/([.?@])?(.*)/.exec(d);t.push({type:1,index:r,name:x[2],strings:o,ctor:x[1]==="."?X:x[1]==="?"?Y:x[1]==="@"?J:T}),L.removeAttribute(i)}else i.startsWith(O)&&(t.push({type:6,index:r}),L.removeAttribute(i));if(T1.test(L.tagName)){let i=L.textContent.split(O),d=i.length-1;if(d>0){L.textContent=q?q.emptyScript:"";for(let o=0;o<d;o++)L.append(i[o],_()),k.nextNode(),t.push({type:2,index:++r});L.append(i[d],_())}}}else if(L.nodeType===8)if(L.data===d1)t.push({type:2,index:r});else{let i=-1;for(;(i=L.data.indexOf(O,i+1))!==-1;)t.push({type:7,index:r}),i+=O.length-1}r++}}static createElement(C,H){let V=B.createElement("template");return V.innerHTML=C,V}};function P(M,C,H=M,V){if(C===h)return C;let L=V!==void 0?H._$Co?.[V]:H._$Cl,r=I(C)?void 0:C._$litDirective$;return L?.constructor!==r&&(L?._$AO?.(!1),r===void 0?L=void 0:(L=new r(M),L._$AT(M,H,V)),V!==void 0?(H._$Co??=[])[V]=L:H._$Cl=L),L!==void 0&&(C=P(M,L._$AS(M,C.values),L,V)),C}var j=class{constructor(C,H){this._$AV=[],this._$AN=void 0,this._$AD=C,this._$AM=H}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(C){let{el:{content:H},parts:V}=this._$AD,L=(C?.creationScope??B).importNode(H,!0);k.currentNode=L;let r=k.nextNode(),e=0,A=0,t=V[0];for(;t!==void 0;){if(e===t.index){let a;t.type===2?a=new w(r,r.nextSibling,this,C):t.type===1?a=new t.ctor(r,t.name,t.strings,this,C):t.type===6&&(a=new C1(r,this,C)),this._$AV.push(a),t=V[++A]}e!==t?.index&&(r=k.nextNode(),e++)}return k.currentNode=B,L}p(C){let H=0;for(let V of this._$AV)V!==void 0&&(V.strings!==void 0?(V._$AI(C,V,H),H+=V.strings.length-2):V._$AI(C[H])),H++}},w=class M{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(C,H,V,L){this.type=2,this._$AH=p,this._$AN=void 0,this._$AA=C,this._$AB=H,this._$AM=V,this.options=L,this._$Cv=L?.isConnected??!0}get parentNode(){let C=this._$AA.parentNode,H=this._$AM;return H!==void 0&&C?.nodeType===11&&(C=H.parentNode),C}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(C,H=this){C=P(this,C,H),I(C)?C===p||C==null||C===""?(this._$AH!==p&&this._$AR(),this._$AH=p):C!==this._$AH&&C!==h&&this._(C):C._$litType$!==void 0?this.$(C):C.nodeType!==void 0?this.T(C):P1(C)?this.k(C):this._(C)}O(C){return this._$AA.parentNode.insertBefore(C,this._$AB)}T(C){this._$AH!==C&&(this._$AR(),this._$AH=this.O(C))}_(C){this._$AH!==p&&I(this._$AH)?this._$AA.nextSibling.data=C:this.T(B.createTextNode(C)),this._$AH=C}$(C){let{values:H,_$litType$:V}=C,L=typeof V=="number"?this._$AC(C):(V.el===void 0&&(V.el=$.createElement(y1(V.h,V.h[0]),this.options)),V);if(this._$AH?._$AD===L)this._$AH.p(H);else{let r=new j(L,this),e=r.u(this.options);r.p(H),this.T(e),this._$AH=r}}_$AC(C){let H=B1.get(C.strings);return H===void 0&&B1.set(C.strings,H=new $(C)),H}k(C){p1(this._$AH)||(this._$AH=[],this._$AR());let H=this._$AH,V,L=0;for(let r of C)L===H.length?H.push(V=new M(this.O(_()),this.O(_()),this,this.options)):V=H[L],V._$AI(r),L++;L<H.length&&(this._$AR(V&&V._$AB.nextSibling,L),H.length=L)}_$AR(C=this._$AA.nextSibling,H){for(this._$AP?.(!1,!0,H);C!==this._$AB;){let V=c1(C).nextSibling;c1(C).remove(),C=V}}setConnected(C){this._$AM===void 0&&(this._$Cv=C,this._$AP?.(C))}},T=class{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(C,H,V,L,r){this.type=1,this._$AH=p,this._$AN=void 0,this.element=C,this.name=H,this._$AM=L,this.options=r,V.length>2||V[0]!==""||V[1]!==""?(this._$AH=Array(V.length-1).fill(new String),this.strings=V):this._$AH=p}_$AI(C,H=this,V,L){let r=this.strings,e=!1;if(r===void 0)C=P(this,C,H,0),e=!I(C)||C!==this._$AH&&C!==h,e&&(this._$AH=C);else{let A=C,t,a;for(C=r[0],t=0;t<r.length-1;t++)a=P(this,A[V+t],H,t),a===h&&(a=this._$AH[t]),e||=!I(a)||a!==this._$AH[t],a===p?C=p:C!==p&&(C+=(a??"")+r[t+1]),this._$AH[t]=a}e&&!L&&this.j(C)}j(C){C===p?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,C??"")}},X=class extends T{constructor(){super(...arguments),this.type=3}j(C){this.element[this.name]=C===p?void 0:C}},Y=class extends T{constructor(){super(...arguments),this.type=4}j(C){this.element.toggleAttribute(this.name,!!C&&C!==p)}},J=class extends T{constructor(C,H,V,L,r){super(C,H,V,L,r),this.type=5}_$AI(C,H=this){if((C=P(this,C,H,0)??p)===h)return;let V=this._$AH,L=C===p&&V!==p||C.capture!==V.capture||C.once!==V.once||C.passive!==V.passive,r=C!==p&&(V===p||L);L&&this.element.removeEventListener(this.name,this,V),r&&this.element.addEventListener(this.name,this,C),this._$AH=C}handleEvent(C){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,C):this._$AH.handleEvent(C)}},C1=class{constructor(C,H,V){this.element=C,this.type=6,this._$AN=void 0,this._$AM=H,this.options=V}get _$AU(){return this._$AM._$AU}_$AI(C){P(this,C)}},b1={M:a1,P:O,A:d1,C:1,L:w1,R:j,D:P1,V:P,I:w,H:T,N:Y,U:J,B:X,F:C1},t2=o1.litHtmlPolyfillSupport;t2?.($,w),(o1.litHtmlVersions??=[]).push("3.3.3");var F1=(M,C,H)=>{let V=H?.renderBefore??C,L=V._$litPart$;if(L===void 0){let r=H?.renderBefore??null;V._$litPart$=L=new w(C.insertBefore(_(),r),r,void 0,H??{})}return L._$AI(M),L};var v1=globalThis,u=class extends c{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){let C=super.createRenderRoot();return this.renderOptions.renderBefore??=C.firstChild,C}update(C){let H=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(C),this._$Do=F1(H,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return h}};u._$litElement$=!0,u.finalized=!0,v1.litElementHydrateSupport?.({LitElement:u});var A2=v1.litElementPolyfillSupport;A2?.({LitElement:u});(v1.litElementVersions??=[]).push("4.2.2");var H1=M=>(C,H)=>{H!==void 0?H.addInitializer(()=>{customElements.define(M,C)}):customElements.define(M,C)};var i2={attribute:!0,type:String,converter:W,reflect:!1,hasChanged:K},o2=(M=i2,C,H)=>{let{kind:V,metadata:L}=H,r=globalThis.litPropertyMetadata.get(L);if(r===void 0&&globalThis.litPropertyMetadata.set(L,r=new Map),V==="setter"&&((M=Object.create(M)).wrapped=!0),r.set(H.name,M),V==="accessor"){let{name:e}=H;return{set(A){let t=C.get.call(this);C.set.call(this,A),this.requestUpdate(e,t,M,!0,A)},init(A){return A!==void 0&&this.C(e,void 0,M,A),A}}}if(V==="setter"){let{name:e}=H;return function(A){let t=this[e];C.call(this,A),this.requestUpdate(e,t,M,!0,A)}}throw Error("Unsupported decorator location: "+V)};function b(M){return(C,H)=>typeof H=="object"?o2(M,C,H):((V,L,r)=>{let e=L.hasOwnProperty(r);return L.constructor.createProperty(r,V),e?Object.getOwnPropertyDescriptor(L,r):void 0})(M,C,H)}function l(M){return b({...M,state:!0,attribute:!1})}var y=(M,C,H)=>(H.configurable=!0,H.enumerable=!0,Reflect.decorate&&typeof C!="object"&&Object.defineProperty(M,C,H),H);function R1(M,C){return(H,V,L)=>{let r=e=>e.renderRoot?.querySelector(M)??null;if(C){let{get:e,set:A}=typeof V=="object"?H:L??(()=>{let t=Symbol();return{get(){return this[t]},set(a){this[t]=a}}})();return y(H,V,{get(){let t=e.call(this);return t===void 0&&(t=r(this),(t!==null||this.hasUpdated)&&A.call(this,t)),t}})}return y(H,V,{get(){return r(this)}})}}var V1="scheduler_plus";async function D1(M){return(await M.callWS({type:`${V1}/list_schedules`})).schedules}async function E1(M,C){return(await M.callWS({type:`${V1}/create_schedule`,...C})).schedule}async function W1(M,C,H){return(await M.callWS({type:`${V1}/update_schedule`,schedule_id:C,...H})).schedule}async function N1(M,C){await M.callWS({type:`${V1}/delete_schedule`,schedule_id:C})}var _1={ATTRIBUTE:1,CHILD:2,PROPERTY:3,BOOLEAN_ATTRIBUTE:4,EVENT:5,ELEMENT:6},I1=M=>(...C)=>({_$litDirective$:M,values:C}),L1=class{constructor(C){}get _$AU(){return this._$AM._$AU}_$AT(C,H,V){this._$Ct=C,this._$AM=H,this._$Ci=V}_$AS(C,H){return this.update(C,H)}update(C,H){return this.render(...H)}};var{I:a2}=b1,$1=M=>M;var U1=()=>document.createComment(""),F=(M,C,H)=>{let V=M._$AA.parentNode,L=C===void 0?M._$AB:C._$AA;if(H===void 0){let r=V.insertBefore(U1(),L),e=V.insertBefore(U1(),L);H=new a2(r,e,M,M.options)}else{let r=H._$AB.nextSibling,e=H._$AM,A=e!==M;if(A){let t;H._$AQ?.(M),H._$AM=M,H._$AP!==void 0&&(t=M._$AU)!==e._$AU&&H._$AP(t)}if(r!==L||A){let t=H._$AA;for(;t!==r;){let a=$1(t).nextSibling;$1(V).insertBefore(t,L),t=a}}}return H},g=(M,C,H=M)=>(M._$AI(C,H),M),d2={},Q1=(M,C=d2)=>M._$AH=C,G1=M=>M._$AH,M1=M=>{M._$AR(),M._$AA.remove()};var z1=(M,C,H)=>{let V=new Map;for(let L=C;L<=H;L++)V.set(M[L],L);return V},K1=I1(class extends L1{constructor(M){if(super(M),M.type!==_1.CHILD)throw Error("repeat() can only be used in text expressions")}dt(M,C,H){let V;H===void 0?H=C:C!==void 0&&(V=C);let L=[],r=[],e=0;for(let A of M)L[e]=V?V(A,e):e,r[e]=H(A,e),e++;return{values:r,keys:L}}render(M,C,H){return this.dt(M,C,H).values}update(M,[C,H,V]){let L=G1(M),{values:r,keys:e}=this.dt(C,H,V);if(!Array.isArray(L))return this.ut=e,r;let A=this.ut??=[],t=[],a,m,i=0,d=L.length-1,o=0,x=r.length-1;for(;i<=d&&o<=x;)if(L[i]===null)i++;else if(L[d]===null)d--;else if(A[i]===e[o])t[o]=g(L[i],r[o]),i++,o++;else if(A[d]===e[x])t[x]=g(L[d],r[x]),d--,x--;else if(A[i]===e[x])t[x]=g(L[i],r[x]),F(M,t[x+1],L[i]),i++,x--;else if(A[d]===e[o])t[o]=g(L[d],r[o]),F(M,L[i],L[d]),d--,o++;else if(a===void 0&&(a=z1(e,o,x),m=z1(A,i,d)),a.has(A[i]))if(a.has(A[d])){let s=m.get(e[o]),e1=s!==void 0?L[s]:null;if(e1===null){let x1=F(M,L[i]);g(x1,r[o]),t[o]=x1}else t[o]=g(e1,r[o]),F(M,L[i],e1),L[s]=null;o++}else M1(L[d]),d--;else M1(L[i]),i++;for(;o<=x;){let s=F(M,t[x+1]);g(s,r[o]),t[o++]=s}for(;i<=d;){let s=L[i++];s!==null&&M1(s)}return this.ut=e,Q1(M,t),h}});var q1=["light","climate"],r1={light:"Light",climate:"Climate"};var n=class extends u{constructor(){super(...arguments);this._open=!1;this._name="";this._deviceType="light";this._enabled=!0;this._entities=[];this._saving=!1;this._closeDialog=()=>{this._open=!1};this._handleDeviceTypeChange=H=>{this._deviceType=H.target.value,this._entities=[]};this._addEntity=H=>{!H||this._entities.includes(H)||(this._entities=[...this._entities,H])};this._removeEntity=H=>{this._entities=this._entities.filter((V,L)=>L!==H)};this._updateEntity=(H,V)=>{if(!V){this._removeEntity(H);return}this._entities=this._entities.map((L,r)=>r===H?V:L)};this._save=async()=>{let H=this._name.trim();if(!H){this._error="Name is required.";return}if(this._entities.length===0){this._error="At least one entity is required.";return}this._saving=!0,this._error=void 0;try{let V={name:H,device_type:this._deviceType,entities:this._entities,enabled:this._enabled,rules:this._schedule?.rules??[]};this._schedule?await W1(this.hass,this._schedule.id,V):await E1(this.hass,V),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(V){this._error=V instanceof Error?V.message:String(V)}finally{this._saving=!1}}}showDialog(H){this._schedule=H,this._name=H?.name??"",this._deviceType=H?.device_type??"light",this._enabled=H?.enabled??!0,this._entities=H?[...H.entities]:[],this._error=void 0,this._open=!0}render(){return this._open?Z`
+var V2=Object.defineProperty;var L2=Object.getOwnPropertyDescriptor;var o=(M,H,C,V)=>{for(var L=V>1?void 0:V?L2(H,C):H,r=M.length-1,e;r>=0;r--)(e=M[r])&&(L=(V?e(H,C,L):e(L))||L);return V&&L&&V2(H,C,L),L};var _="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";var q="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";var j=globalThis,Y=j.ShadowRoot&&(j.ShadyCSS===void 0||j.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,p1=Symbol(),c1=new WeakMap,W=class{constructor(H,C,V){if(this._$cssResult$=!0,V!==p1)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=H,this.t=C}get styleSheet(){let H=this.o,C=this.t;if(Y&&H===void 0){let V=C!==void 0&&C.length===1;V&&(H=c1.get(C)),H===void 0&&((this.o=H=new CSSStyleSheet).replaceSync(this.cssText),V&&c1.set(C,H))}return H}toString(){return this.cssText}},O1=M=>new W(typeof M=="string"?M:M+"",void 0,p1),k=(M,...H)=>{let C=M.length===1?M[0]:H.reduce((V,L,r)=>V+(e=>{if(e._$cssResult$===!0)return e.cssText;if(typeof e=="number")return e;throw Error("Value passed to 'css' function must be a 'css' function result: "+e+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(L)+M[r+1],M[0]);return new W(C,M,p1)},h1=(M,H)=>{if(Y)M.adoptedStyleSheets=H.map(C=>C instanceof CSSStyleSheet?C:C.styleSheet);else for(let C of H){let V=document.createElement("style"),L=j.litNonce;L!==void 0&&V.setAttribute("nonce",L),V.textContent=C.cssText,M.appendChild(V)}},m1=Y?M=>M:M=>M instanceof CSSStyleSheet?(H=>{let C="";for(let V of H.cssRules)C+=V.cssText;return O1(C)})(M):M;var{is:M2,defineProperty:r2,getOwnPropertyDescriptor:e2,getOwnPropertyNames:t2,getOwnPropertySymbols:A2,getPrototypeOf:i2}=Object,X=globalThis,f1=X.trustedTypes,o2=f1?f1.emptyScript:"",a2=X.reactiveElementPolyfillSupport,N=(M,H)=>M,$={toAttribute(M,H){switch(H){case Boolean:M=M?o2:null;break;case Object:case Array:M=M==null?M:JSON.stringify(M)}return M},fromAttribute(M,H){let C=M;switch(H){case Boolean:C=M!==null;break;case Number:C=M===null?null:Number(M);break;case Object:case Array:try{C=JSON.parse(M)}catch{C=null}}return C}},J=(M,H)=>!M2(M,H),g1={attribute:!0,type:String,converter:$,reflect:!1,useDefault:!1,hasChanged:J};Symbol.metadata??=Symbol("metadata"),X.litPropertyMetadata??=new WeakMap;var O=class extends HTMLElement{static addInitializer(H){this._$Ei(),(this.l??=[]).push(H)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(H,C=g1){if(C.state&&(C.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(H)&&((C=Object.create(C)).wrapped=!0),this.elementProperties.set(H,C),!C.noAccessor){let V=Symbol(),L=this.getPropertyDescriptor(H,V,C);L!==void 0&&r2(this.prototype,H,L)}}static getPropertyDescriptor(H,C,V){let{get:L,set:r}=e2(this.prototype,H)??{get(){return this[C]},set(e){this[C]=e}};return{get:L,set(e){let A=L?.call(this);r?.call(this,e),this.requestUpdate(H,A,V)},configurable:!0,enumerable:!0}}static getPropertyOptions(H){return this.elementProperties.get(H)??g1}static _$Ei(){if(this.hasOwnProperty(N("elementProperties")))return;let H=i2(this);H.finalize(),H.l!==void 0&&(this.l=[...H.l]),this.elementProperties=new Map(H.elementProperties)}static finalize(){if(this.hasOwnProperty(N("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(N("properties"))){let C=this.properties,V=[...t2(C),...A2(C)];for(let L of V)this.createProperty(L,C[L])}let H=this[Symbol.metadata];if(H!==null){let C=litPropertyMetadata.get(H);if(C!==void 0)for(let[V,L]of C)this.elementProperties.set(V,L)}this._$Eh=new Map;for(let[C,V]of this.elementProperties){let L=this._$Eu(C,V);L!==void 0&&this._$Eh.set(L,C)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(H){let C=[];if(Array.isArray(H)){let V=new Set(H.flat(1/0).reverse());for(let L of V)C.unshift(m1(L))}else H!==void 0&&C.push(m1(H));return C}static _$Eu(H,C){let V=C.attribute;return V===!1?void 0:typeof V=="string"?V:typeof H=="string"?H.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(H=>this.enableUpdating=H),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(H=>H(this))}addController(H){(this._$EO??=new Set).add(H),this.renderRoot!==void 0&&this.isConnected&&H.hostConnected?.()}removeController(H){this._$EO?.delete(H)}_$E_(){let H=new Map,C=this.constructor.elementProperties;for(let V of C.keys())this.hasOwnProperty(V)&&(H.set(V,this[V]),delete this[V]);H.size>0&&(this._$Ep=H)}createRenderRoot(){let H=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return h1(H,this.constructor.elementStyles),H}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(H=>H.hostConnected?.())}enableUpdating(H){}disconnectedCallback(){this._$EO?.forEach(H=>H.hostDisconnected?.())}attributeChangedCallback(H,C,V){this._$AK(H,V)}_$ET(H,C){let V=this.constructor.elementProperties.get(H),L=this.constructor._$Eu(H,V);if(L!==void 0&&V.reflect===!0){let r=(V.converter?.toAttribute!==void 0?V.converter:$).toAttribute(C,V.type);this._$Em=H,r==null?this.removeAttribute(L):this.setAttribute(L,r),this._$Em=null}}_$AK(H,C){let V=this.constructor,L=V._$Eh.get(H);if(L!==void 0&&this._$Em!==L){let r=V.getPropertyOptions(L),e=typeof r.converter=="function"?{fromAttribute:r.converter}:r.converter?.fromAttribute!==void 0?r.converter:$;this._$Em=L;let A=e.fromAttribute(C,r.type);this[L]=A??this._$Ej?.get(L)??A,this._$Em=null}}requestUpdate(H,C,V,L=!1,r){if(H!==void 0){let e=this.constructor;if(L===!1&&(r=this[H]),V??=e.getPropertyOptions(H),!((V.hasChanged??J)(r,C)||V.useDefault&&V.reflect&&r===this._$Ej?.get(H)&&!this.hasAttribute(e._$Eu(H,V))))return;this.C(H,C,V)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(H,C,{useDefault:V,reflect:L,wrapped:r},e){V&&!(this._$Ej??=new Map).has(H)&&(this._$Ej.set(H,e??C??this[H]),r!==!0||e!==void 0)||(this._$AL.has(H)||(this.hasUpdated||V||(C=void 0),this._$AL.set(H,C)),L===!0&&this._$Em!==H&&(this._$Eq??=new Set).add(H))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(C){Promise.reject(C)}let H=this.scheduleUpdate();return H!=null&&await H,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(let[L,r]of this._$Ep)this[L]=r;this._$Ep=void 0}let V=this.constructor.elementProperties;if(V.size>0)for(let[L,r]of V){let{wrapped:e}=r,A=this[L];e!==!0||this._$AL.has(L)||A===void 0||this.C(L,void 0,r,A)}}let H=!1,C=this._$AL;try{H=this.shouldUpdate(C),H?(this.willUpdate(C),this._$EO?.forEach(V=>V.hostUpdate?.()),this.update(C)):this._$EM()}catch(V){throw H=!1,this._$EM(),V}H&&this._$AE(C)}willUpdate(H){}_$AE(H){this._$EO?.forEach(C=>C.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(H)),this.updated(H)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(H){return!0}update(H){this._$Eq&&=this._$Eq.forEach(C=>this._$ET(C,this[C])),this._$EM()}updated(H){}firstUpdated(H){}};O.elementStyles=[],O.shadowRootOptions={mode:"open"},O[N("elementProperties")]=new Map,O[N("finalized")]=new Map,a2?.({ReactiveElement:O}),(X.reactiveElementVersions??=[]).push("2.1.2");var x1=globalThis,k1=M=>M,C1=x1.trustedTypes,B1=C1?C1.createPolicy("lit-html",{createHTML:M=>M}):void 0,l1="$lit$",h=`lit$${Math.random().toFixed(9).slice(2)}$`,n1="?"+h,d2=`<${n1}>`,y=document,U=()=>y.createComment(""),Q=M=>M===null||typeof M!="object"&&typeof M!="function",Z1=Array.isArray,F1=M=>Z1(M)||typeof M?.[Symbol.iterator]=="function",v1=`[ 	
+\f\r]`,I=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,P1=/-->/g,y1=/>/g,B=RegExp(`>|${v1}(?:([^\\s"'>=/]+)(${v1}*=${v1}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`,"g"),T1=/'/g,w1=/"/g,R1=/^(?:script|style|textarea|title)$/i,S1=M=>(H,...C)=>({_$litType$:M,strings:H,values:C}),d=S1(1),B2=S1(2),P2=S1(3),f=Symbol.for("lit-noChange"),m=Symbol.for("lit-nothing"),b1=new WeakMap,P=y.createTreeWalker(y,129);function D1(M,H){if(!Z1(M)||!M.hasOwnProperty("raw"))throw Error("invalid template strings array");return B1!==void 0?B1.createHTML(H):H}var E1=(M,H)=>{let C=M.length-1,V=[],L,r=H===2?"<svg>":H===3?"<math>":"",e=I;for(let A=0;A<C;A++){let t=M[A],v,l,i=-1,x=0;for(;x<t.length&&(e.lastIndex=x,l=e.exec(t),l!==null);)x=e.lastIndex,e===I?l[1]==="!--"?e=P1:l[1]!==void 0?e=y1:l[2]!==void 0?(R1.test(l[2])&&(L=RegExp("</"+l[2],"g")),e=B):l[3]!==void 0&&(e=B):e===B?l[0]===">"?(e=L??I,i=-1):l[1]===void 0?i=-2:(i=e.lastIndex-l[2].length,v=l[1],e=l[3]===void 0?B:l[3]==='"'?w1:T1):e===w1||e===T1?e=B:e===P1||e===y1?e=I:(e=B,L=void 0);let p=e===B&&M[A+1].startsWith("/>")?" ":"";r+=e===I?t+d2:i>=0?(V.push(v),t.slice(0,i)+l1+t.slice(i)+h+p):t+h+(i===-2?A:p)}return[D1(M,r+(M[C]||"<?>")+(H===2?"</svg>":H===3?"</math>":"")),V]},G=class M{constructor({strings:H,_$litType$:C},V){let L;this.parts=[];let r=0,e=0,A=H.length-1,t=this.parts,[v,l]=E1(H,C);if(this.el=M.createElement(v,V),P.currentNode=this.el.content,C===2||C===3){let i=this.el.content.firstChild;i.replaceWith(...i.childNodes)}for(;(L=P.nextNode())!==null&&t.length<A;){if(L.nodeType===1){if(L.hasAttributes())for(let i of L.getAttributeNames())if(i.endsWith(l1)){let x=l[e++],p=L.getAttribute(i).split(h),Z=/([.?@])?(.*)/.exec(x);t.push({type:1,index:r,name:Z[2],strings:p,ctor:Z[1]==="."?V1:Z[1]==="?"?L1:Z[1]==="@"?M1:w}),L.removeAttribute(i)}else i.startsWith(h)&&(t.push({type:6,index:r}),L.removeAttribute(i));if(R1.test(L.tagName)){let i=L.textContent.split(h),x=i.length-1;if(x>0){L.textContent=C1?C1.emptyScript:"";for(let p=0;p<x;p++)L.append(i[p],U()),P.nextNode(),t.push({type:2,index:++r});L.append(i[x],U())}}}else if(L.nodeType===8)if(L.data===n1)t.push({type:2,index:r});else{let i=-1;for(;(i=L.data.indexOf(h,i+1))!==-1;)t.push({type:7,index:r}),i+=h.length-1}r++}}static createElement(H,C){let V=y.createElement("template");return V.innerHTML=H,V}};function T(M,H,C=M,V){if(H===f)return H;let L=V!==void 0?C._$Co?.[V]:C._$Cl,r=Q(H)?void 0:H._$litDirective$;return L?.constructor!==r&&(L?._$AO?.(!1),r===void 0?L=void 0:(L=new r(M),L._$AT(M,C,V)),V!==void 0?(C._$Co??=[])[V]=L:C._$Cl=L),L!==void 0&&(H=T(M,L._$AS(M,H.values),L,V)),H}var H1=class{constructor(H,C){this._$AV=[],this._$AN=void 0,this._$AD=H,this._$AM=C}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(H){let{el:{content:C},parts:V}=this._$AD,L=(H?.creationScope??y).importNode(C,!0);P.currentNode=L;let r=P.nextNode(),e=0,A=0,t=V[0];for(;t!==void 0;){if(e===t.index){let v;t.type===2?v=new F(r,r.nextSibling,this,H):t.type===1?v=new t.ctor(r,t.name,t.strings,this,H):t.type===6&&(v=new r1(r,this,H)),this._$AV.push(v),t=V[++A]}e!==t?.index&&(r=P.nextNode(),e++)}return P.currentNode=y,L}p(H){let C=0;for(let V of this._$AV)V!==void 0&&(V.strings!==void 0?(V._$AI(H,V,C),C+=V.strings.length-2):V._$AI(H[C])),C++}},F=class M{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(H,C,V,L){this.type=2,this._$AH=m,this._$AN=void 0,this._$AA=H,this._$AB=C,this._$AM=V,this.options=L,this._$Cv=L?.isConnected??!0}get parentNode(){let H=this._$AA.parentNode,C=this._$AM;return C!==void 0&&H?.nodeType===11&&(H=C.parentNode),H}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(H,C=this){H=T(this,H,C),Q(H)?H===m||H==null||H===""?(this._$AH!==m&&this._$AR(),this._$AH=m):H!==this._$AH&&H!==f&&this._(H):H._$litType$!==void 0?this.$(H):H.nodeType!==void 0?this.T(H):F1(H)?this.k(H):this._(H)}O(H){return this._$AA.parentNode.insertBefore(H,this._$AB)}T(H){this._$AH!==H&&(this._$AR(),this._$AH=this.O(H))}_(H){this._$AH!==m&&Q(this._$AH)?this._$AA.nextSibling.data=H:this.T(y.createTextNode(H)),this._$AH=H}$(H){let{values:C,_$litType$:V}=H,L=typeof V=="number"?this._$AC(H):(V.el===void 0&&(V.el=G.createElement(D1(V.h,V.h[0]),this.options)),V);if(this._$AH?._$AD===L)this._$AH.p(C);else{let r=new H1(L,this),e=r.u(this.options);r.p(C),this.T(e),this._$AH=r}}_$AC(H){let C=b1.get(H.strings);return C===void 0&&b1.set(H.strings,C=new G(H)),C}k(H){Z1(this._$AH)||(this._$AH=[],this._$AR());let C=this._$AH,V,L=0;for(let r of H)L===C.length?C.push(V=new M(this.O(U()),this.O(U()),this,this.options)):V=C[L],V._$AI(r),L++;L<C.length&&(this._$AR(V&&V._$AB.nextSibling,L),C.length=L)}_$AR(H=this._$AA.nextSibling,C){for(this._$AP?.(!1,!0,C);H!==this._$AB;){let V=k1(H).nextSibling;k1(H).remove(),H=V}}setConnected(H){this._$AM===void 0&&(this._$Cv=H,this._$AP?.(H))}},w=class{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(H,C,V,L,r){this.type=1,this._$AH=m,this._$AN=void 0,this.element=H,this.name=C,this._$AM=L,this.options=r,V.length>2||V[0]!==""||V[1]!==""?(this._$AH=Array(V.length-1).fill(new String),this.strings=V):this._$AH=m}_$AI(H,C=this,V,L){let r=this.strings,e=!1;if(r===void 0)H=T(this,H,C,0),e=!Q(H)||H!==this._$AH&&H!==f,e&&(this._$AH=H);else{let A=H,t,v;for(H=r[0],t=0;t<r.length-1;t++)v=T(this,A[V+t],C,t),v===f&&(v=this._$AH[t]),e||=!Q(v)||v!==this._$AH[t],v===m?H=m:H!==m&&(H+=(v??"")+r[t+1]),this._$AH[t]=v}e&&!L&&this.j(H)}j(H){H===m?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,H??"")}},V1=class extends w{constructor(){super(...arguments),this.type=3}j(H){this.element[this.name]=H===m?void 0:H}},L1=class extends w{constructor(){super(...arguments),this.type=4}j(H){this.element.toggleAttribute(this.name,!!H&&H!==m)}},M1=class extends w{constructor(H,C,V,L,r){super(H,C,V,L,r),this.type=5}_$AI(H,C=this){if((H=T(this,H,C,0)??m)===f)return;let V=this._$AH,L=H===m&&V!==m||H.capture!==V.capture||H.once!==V.once||H.passive!==V.passive,r=H!==m&&(V===m||L);L&&this.element.removeEventListener(this.name,this,V),r&&this.element.addEventListener(this.name,this,H),this._$AH=H}handleEvent(H){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,H):this._$AH.handleEvent(H)}},r1=class{constructor(H,C,V){this.element=H,this.type=6,this._$AN=void 0,this._$AM=C,this.options=V}get _$AU(){return this._$AM._$AU}_$AI(H){T(this,H)}},_1={M:l1,P:h,A:n1,C:1,L:E1,R:H1,D:F1,V:T,I:F,H:w,N:L1,U:M1,B:V1,F:r1},p2=x1.litHtmlPolyfillSupport;p2?.(G,F),(x1.litHtmlVersions??=[]).push("3.3.3");var W1=(M,H,C)=>{let V=C?.renderBefore??H,L=V._$litPart$;if(L===void 0){let r=C?.renderBefore??null;V._$litPart$=L=new F(H.insertBefore(U(),r),r,void 0,C??{})}return L._$AI(M),L};var u1=globalThis,u=class extends O{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){let H=super.createRenderRoot();return this.renderOptions.renderBefore??=H.firstChild,H}update(H){let C=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(H),this._$Do=W1(C,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return f}};u._$litElement$=!0,u.finalized=!0,u1.litElementHydrateSupport?.({LitElement:u});var m2=u1.litElementPolyfillSupport;m2?.({LitElement:u});(u1.litElementVersions??=[]).push("4.2.2");var R=M=>(H,C)=>{C!==void 0?C.addInitializer(()=>{customElements.define(M,H)}):customElements.define(M,H)};var v2={attribute:!0,type:String,converter:$,reflect:!1,hasChanged:J},x2=(M=v2,H,C)=>{let{kind:V,metadata:L}=C,r=globalThis.litPropertyMetadata.get(L);if(r===void 0&&globalThis.litPropertyMetadata.set(L,r=new Map),V==="setter"&&((M=Object.create(M)).wrapped=!0),r.set(C.name,M),V==="accessor"){let{name:e}=C;return{set(A){let t=H.get.call(this);H.set.call(this,A),this.requestUpdate(e,t,M,!0,A)},init(A){return A!==void 0&&this.C(e,void 0,M,A),A}}}if(V==="setter"){let{name:e}=C;return function(A){let t=this[e];H.call(this,A),this.requestUpdate(e,t,M,!0,A)}}throw Error("Unsupported decorator location: "+V)};function D(M){return(H,C)=>typeof C=="object"?x2(M,H,C):((V,L,r)=>{let e=L.hasOwnProperty(r);return L.constructor.createProperty(r,V),e?Object.getOwnPropertyDescriptor(L,r):void 0})(M,H,C)}function a(M){return D({...M,state:!0,attribute:!1})}var b=(M,H,C)=>(C.configurable=!0,C.enumerable=!0,Reflect.decorate&&typeof H!="object"&&Object.defineProperty(M,H,C),C);function e1(M,H){return(C,V,L)=>{let r=e=>e.renderRoot?.querySelector(M)??null;if(H){let{get:e,set:A}=typeof V=="object"?C:L??(()=>{let t=Symbol();return{get(){return this[t]},set(v){this[t]=v}}})();return b(C,V,{get(){let t=e.call(this);return t===void 0&&(t=r(this),(t!==null||this.hasUpdated)&&A.call(this,t)),t}})}return b(C,V,{get(){return r(this)}})}}var t1="scheduler_plus";async function N1(M){return(await M.callWS({type:`${t1}/list_schedules`})).schedules}async function $1(M,H){return(await M.callWS({type:`${t1}/create_schedule`,...H})).schedule}async function I1(M,H,C){return(await M.callWS({type:`${t1}/update_schedule`,schedule_id:H,...C})).schedule}async function U1(M,H){await M.callWS({type:`${t1}/delete_schedule`,schedule_id:H})}var Q1={ATTRIBUTE:1,CHILD:2,PROPERTY:3,BOOLEAN_ATTRIBUTE:4,EVENT:5,ELEMENT:6},G1=M=>(...H)=>({_$litDirective$:M,values:H}),A1=class{constructor(H){}get _$AU(){return this._$AM._$AU}_$AT(H,C,V){this._$Ct=H,this._$AM=C,this._$Ci=V}_$AS(H,C){return this.update(H,C)}update(H,C){return this.render(...C)}};var{I:l2}=_1,z1=M=>M;var K1=()=>document.createComment(""),E=(M,H,C)=>{let V=M._$AA.parentNode,L=H===void 0?M._$AB:H._$AA;if(C===void 0){let r=V.insertBefore(K1(),L),e=V.insertBefore(K1(),L);C=new l2(r,e,M,M.options)}else{let r=C._$AB.nextSibling,e=C._$AM,A=e!==M;if(A){let t;C._$AQ?.(M),C._$AM=M,C._$AP!==void 0&&(t=M._$AU)!==e._$AU&&C._$AP(t)}if(r!==L||A){let t=C._$AA;for(;t!==r;){let v=z1(t).nextSibling;z1(V).insertBefore(t,L),t=v}}}return C},g=(M,H,C=M)=>(M._$AI(H,C),M),n2={},q1=(M,H=n2)=>M._$AH=H,j1=M=>M._$AH,i1=M=>{M._$AR(),M._$AA.remove()};var Y1=(M,H,C)=>{let V=new Map;for(let L=H;L<=C;L++)V.set(M[L],L);return V},X1=G1(class extends A1{constructor(M){if(super(M),M.type!==Q1.CHILD)throw Error("repeat() can only be used in text expressions")}dt(M,H,C){let V;C===void 0?C=H:H!==void 0&&(V=H);let L=[],r=[],e=0;for(let A of M)L[e]=V?V(A,e):e,r[e]=C(A,e),e++;return{values:r,keys:L}}render(M,H,C){return this.dt(M,H,C).values}update(M,[H,C,V]){let L=j1(M),{values:r,keys:e}=this.dt(H,C,V);if(!Array.isArray(L))return this.ut=e,r;let A=this.ut??=[],t=[],v,l,i=0,x=L.length-1,p=0,Z=r.length-1;for(;i<=x&&p<=Z;)if(L[i]===null)i++;else if(L[x]===null)x--;else if(A[i]===e[p])t[p]=g(L[i],r[p]),i++,p++;else if(A[x]===e[Z])t[Z]=g(L[x],r[Z]),x--,Z--;else if(A[i]===e[Z])t[Z]=g(L[i],r[Z]),E(M,t[Z+1],L[i]),i++,Z--;else if(A[x]===e[p])t[p]=g(L[x],r[p]),E(M,L[i],L[x]),x--,p++;else if(v===void 0&&(v=Y1(e,p,Z),l=Y1(A,i,x)),v.has(A[i]))if(v.has(A[x])){let c=l.get(e[p]),d1=c!==void 0?L[c]:null;if(d1===null){let s1=E(M,L[i]);g(s1,r[p]),t[p]=s1}else t[p]=g(d1,r[p]),E(M,L[i],d1),L[c]=null;p++}else i1(L[x]),x--;else i1(L[i]),i++;for(;p<=Z;){let c=E(M,t[Z+1]);g(c,r[p]),t[p++]=c}for(;i<=x;){let c=L[i++];c!==null&&i1(c)}return this.ut=e,q1(M,t),f}});var J1=["light","climate"],o1={light:"Light",climate:"Climate"},C2=["fixed","sunrise","sunset"],z={fixed:"Fixed time",sunrise:"Sunrise",sunset:"Sunset",yidcal:"YidCal"},K=["mon","tue","wed","thu","fri","sat","sun"],a1={mon:"Monday",tue:"Tuesday",wed:"Wednesday",thu:"Thursday",fri:"Friday",sat:"Saturday",sun:"Sunday"};var Z2=["heat","cool","heat_cool","auto","dry","fan_only"],S2={heat:"Heat",cool:"Cool",heat_cool:"Heat/Cool",auto:"Auto",dry:"Dry",fan_only:"Fan only"},n=class extends u{constructor(){super(...arguments);this._open=!1;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(V=>V!==C):[...this._days,C]};this._save=()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._days.length===0){this._error="At least one day is required.";return}let V=this._deviceType==="light"?{brightness:Math.round(this._brightnessPct/100*255),...this._useTransition?{transition:this._transitionSeconds}:{}}:{hvac_mode:this._hvacMode,...this._useTargetTemperature?{target_temperature:this._targetTemperature}:{}};this._onSave?.({id:this._rule?.id,name:C,enabled:this._enabled,days:this._days,on_time:this._onTime,off_time:this._offTime,action:V}),this._open=!1}}showDialog(C){let{deviceType:V,rule:L,onSave:r}=C;if(this._deviceType=V,this._rule=L,this._onSave=r,this._name=L?.name??"",this._enabled=L?.enabled??!0,this._days=L?[...L.days]:[],this._onTime=L?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=L?.off_time??{provider:"fixed",params:{time:"21:00"}},V==="light"){let e=L?.action.brightness??255;this._brightnessPct=Math.round(e/255*100),this._useTransition=L?.action.transition!==void 0,this._transitionSeconds=L?.action.transition??0}else this._hvacMode=L?.action.hvac_mode??"heat",this._useTargetTemperature=L?.action.target_temperature!==void 0,this._targetTemperature=L?.action.target_temperature??70;this._error=void 0,this._open=!0}render(){return this._open?d`
+      <ha-dialog
+        open
+        .heading=${this._rule?"Edit rule":"Add rule"}
+        @closed=${this._closeDialog}
+      >
+        <div class="form">
+          ${this._error?d`<div class="error">${this._error}</div>`:m}
+
+          <ha-textfield
+            label="Name"
+            .value=${this._name}
+            @input=${C=>{this._name=C.target.value}}
+          ></ha-textfield>
+
+          <ha-formfield label="Enabled">
+            <ha-switch
+              .checked=${this._enabled}
+              @change=${C=>{this._enabled=C.target.checked}}
+            ></ha-switch>
+          </ha-formfield>
+
+          <label class="field-label">Days</label>
+          <div class="days">
+            ${K.map(C=>d`
+                <button
+                  type="button"
+                  class="day-chip ${this._days.includes(C)?"active":""}"
+                  @click=${()=>this._toggleDay(C)}
+                >
+                  ${a1[C].slice(0,3)}
+                </button>
+              `)}
+          </div>
+
+          ${this._renderTimeFields("On time",this._onTime,C=>this._onTime=C)}
+          ${this._renderTimeFields("Off time",this._offTime,C=>this._offTime=C)}
+
+          ${this._deviceType==="light"?this._renderLightAction():this._renderClimateAction()}
+        </div>
+
+        <mwc-button slot="secondaryAction" @click=${this._closeDialog}>
+          Cancel
+        </mwc-button>
+        <mwc-button slot="primaryAction" @click=${this._save}>
+          Save
+        </mwc-button>
+      </ha-dialog>
+    `:m}_renderTimeFields(C,V,L){return d`
+      <label class="field-label">${C}</label>
+      <div class="time-row">
+        <select
+          class="native-select"
+          .value=${V.provider}
+          @change=${r=>{let e=r.target.value;L({provider:e,params:e==="fixed"?{time:"06:00"}:{offset_minutes:0}})}}
+        >
+          ${C2.map(r=>d`<option value=${r}>${z[r]}</option>`)}
+        </select>
+        ${V.provider==="fixed"?d`
+              <input
+                type="time"
+                class="native-input"
+                .value=${V.params.time??""}
+                @input=${r=>L({...V,params:{time:r.target.value}})}
+              />
+            `:d`
+              <input
+                type="number"
+                class="native-input offset"
+                .value=${String(V.params.offset_minutes??0)}
+                @input=${r=>L({...V,params:{offset_minutes:Number(r.target.value)||0}})}
+              />
+              <span class="hint">minutes</span>
+            `}
+      </div>
+    `}_renderLightAction(){return d`
+      <label class="field-label">Brightness (${this._brightnessPct}%)</label>
+      <input
+        type="range"
+        min="1"
+        max="100"
+        class="native-input"
+        .value=${String(this._brightnessPct)}
+        @input=${C=>{this._brightnessPct=Number(C.target.value)}}
+      />
+
+      <ha-formfield label="Use transition">
+        <ha-switch
+          .checked=${this._useTransition}
+          @change=${C=>{this._useTransition=C.target.checked}}
+        ></ha-switch>
+      </ha-formfield>
+      ${this._useTransition?d`
+            <ha-textfield
+              label="Transition (seconds)"
+              type="number"
+              .value=${String(this._transitionSeconds)}
+              @input=${C=>{this._transitionSeconds=Number(C.target.value)||0}}
+            ></ha-textfield>
+          `:m}
+    `}_renderClimateAction(){return d`
+      <label class="field-label" for="hvac-mode">HVAC mode</label>
+      <select
+        id="hvac-mode"
+        class="native-select"
+        .value=${this._hvacMode}
+        @change=${C=>{this._hvacMode=C.target.value}}
+      >
+        ${Z2.map(C=>d`<option value=${C}>${S2[C]}</option>`)}
+      </select>
+
+      <ha-formfield label="Set target temperature">
+        <ha-switch
+          .checked=${this._useTargetTemperature}
+          @change=${C=>{this._useTargetTemperature=C.target.checked}}
+        ></ha-switch>
+      </ha-formfield>
+      ${this._useTargetTemperature?d`
+            <ha-textfield
+              label="Target temperature"
+              type="number"
+              .value=${String(this._targetTemperature)}
+              @input=${C=>{this._targetTemperature=Number(C.target.value)||0}}
+            ></ha-textfield>
+          `:m}
+    `}};n.styles=k`
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 320px;
+    }
+    .error {
+      color: var(--error-color);
+    }
+    .field-label {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+    }
+    .native-select,
+    .native-input {
+      font: inherit;
+      color: var(--primary-text-color);
+      background: var(--card-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .native-input.offset {
+      width: 80px;
+    }
+    .days {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .day-chip {
+      font: inherit;
+      color: var(--primary-text-color);
+      background: var(--card-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: 16px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .day-chip.active {
+      color: var(--text-primary-color, #fff);
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+    }
+    .time-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hint {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+    }
+  `,o([a()],n.prototype,"_open",2),o([a()],n.prototype,"_deviceType",2),o([a()],n.prototype,"_name",2),o([a()],n.prototype,"_enabled",2),o([a()],n.prototype,"_days",2),o([a()],n.prototype,"_onTime",2),o([a()],n.prototype,"_offTime",2),o([a()],n.prototype,"_brightnessPct",2),o([a()],n.prototype,"_useTransition",2),o([a()],n.prototype,"_transitionSeconds",2),o([a()],n.prototype,"_hvacMode",2),o([a()],n.prototype,"_useTargetTemperature",2),o([a()],n.prototype,"_targetTemperature",2),o([a()],n.prototype,"_error",2),n=o([R("scheduler-plus-rule-editor")],n);function u2(M){let[H,C]=M.split(":"),V=Number(H),L=Number(C),r=V>=12?"PM":"AM";return`${V%12===0?12:V%12}:${L.toString().padStart(2,"0")} ${r}`}function H2(M){if(M.provider==="fixed")return u2(M.params.time??"00:00");let H=M.params.offset_minutes??0;return H===0?z[M.provider]:`${z[M.provider]} ${H>0?"+":""}${H}`}var S=class extends u{constructor(){super(...arguments);this._open=!1;this._name="";this._deviceType="light";this._enabled=!0;this._entities=[];this._rules=[];this._saving=!1;this._closeDialog=()=>{this._open=!1};this._handleDeviceTypeChange=C=>{this._deviceType=C.target.value,this._entities=[],this._rules=[]};this._addEntity=C=>{!C||this._entities.includes(C)||(this._entities=[...this._entities,C])};this._removeEntity=C=>{this._entities=this._entities.filter((V,L)=>L!==C)};this._updateEntity=(C,V)=>{if(!V){this._removeEntity(C);return}this._entities=this._entities.map((L,r)=>r===C?V:L)};this._openAddRuleDialog=()=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,onSave:C=>{this._rules=[...this._rules,C]}})};this._openEditRuleDialog=C=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,rule:this._rules[C],onSave:V=>{this._rules=this._rules.map((L,r)=>r===C?V:L)}})};this._removeRule=C=>{let V=this._rules[C];!V||!window.confirm(`Delete rule "${V.name}"?`)||(this._rules=this._rules.filter((L,r)=>r!==C))};this._save=async()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._entities.length===0){this._error="At least one entity is required.";return}this._saving=!0,this._error=void 0;try{let V={name:C,device_type:this._deviceType,entities:this._entities,enabled:this._enabled,rules:this._rules};this._schedule?await I1(this.hass,this._schedule.id,V):await $1(this.hass,V),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(V){this._error=V instanceof Error?V.message:String(V)}finally{this._saving=!1}}}showDialog(C){this._schedule=C,this._name=C?.name??"",this._deviceType=C?.device_type??"light",this._enabled=C?.enabled??!0,this._entities=C?[...C.entities]:[],this._rules=C?C.rules.map(V=>({...V})):[],this._error=void 0,this._open=!0}render(){return this._open?d`
       <ha-dialog
         open
         .heading=${this._schedule?"Edit schedule":"Add schedule"}
         @closed=${this._closeDialog}
       >
         <div class="form">
-          ${this._error?Z`<div class="error">${this._error}</div>`:p}
+          ${this._error?d`<div class="error">${this._error}</div>`:m}
 
           <ha-textfield
             label="Name"
             .value=${this._name}
-            @input=${H=>{this._name=H.target.value}}
+            @input=${C=>{this._name=C.target.value}}
           ></ha-textfield>
 
           <label class="field-label" for="device-type">Device type</label>
@@ -23,28 +202,28 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
             ?disabled=${this._schedule!==void 0}
             @change=${this._handleDeviceTypeChange}
           >
-            ${q1.map(H=>Z`<option value=${H}>${r1[H]}</option>`)}
+            ${J1.map(C=>d`<option value=${C}>${o1[C]}</option>`)}
           </select>
 
           <ha-formfield label="Enabled">
             <ha-switch
               .checked=${this._enabled}
-              @change=${H=>{this._enabled=H.target.checked}}
+              @change=${C=>{this._enabled=C.target.checked}}
             ></ha-switch>
           </ha-formfield>
 
           <label class="field-label">Entities</label>
           <div class="entities">
-            ${K1(this._entities,H=>H,(H,V)=>Z`
+            ${X1(this._entities,C=>C,(C,V)=>d`
                 <div class="entity-row">
                   <ha-entity-picker
                     .hass=${this.hass}
-                    .value=${H}
+                    .value=${C}
                     .includeDomains=${[this._deviceType]}
                     @value-changed=${L=>this._updateEntity(V,L.detail.value)}
                   ></ha-entity-picker>
                   <ha-icon-button
-                    .path=${U}
+                    .path=${_}
                     label="Remove entity"
                     @click=${()=>this._removeEntity(V)}
                   ></ha-icon-button>
@@ -53,9 +232,19 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
             <ha-entity-picker
               .hass=${this.hass}
               .includeDomains=${[this._deviceType]}
-              @value-changed=${H=>this._addEntity(H.detail.value)}
+              @value-changed=${C=>this._addEntity(C.detail.value)}
             ></ha-entity-picker>
           </div>
+
+          <div class="rules-header">
+            <label class="field-label">Rules</label>
+            <mwc-button @click=${this._openAddRuleDialog}>Add rule</mwc-button>
+          </div>
+          ${this._rules.length===0?d`<div class="placeholder">No rules yet.</div>`:d`
+                <ul class="rules">
+                  ${this._rules.map((C,V)=>this._renderRule(C,V))}
+                </ul>
+              `}
         </div>
 
         <mwc-button slot="secondaryAction" @click=${this._closeDialog}>
@@ -65,7 +254,29 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
           Save
         </mwc-button>
       </ha-dialog>
-    `:p}};n.styles=D`
+      <scheduler-plus-rule-editor></scheduler-plus-rule-editor>
+    `:m}_renderRule(C,V){let L=[...C.days].sort((r,e)=>K.indexOf(r)-K.indexOf(e)).map(r=>a1[r].slice(0,3)).join(", ");return d`
+      <li class="rule ${C.enabled?"":"disabled"}">
+        <div class="rule-info">
+          <span class="rule-name">${C.name}</span>
+          <span class="rule-meta">
+            ${L} · ${H2(C.on_time)} → ${H2(C.off_time)}
+          </span>
+        </div>
+        <div class="row-actions">
+          <ha-icon-button
+            .path=${q}
+            label="Edit rule"
+            @click=${()=>this._openEditRuleDialog(V)}
+          ></ha-icon-button>
+          <ha-icon-button
+            .path=${_}
+            label="Remove rule"
+            @click=${()=>this._removeRule(V)}
+          ></ha-icon-button>
+        </div>
+      </li>
+    `}};S.styles=k`
     .form {
       display: flex;
       flex-direction: column;
@@ -100,7 +311,48 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
     .entity-row ha-entity-picker {
       flex: 1;
     }
-  `,v([b({attribute:!1})],n.prototype,"hass",2),v([l()],n.prototype,"_schedule",2),v([l()],n.prototype,"_open",2),v([l()],n.prototype,"_name",2),v([l()],n.prototype,"_deviceType",2),v([l()],n.prototype,"_enabled",2),v([l()],n.prototype,"_entities",2),v([l()],n.prototype,"_saving",2),v([l()],n.prototype,"_error",2),n=v([H1("scheduler-plus-schedule-editor")],n);var S=class extends u{constructor(){super(...arguments);this._schedules=[];this._loading=!0;this._openAddDialog=()=>{this._editor?.showDialog()};this._openEditDialog=H=>{this._editor?.showDialog(H)}}static getStubConfig(){return{type:"custom:scheduler-plus-card"}}setConfig(H){this._config=H}getCardSize(){return 2+this._schedules.length}connectedCallback(){super.connectedCallback(),this._refresh()}async _refresh(){this._loading=!0;try{this._schedules=await D1(this.hass),this._error=void 0}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._loading=!1}}async _handleDelete(H){window.confirm(`Delete schedule "${H.name}"?`)&&(await N1(this.hass,H.id),await this._refresh())}render(){return Z`
+    .rules-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .placeholder {
+      padding: 8px 0;
+      color: var(--secondary-text-color);
+    }
+    ul.rules {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .rule {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .rule:last-child {
+      border-bottom: none;
+    }
+    .rule.disabled .rule-name {
+      color: var(--disabled-text-color);
+    }
+    .rule-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .rule-name {
+      font-weight: 500;
+    }
+    .rule-meta {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+    }
+    .row-actions {
+      display: flex;
+    }
+  `,o([D({attribute:!1})],S.prototype,"hass",2),o([a()],S.prototype,"_schedule",2),o([a()],S.prototype,"_open",2),o([a()],S.prototype,"_name",2),o([a()],S.prototype,"_deviceType",2),o([a()],S.prototype,"_enabled",2),o([a()],S.prototype,"_entities",2),o([a()],S.prototype,"_rules",2),o([a()],S.prototype,"_saving",2),o([a()],S.prototype,"_error",2),o([e1("scheduler-plus-rule-editor")],S.prototype,"_ruleEditor",2),S=o([R("scheduler-plus-schedule-editor")],S);function s2(M){if(!M||M.state==="unknown"||M.state==="unavailable")return;let H=new Date(M.state);if(Number.isNaN(H.getTime()))return;let C=M.attributes.action==="off"?"Off":"On",V=H.toLocaleString(void 0,{weekday:"short",hour:"numeric",minute:"2-digit"});return`Next: ${C} ${V}`}var s=class extends u{constructor(){super(...arguments);this._schedules=[];this._loading=!0;this._openAddDialog=()=>{this._editor?.showDialog()};this._openEditDialog=C=>{this._editor?.showDialog(C)}}static getStubConfig(){return{type:"custom:scheduler-plus-card"}}setConfig(C){this._config=C}getCardSize(){return 2+this._schedules.length}connectedCallback(){super.connectedCallback(),this._refresh()}async _refresh(){this._loading=!0;try{this._schedules=await N1(this.hass),this._error=void 0}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}async _handleDelete(C){window.confirm(`Delete schedule "${C.name}"?`)&&(await U1(this.hass,C.id),await this._refresh())}_nextEventFor(C){let V=Object.values(this.hass.entities??{}).find(L=>L.unique_id===`${C}_next_event`)?.entity_id;return V?this.hass.states[V]:void 0}render(){return d`
       <ha-card .header=${this._config?.title??"Scheduler+"}>
         <div class="content">${this._renderContent()}</div>
         <div class="card-actions">
@@ -111,36 +363,37 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
         .hass=${this.hass}
         @schedule-plus-saved=${this._refresh}
       ></scheduler-plus-schedule-editor>
-    `}_renderContent(){return this._loading?Z`<div class="placeholder">Loading schedules…</div>`:this._error?Z`<div class="placeholder error">${this._error}</div>`:this._schedules.length===0?Z`<div class="placeholder">No schedules yet.</div>`:Z`
+    `}_renderContent(){return this._loading?d`<div class="placeholder">Loading schedules…</div>`:this._error?d`<div class="placeholder error">${this._error}</div>`:this._schedules.length===0?d`<div class="placeholder">No schedules yet.</div>`:d`
       <ul class="schedules">
-        ${this._schedules.map(H=>this._renderSchedule(H))}
+        ${this._schedules.map(C=>this._renderSchedule(C))}
       </ul>
-    `}_renderSchedule(H){return Z`
-      <li class="schedule ${H.enabled?"":"disabled"}">
+    `}_renderSchedule(C){let V=C.enabled?s2(this._nextEventFor(C.id)):void 0;return d`
+      <li class="schedule ${C.enabled?"":"disabled"}">
         <div class="schedule-info">
-          <span class="schedule-name">${H.name}</span>
+          <span class="schedule-name">${C.name}</span>
           <span class="schedule-meta">
-            ${r1[H.device_type]} ·
-            ${H.entities.length}
-            ${H.entities.length===1?"entity":"entities"} ·
-            ${H.rules.length}
-            ${H.rules.length===1?"rule":"rules"}
+            ${o1[C.device_type]} ·
+            ${C.entities.length}
+            ${C.entities.length===1?"entity":"entities"} ·
+            ${C.rules.length}
+            ${C.rules.length===1?"rule":"rules"}
           </span>
+          ${V?d`<span class="schedule-next">${V}</span>`:m}
         </div>
         <div class="row-actions">
           <ha-icon-button
-            .path=${l1}
+            .path=${q}
             label="Edit"
-            @click=${()=>this._openEditDialog(H)}
+            @click=${()=>this._openEditDialog(C)}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${U}
+            .path=${_}
             label="Delete"
-            @click=${()=>this._handleDelete(H)}
+            @click=${()=>this._handleDelete(C)}
           ></ha-icon-button>
         </div>
       </li>
-    `}};S.styles=D`
+    `}};s.styles=k`
     .content {
       padding: 0 16px 16px;
     }
@@ -181,6 +434,10 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
       font-size: 0.85em;
       color: var(--secondary-text-color);
     }
+    .schedule-next {
+      font-size: 0.85em;
+      color: var(--primary-color);
+    }
     .row-actions {
       display: flex;
     }
@@ -189,7 +446,7 @@ var j1=Object.defineProperty;var X1=Object.getOwnPropertyDescriptor;var v=(M,C,H
       justify-content: flex-end;
       padding: 8px 8px 8px 16px;
     }
-  `,v([b({attribute:!1})],S.prototype,"hass",2),v([l()],S.prototype,"_config",2),v([l()],S.prototype,"_schedules",2),v([l()],S.prototype,"_loading",2),v([l()],S.prototype,"_error",2),v([R1("scheduler-plus-schedule-editor")],S.prototype,"_editor",2),S=v([H1("scheduler-plus-card")],S);window.customCards=window.customCards??[];window.customCards.push({type:"scheduler-plus-card",name:"Scheduler+",description:"Visual scheduling for lights and climate devices."});export{S as SchedulerPlusCard};
+  `,o([D({attribute:!1})],s.prototype,"hass",2),o([a()],s.prototype,"_config",2),o([a()],s.prototype,"_schedules",2),o([a()],s.prototype,"_loading",2),o([a()],s.prototype,"_error",2),o([e1("scheduler-plus-schedule-editor")],s.prototype,"_editor",2),s=o([R("scheduler-plus-card")],s);window.customCards=window.customCards??[];window.customCards.push({type:"scheduler-plus-card",name:"Scheduler+",description:"Visual scheduling for lights and climate devices."});export{s as SchedulerPlusCard};
 /*! Bundled license information:
 
 @lit/reactive-element/css-tag.js:

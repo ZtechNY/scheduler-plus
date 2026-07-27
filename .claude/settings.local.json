@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^\\\\./\\\\.git\")",
+      "Bash(python -c \"print\\('check'\\)\")",
+      "Bash(pip show *)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py tests/test_scheduler.py)"
+    ]
+  }
+}

@@ -1,13 +1,31 @@
 import { mdiDelete, mdiPencil } from "@mdi/js";
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
-import type { HomeAssistant } from "./api";
+import type { HassEntityState, HomeAssistant } from "./api";
 import { deleteSchedule, fetchSchedules } from "./api";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
 import { DEVICE_TYPE_LABELS } from "./types";
+
+/** Formats a schedule's next-event sensor state as e.g. "Next: On Fri, 6:00 AM". */
+function formatNextEvent(entry: HassEntityState | undefined): string | undefined {
+  if (!entry || entry.state === "unknown" || entry.state === "unavailable") {
+    return undefined;
+  }
+  const when = new Date(entry.state);
+  if (Number.isNaN(when.getTime())) {
+    return undefined;
+  }
+  const action = entry.attributes.action === "off" ? "Off" : "On";
+  const formatted = when.toLocaleString(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Next: ${action} ${formatted}`;
+}
 
 export interface SchedulerPlusCardConfig {
   type: string;
@@ -71,6 +89,19 @@ export class SchedulerPlusCard extends LitElement {
     await this._refresh();
   }
 
+  /**
+   * Looks up a schedule's "next event" sensor by unique_id (ScheduleNextEventSensor
+   * sets `{schedule_id}_next_event`, see sensor.py) rather than a guessed
+   * entity_id, since the entity's name - and therefore its default
+   * entity_id - is derived from the schedule's own (user-editable) name.
+   */
+  private _nextEventFor(scheduleId: string): HassEntityState | undefined {
+    const entityId = Object.values(this.hass.entities ?? {}).find(
+      (entity) => entity.unique_id === `${scheduleId}_next_event`,
+    )?.entity_id;
+    return entityId ? this.hass.states[entityId] : undefined;
+  }
+
   private _openAddDialog = (): void => {
     this._editor?.showDialog();
   };
@@ -112,6 +143,9 @@ export class SchedulerPlusCard extends LitElement {
   }
 
   private _renderSchedule(schedule: Schedule) {
+    const nextEvent = schedule.enabled
+      ? formatNextEvent(this._nextEventFor(schedule.id))
+      : undefined;
     return html`
       <li class="schedule ${schedule.enabled ? "" : "disabled"}">
         <div class="schedule-info">
@@ -123,6 +157,7 @@ export class SchedulerPlusCard extends LitElement {
             ${schedule.rules.length}
             ${schedule.rules.length === 1 ? "rule" : "rules"}
           </span>
+          ${nextEvent ? html`<span class="schedule-next">${nextEvent}</span>` : nothing}
         </div>
         <div class="row-actions">
           <ha-icon-button
@@ -180,6 +215,10 @@ export class SchedulerPlusCard extends LitElement {
     .schedule-meta {
       font-size: 0.85em;
       color: var(--secondary-text-color);
+    }
+    .schedule-next {
+      font-size: 0.85em;
+      color: var(--primary-color);
     }
     .row-actions {
       display: flex;

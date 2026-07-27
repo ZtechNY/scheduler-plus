@@ -112,9 +112,12 @@ class SchedulerEngine:
         """Return the soonest upcoming (when, "on" | "off") for `schedule`.
 
         Read-only: reuses _async_resolve_occurrence but never schedules or
-        fires anything. Returns None if the schedule has no enabled rules,
-        or none of them resolve to a future occurrence.
+        fires anything. Returns None if the schedule is disabled, has no
+        enabled rules, or none of them resolve to a future occurrence.
         """
+        if not schedule.enabled:
+            return None
+
         now = dt_util.now()
         soonest: tuple[datetime, str] | None = None
 
