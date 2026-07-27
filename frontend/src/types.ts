@@ -110,6 +110,8 @@ export interface Rule {
   days: Weekday[];
   date_mode: RuleDateMode;
   dates: string[];
+  /** [start, end] pairs of "YYYY-MM-DD" strings, inclusive on both ends. */
+  date_ranges: [string, string][];
   day_conditions: DayConditionType[];
   on_time: TimeSpec;
   off_time: TimeSpec;

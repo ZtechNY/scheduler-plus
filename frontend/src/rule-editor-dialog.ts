@@ -55,6 +55,22 @@ const DEFAULT_PREFERENCES: Preferences = {
   working_hours_end: "17:00",
 };
 
+/** Renders a "YYYY-MM-DD" string as e.g. "Jul 26, 2026". */
+function formatDate(iso: string): string {
+  // Appending a local midnight time avoids new Date("YYYY-MM-DD") parsing
+  // the string as UTC, which can display a day early in negative-UTC-offset
+  // time zones.
+  const parsed = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return iso;
+  }
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 /**
  * Dialog for adding or editing a single Rule (days/on-time/off-time/action)
  * within a schedule. Purely local state: unlike the schedule editor, a rule
@@ -84,6 +100,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
   @state() private _dates: string[] = [];
 
   @state() private _newDate = "";
+
+  @state() private _dateRanges: [string, string][] = [];
+
+  @state() private _newRangeStart = "";
+
+  @state() private _newRangeEnd = "";
 
   @state() private _dayConditions: DayConditionType[] = [];
 
@@ -128,6 +150,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._dateMode = rule?.date_mode ?? "always";
     this._dates = rule ? [...rule.dates] : [];
     this._newDate = "";
+    this._dateRanges = rule ? rule.date_ranges.map(([start, end]) => [start, end]) : [];
+    this._newRangeStart = "";
+    this._newRangeEnd = "";
     this._dayConditions = rule ? [...rule.day_conditions] : [];
     this._onTime = rule?.on_time ?? { provider: "fixed", params: { time: "06:00" } };
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
@@ -214,6 +239,42 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._dates = this._dates.filter((d) => d !== dateToRemove);
   };
 
+  private _addDateRange = (): void => {
+    if (
+      !this._newRangeStart ||
+      !this._newRangeEnd ||
+      this._newRangeStart > this._newRangeEnd
+    ) {
+      return;
+    }
+    this._dateRanges = [...this._dateRanges, [this._newRangeStart, this._newRangeEnd]];
+    this._newRangeStart = "";
+    this._newRangeEnd = "";
+  };
+
+  private _removeDateRange = (rangeToRemove: [string, string]): void => {
+    this._dateRanges = this._dateRanges.filter(
+      (r) => r[0] !== rangeToRemove[0] || r[1] !== rangeToRemove[1],
+    );
+  };
+
+  /** A live, plain-English summary of what the current date filter actually does. */
+  private _summarizeDateFilter(): string {
+    const parts = [
+      ...this._dates.map((d) => formatDate(d)),
+      ...this._dateRanges.map(([start, end]) => `${formatDate(start)}–${formatDate(end)}`),
+      ...this._dayConditions.map((c) => DAY_CONDITION_LABELS[c]),
+    ];
+    if (this._dateMode === "include") {
+      return parts.length === 0
+        ? "Nothing selected yet - as configured, this rule will never run."
+        : `Runs only when it's ${parts.join(", ")} - the Days above are ignored.`;
+    }
+    return parts.length === 0
+      ? "Nothing excluded yet - this behaves the same as “Always”."
+      : `Runs on the Days above as usual, except when it's ${parts.join(", ")}.`;
+  }
+
   private _toggleDayCondition = (condition: DayConditionType): void => {
     this._dayConditions = this._dayConditions.includes(condition)
       ? this._dayConditions.filter((c) => c !== condition)
@@ -233,9 +294,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
     if (
       this._dateMode !== "always" &&
       this._dates.length === 0 &&
+      this._dateRanges.length === 0 &&
       this._dayConditions.length === 0
     ) {
-      this._error = "At least one date or day condition is required.";
+      this._error = "At least one date, date range, or special condition is required.";
       return;
     }
 
@@ -262,6 +324,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
       days: this._days,
       date_mode: this._dateMode,
       dates: this._dates,
+      date_ranges: this._dateRanges,
       day_conditions: this._dayConditions,
       on_time: this._onTime,
       off_time: this._offTime,
@@ -280,149 +343,205 @@ export class SchedulerPlusRuleEditor extends LitElement {
           <div class="dialog-title">${this._rule ? "Edit rule" : "Add rule"}</div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 
-          <label class="field-label" for="rule-name">Name</label>
-          <input
-            id="rule-name"
-            type="text"
-            class="native-input"
-            .value=${this._name}
-            @input=${(e: Event) => {
-              this._name = (e.target as HTMLInputElement).value;
-            }}
-          />
-
-          <ha-formfield label="Enabled">
-            <ha-switch
-              .checked=${this._enabled}
-              @change=${(e: Event) => {
-                this._enabled = (e.target as HTMLInputElement).checked;
+          <section class="section">
+            <label class="field-label" for="rule-name">Name</label>
+            <input
+              id="rule-name"
+              type="text"
+              class="native-input"
+              .value=${this._name}
+              @input=${(e: Event) => {
+                this._name = (e.target as HTMLInputElement).value;
               }}
-            ></ha-switch>
-          </ha-formfield>
+            />
 
-          <label class="field-label">Days</label>
-          <div class="day-presets">
-            <button type="button" class="btn" @click=${() => this._applyDayPreset(WEEKDAYS)}>
-              Every day
-            </button>
-            <button
-              type="button"
-              class="btn"
-              @click=${() => this._applyDayPreset(this._preferences.weekday_days)}
-            >
-              Weekdays
-            </button>
-            <button
-              type="button"
-              class="btn"
-              @click=${() => this._applyDayPreset(this._preferences.weekend_days)}
-            >
-              Weekend
-            </button>
-            <button type="button" class="btn" @click=${this._applyAfterHoursPreset}>
-              After hours
-            </button>
-          </div>
-          <div class="days">
-            ${WEEKDAYS.map(
-              (day) => html`
-                <button
-                  type="button"
-                  class="day-chip ${this._days.includes(day) ? "active" : ""}"
-                  ?disabled=${this._dateMode === "include"}
-                  @click=${() => this._toggleDay(day)}
-                >
-                  ${WEEKDAY_LABELS[day].slice(0, 3)}
-                </button>
-              `,
-            )}
-          </div>
+            <ha-formfield label="Enabled">
+              <ha-switch
+                .checked=${this._enabled}
+                @change=${(e: Event) => {
+                  this._enabled = (e.target as HTMLInputElement).checked;
+                }}
+              ></ha-switch>
+            </ha-formfield>
+          </section>
 
-          <label class="field-label" for="date-mode">Date filter</label>
-          <select
-            id="date-mode"
-            class="native-select"
-            .value=${this._dateMode}
-            @change=${this._handleDateModeChange}
-          >
-            ${RULE_DATE_MODES.map(
-              (mode) => html`<option value=${mode}>${RULE_DATE_MODE_LABELS[mode]}</option>`,
-            )}
-          </select>
-          ${this._dateMode !== "always"
-            ? html`
-                <span class="hint">
-                  ${this._dateMode === "include"
-                    ? "This rule only runs on the dates below, regardless of the Days selection."
-                    : "This rule follows the Days selection above, except on the dates below - use this to override a recurring rule for one date."}
-                </span>
-                <div class="dates">
-                  ${this._dates.map(
-                    (dateValue) => html`
+          <section class="section">
+            <h3 class="section-title">When this rule runs</h3>
+
+            <label class="field-label">Days</label>
+            <div class="day-presets">
+              <button type="button" class="btn" @click=${() => this._applyDayPreset(WEEKDAYS)}>
+                Every day
+              </button>
+              <button
+                type="button"
+                class="btn"
+                @click=${() => this._applyDayPreset(this._preferences.weekday_days)}
+              >
+                Weekdays
+              </button>
+              <button
+                type="button"
+                class="btn"
+                @click=${() => this._applyDayPreset(this._preferences.weekend_days)}
+              >
+                Weekend
+              </button>
+              <button type="button" class="btn" @click=${this._applyAfterHoursPreset}>
+                After hours
+              </button>
+            </div>
+            <div class="days">
+              ${WEEKDAYS.map(
+                (day) => html`
+                  <button
+                    type="button"
+                    class="day-chip ${this._days.includes(day) ? "active" : ""}"
+                    ?disabled=${this._dateMode === "include"}
+                    @click=${() => this._toggleDay(day)}
+                  >
+                    ${WEEKDAY_LABELS[day].slice(0, 3)}
+                  </button>
+                `,
+              )}
+            </div>
+            ${this._dateMode === "include"
+              ? html`<span class="hint">Ignored - this rule uses a date filter instead.</span>`
+              : nothing}
+
+            <label class="field-label" for="date-mode">Date filter</label>
+            <select
+              id="date-mode"
+              class="native-select"
+              .value=${this._dateMode}
+              @change=${this._handleDateModeChange}
+            >
+              ${RULE_DATE_MODES.map(
+                (mode) => html`<option value=${mode}>${RULE_DATE_MODE_LABELS[mode]}</option>`,
+              )}
+            </select>
+
+            ${this._dateMode !== "always"
+              ? html`
+                  <div class="filter-panel">
+                    <p class="filter-summary">${this._summarizeDateFilter()}</p>
+
+                    <label class="panel-label">Specific dates</label>
+                    <div class="dates">
+                      ${this._dates.map(
+                        (dateValue) => html`
+                          <div class="date-row">
+                            <span>${formatDate(dateValue)}</span>
+                            <button
+                              type="button"
+                              class="btn"
+                              @click=${() => this._removeDate(dateValue)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        `,
+                      )}
                       <div class="date-row">
-                        <span>${dateValue}</span>
-                        <button
-                          type="button"
-                          class="btn"
-                          @click=${() => this._removeDate(dateValue)}
-                        >
-                          Remove
+                        <input
+                          type="date"
+                          class="native-input"
+                          .value=${this._newDate}
+                          @input=${(e: Event) => {
+                            this._newDate = (e.target as HTMLInputElement).value;
+                          }}
+                        />
+                        <button type="button" class="btn" @click=${this._addDate}>
+                          Add date
                         </button>
                       </div>
-                    `,
-                  )}
-                  <div class="date-row">
-                    <input
-                      type="date"
-                      class="native-input"
-                      .value=${this._newDate}
-                      @input=${(e: Event) => {
-                        this._newDate = (e.target as HTMLInputElement).value;
-                      }}
-                    />
-                    <button type="button" class="btn" @click=${this._addDate}>
-                      Add date
-                    </button>
+                    </div>
+
+                    <label class="panel-label">Date range</label>
+                    <div class="dates">
+                      ${this._dateRanges.map(
+                        (r) => html`
+                          <div class="date-row">
+                            <span>${formatDate(r[0])} – ${formatDate(r[1])}</span>
+                            <button
+                              type="button"
+                              class="btn"
+                              @click=${() => this._removeDateRange(r)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        `,
+                      )}
+                      <div class="range-add-row">
+                        <input
+                          type="date"
+                          class="native-input"
+                          .value=${this._newRangeStart}
+                          @input=${(e: Event) => {
+                            this._newRangeStart = (e.target as HTMLInputElement).value;
+                          }}
+                        />
+                        <span class="sep">to</span>
+                        <input
+                          type="date"
+                          class="native-input"
+                          .value=${this._newRangeEnd}
+                          @input=${(e: Event) => {
+                            this._newRangeEnd = (e.target as HTMLInputElement).value;
+                          }}
+                        />
+                        <button type="button" class="btn" @click=${this._addDateRange}>
+                          Add range
+                        </button>
+                      </div>
+                    </div>
+
+                    <label class="panel-label">Special conditions (YidCal)</label>
+                    <div class="days">
+                      ${DAY_CONDITION_TYPES.map(
+                        (condition) => html`
+                          <button
+                            type="button"
+                            class="day-chip ${this._dayConditions.includes(condition)
+                              ? "active"
+                              : ""}"
+                            @click=${() => this._toggleDayCondition(condition)}
+                          >
+                            ${DAY_CONDITION_LABELS[condition]}
+                          </button>
+                        `,
+                      )}
+                    </div>
+                    <span class="hint">
+                      Reflects YidCal's current state, so this can only be
+                      confirmed for today - a future Shabbos/Yom Tov won't
+                      show up in "Next event" ahead of time, but the rule
+                      still applies correctly once that day arrives.
+                    </span>
                   </div>
-                </div>
+                `
+              : nothing}
+          </section>
 
-                <label class="field-label">Day conditions (YidCal)</label>
-                <div class="days">
-                  ${DAY_CONDITION_TYPES.map(
-                    (condition) => html`
-                      <button
-                        type="button"
-                        class="day-chip ${this._dayConditions.includes(condition)
-                          ? "active"
-                          : ""}"
-                        @click=${() => this._toggleDayCondition(condition)}
-                      >
-                        ${DAY_CONDITION_LABELS[condition]}
-                      </button>
-                    `,
-                  )}
-                </div>
-                <span class="hint">
-                  Reflects YidCal's current state, so this can only be
-                  confirmed for today - a future Shabbos/Yom Tov won't show
-                  up in "Next event" ahead of time, but the rule still
-                  applies correctly once that day arrives.
-                </span>
-              `
-            : nothing}
+          <section class="section">
+            <h3 class="section-title">Time</h3>
+            ${this._renderTimeFields(
+              "On time",
+              this._onTime,
+              (spec) => (this._onTime = spec),
+            )}
+            ${this._renderTimeFields(
+              "Off time",
+              this._offTime,
+              (spec) => (this._offTime = spec),
+            )}
+          </section>
 
-          ${this._renderTimeFields(
-            "On time",
-            this._onTime,
-            (spec) => (this._onTime = spec),
-          )}
-          ${this._renderTimeFields(
-            "Off time",
-            this._offTime,
-            (spec) => (this._offTime = spec),
-          )}
-
-          ${this._renderActionFields()}
+          <section class="section">
+            <h3 class="section-title">Action</h3>
+            ${this._renderActionFields()}
+          </section>
 
           <div class="dialog-actions">
             <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
@@ -608,11 +727,69 @@ export class SchedulerPlusRuleEditor extends LitElement {
       flex-direction: column;
       gap: 16px;
       min-width: 320px;
+      max-width: 420px;
     }
     .dialog-title {
       font-size: 1.25rem;
       font-weight: 500;
       color: var(--primary-text-color);
+    }
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 18px;
+      border-top: 1px solid var(--divider-color);
+    }
+    .section:first-of-type {
+      padding-top: 0;
+      border-top: none;
+    }
+    .section-title {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--primary-text-color);
+    }
+    .filter-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.03));
+    }
+    .filter-summary {
+      margin: 0 0 4px;
+      font-size: 0.9em;
+      font-weight: 500;
+      color: var(--primary-text-color);
+    }
+    .panel-label {
+      font-size: 0.75em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--secondary-text-color);
+      margin-top: 6px;
+    }
+    .panel-label:first-of-type {
+      margin-top: 0;
+    }
+    .range-add-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .range-add-row .native-input {
+      flex: 1;
+      min-width: 0;
+    }
+    .range-add-row .sep {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+      flex: none;
     }
     .dialog-actions {
       display: flex;

@@ -154,10 +154,14 @@ class SchedulerEngine:
     def _candidate_dates(rule: Rule, now: datetime) -> list[date]:
         """Reference dates worth resolving `rule` against for async_get_next_event.
 
-        A RuleDateMode.INCLUDE rule can name a literal date arbitrarily far
-        in the future - a fixed day window could miss it entirely - so its
-        own `dates` list (not yet fully in the past) is used directly
-        instead. If it also has day_conditions, today is added too: a
+        A RuleDateMode.INCLUDE rule can name a literal date (or a range)
+        arbitrarily far in the future - a fixed day window could miss it
+        entirely - so candidates are built directly from the rule's own
+        `dates`/`date_ranges` instead. For a range, only its earliest
+        not-yet-past day is needed: whatever on/off times resolve for that
+        day are necessarily the range's soonest occurrence, so there's no
+        need to enumerate every day in a (potentially very long) range. If
+        the rule also has day_conditions, today is added too: a
         day-condition's current-state-only sensor (see DayCondition) can
         only ever confirm *today*, so that's the furthest such a rule can
         be previewed, even though it will still fire correctly on some
@@ -173,6 +177,11 @@ class SchedulerEngine:
             candidates = {
                 d for raw in rule.dates if (d := date.fromisoformat(raw)) >= yesterday
             }
+            for start_str, end_str in rule.date_ranges:
+                end = date.fromisoformat(end_str)
+                if end < yesterday:
+                    continue
+                candidates.add(max(date.fromisoformat(start_str), yesterday))
             if rule.day_conditions:
                 candidates.add(now.date())
             return sorted(candidates)
@@ -326,12 +335,21 @@ class SchedulerEngine:
         return on_at, off_at
 
     async def _matches_date_filter(self, rule: Rule, reference_date: date) -> bool:
-        """Return whether `reference_date` is named by rule.dates or rule.day_conditions.
+        """Return whether `reference_date` matches rule.dates/date_ranges/day_conditions.
 
-        The two are combined with OR: a rule can mix a literal blackout
-        date with e.g. "every Yom Tov" and either one is enough to match.
+        All three are combined with OR: a rule can mix a literal blackout
+        date, a vacation date range, and e.g. "every Yom Tov", and any one
+        of them alone is enough to match. date_ranges are stored as
+        "YYYY-MM-DD" string pairs, which sort identically to their actual
+        dates, so a plain string comparison is enough - no need to parse
+        `reference_date` back and forth.
         """
-        if reference_date.isoformat() in rule.dates:
+        date_str = reference_date.isoformat()
+
+        if date_str in rule.dates:
+            return True
+
+        if any(start <= date_str <= end for start, end in rule.date_ranges):
             return True
 
         for condition_type in rule.day_conditions:

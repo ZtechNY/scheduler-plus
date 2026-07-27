@@ -9,6 +9,7 @@ engine assume any data reaching them is already well-formed.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -36,6 +37,26 @@ from .const import (
 from .coordinator import SchedulerPlusCoordinator
 from .models import Rule, RuleDateMode, Schedule, Weekday
 from .storage import SchedulerPlusStoreData
+
+
+_DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
+
+
+def _validate_date_range(value: Any) -> tuple[str, str]:
+    """Validate a [start, end] pair of "YYYY-MM-DD" strings, start <= end."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise vol.Invalid("date_ranges entries must be a [start, end] pair")
+    start, end = value
+    if not (
+        isinstance(start, str)
+        and isinstance(end, str)
+        and re.match(_DATE_RE, start)
+        and re.match(_DATE_RE, end)
+    ):
+        raise vol.Invalid('date_ranges entries must be "YYYY-MM-DD" strings')
+    if start > end:
+        raise vol.Invalid("date_ranges start must not be after end")
+    return (start, end)
 
 
 def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
@@ -77,7 +98,10 @@ _RULE_SCHEMA = vol.Schema(
             RuleDateMode
         ),
         vol.Optional("dates", default=list): vol.All(
-            cv.ensure_list, [vol.Match(r"^\d{4}-\d{2}-\d{2}$")]
+            cv.ensure_list, [vol.Match(_DATE_RE)]
+        ),
+        vol.Optional("date_ranges", default=list): vol.All(
+            cv.ensure_list, [_validate_date_range]
         ),
         vol.Optional("day_conditions", default=list): vol.All(
             cv.ensure_list, [vol.Coerce(DayConditionType)]

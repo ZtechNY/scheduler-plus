@@ -88,6 +88,7 @@ class Rule:
     days: frozenset[Weekday]
     date_mode: RuleDateMode = RuleDateMode.ALWAYS
     dates: frozenset[str] = field(default_factory=frozenset)
+    date_ranges: frozenset[tuple[str, str]] = field(default_factory=frozenset)
     day_conditions: frozenset[DayConditionType] = field(default_factory=frozenset)
     on_time: TimeSpec
     off_time: TimeSpec
@@ -102,6 +103,7 @@ class Rule:
             "days": sorted(day.value for day in self.days),
             "date_mode": self.date_mode.value,
             "dates": sorted(self.dates),
+            "date_ranges": sorted([list(r) for r in self.date_ranges]),
             "day_conditions": sorted(cond.value for cond in self.day_conditions),
             "on_time": self.on_time.to_dict(),
             "off_time": self.off_time.to_dict(),
@@ -112,10 +114,11 @@ class Rule:
     def from_dict(cls, data: dict[str, Any]) -> Rule:
         """Deserialize from a plain dict loaded from storage.
 
-        `date_mode`/`dates`/`day_conditions` use `.get()` with defaults
-        rather than direct indexing, since rules stored before these fields
-        existed won't have them - they behave exactly as before
-        (RuleDateMode.ALWAYS, no dates, no day conditions).
+        `date_mode`/`dates`/`date_ranges`/`day_conditions` use `.get()`
+        with defaults rather than direct indexing, since rules stored
+        before these fields existed won't have them - they behave exactly
+        as before (RuleDateMode.ALWAYS, no dates, no ranges, no day
+        conditions).
         """
         return cls(
             id=data["id"],
@@ -124,6 +127,9 @@ class Rule:
             days=frozenset(Weekday(day) for day in data["days"]),
             date_mode=RuleDateMode(data.get("date_mode", RuleDateMode.ALWAYS)),
             dates=frozenset(data.get("dates", [])),
+            date_ranges=frozenset(
+                (start, end) for start, end in data.get("date_ranges", [])
+            ),
             day_conditions=frozenset(
                 DayConditionType(cond) for cond in data.get("day_conditions", [])
             ),

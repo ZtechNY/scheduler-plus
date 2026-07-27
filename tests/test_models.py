@@ -66,6 +66,23 @@ def test_rule_round_trip_with_date_filter() -> None:
     assert restored == rule
 
 
+def test_rule_round_trip_with_date_ranges() -> None:
+    """Rule's date_ranges should survive a to_dict/from_dict round trip."""
+    rule = Rule(
+        id="rule-1",
+        name="Away for vacation",
+        days=frozenset(Weekday),
+        date_mode=RuleDateMode.EXCLUDE,
+        date_ranges=frozenset({("2024-07-01", "2024-07-15")}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+
+
 def test_rule_round_trip_with_day_conditions() -> None:
     """Rule's day_conditions should survive a to_dict/from_dict round trip."""
     rule = Rule(
@@ -99,6 +116,7 @@ def test_rule_from_dict_defaults_date_mode_for_legacy_data() -> None:
 
     assert rule.date_mode is RuleDateMode.ALWAYS
     assert rule.dates == frozenset()
+    assert rule.date_ranges == frozenset()
     assert rule.day_conditions == frozenset()
 
 

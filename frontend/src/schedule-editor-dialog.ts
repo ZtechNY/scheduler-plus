@@ -300,6 +300,9 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       ...(rule.dates.length > 0
         ? [`${rule.dates.length} date${rule.dates.length === 1 ? "" : "s"}`]
         : []),
+      ...(rule.date_ranges.length > 0
+        ? [`${rule.date_ranges.length} range${rule.date_ranges.length === 1 ? "" : "s"}`]
+        : []),
       ...rule.day_conditions.map((condition) => DAY_CONDITION_LABELS[condition]),
     ];
     const dateNote =

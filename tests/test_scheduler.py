@@ -104,6 +104,7 @@ def _make_rule(
     days: frozenset[Weekday] = frozenset(Weekday),
     date_mode: RuleDateMode = RuleDateMode.ALWAYS,
     dates: frozenset[str] = frozenset(),
+    date_ranges: frozenset[tuple[str, str]] = frozenset(),
     day_conditions: frozenset[DayConditionType] = frozenset(),
     enabled: bool = True,
 ) -> Rule:
@@ -115,6 +116,7 @@ def _make_rule(
         days=days,
         date_mode=date_mode,
         dates=dates,
+        date_ranges=date_ranges,
         day_conditions=day_conditions,
         on_time=TimeSpec(provider=on_provider, params={"time": on_time}),
         off_time=TimeSpec(provider=off_provider, params={"time": off_time}),
@@ -272,6 +274,50 @@ async def test_resolve_occurrence_include_mode_skips_unlisted_date(
     occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
 
     assert occurrence is None
+
+
+async def test_resolve_occurrence_exclude_mode_skips_date_within_range(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule is skipped on any date within a listed range."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE,
+        date_ranges=frozenset({("2023-12-25", "2024-01-05")}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)  # 2024-01-01
+
+    assert occurrence is None
+
+
+async def test_resolve_occurrence_exclude_mode_runs_outside_range(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule still runs on a date outside any listed range."""
+    other_monday = date(2024, 1, 8)
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE,
+        date_ranges=frozenset({("2023-12-25", "2024-01-05")}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, other_monday)
+
+    assert occurrence is not None
+
+
+async def test_resolve_occurrence_include_mode_matches_date_within_range(
+    engine: SchedulerEngine,
+) -> None:
+    """An INCLUDE rule fires on a date within a listed range, ignoring `days`."""
+    rule = _make_rule(
+        days=frozenset({Weekday.SUNDAY}),  # _MONDAY is a Monday, not Sunday
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2023-12-25", "2024-01-05")}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is not None
 
 
 async def test_resolve_occurrence_exclude_mode_skips_matching_day_condition(
@@ -495,6 +541,45 @@ def test_candidate_dates_include_mode_without_day_conditions_excludes_today() ->
     candidates = SchedulerEngine._candidate_dates(rule, now)
 
     assert now.date() not in candidates
+
+
+def test_candidate_dates_include_mode_range_not_yet_started() -> None:
+    """An INCLUDE rule's future range contributes its start date as the candidate."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2024-06-01", "2024-06-15")}),
+    )
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert candidates == [date(2024, 6, 1)]
+
+
+def test_candidate_dates_include_mode_range_already_started() -> None:
+    """An INCLUDE rule's in-progress range contributes today, not its start date."""
+    now = datetime(2024, 6, 5, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2024-06-01", "2024-06-15")}),
+    )
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert candidates == [date(2024, 6, 5)]
+
+
+def test_candidate_dates_include_mode_ignores_past_range() -> None:
+    """An INCLUDE rule's already-ended range contributes no candidate at all."""
+    now = datetime(2024, 6, 20, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2024-06-01", "2024-06-15")}),
+    )
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert candidates == []
 
 
 async def test_refresh_all_skips_disabled_schedule(
