@@ -62,11 +62,55 @@ export interface TimeSpec {
 /** Opaque, device-specific action parameters (e.g. {"brightness": 255}). */
 export type Action = Record<string, unknown>;
 
+/**
+ * How a Rule's `dates` list constrains which days it's active on.
+ * "always": `dates` is ignored - the rule follows `days` alone, every week.
+ * "include": the rule ignores `days` entirely and only fires on the exact
+ *   dates listed - a one-off/holiday-style rule.
+ * "exclude": the rule follows `days` as usual, except it's skipped
+ *   entirely on any listed date - an override/blackout for an otherwise-
+ *   recurring rule.
+ */
+export type RuleDateMode = "always" | "include" | "exclude";
+
+export const RULE_DATE_MODES: readonly RuleDateMode[] = ["always", "include", "exclude"];
+
+export const RULE_DATE_MODE_LABELS: Record<RuleDateMode, string> = {
+  always: "Always",
+  include: "Only on these dates",
+  exclude: "Except these dates",
+};
+
+/**
+ * YidCal-backed day-type conditions a Rule's date filter can reference, as
+ * an alternative to listing literal dates - e.g. "except every Yom Tov"
+ * instead of maintaining a Yom Tov date list by hand.
+ */
+export type DayConditionType = "shabbos" | "yom_tov" | "erev_shabbos" | "erev_yom_tov";
+
+/** Selectable in the rule editor - every DayConditionType now has a registered plugin. */
+export const DAY_CONDITION_TYPES: readonly DayConditionType[] = [
+  "shabbos",
+  "yom_tov",
+  "erev_shabbos",
+  "erev_yom_tov",
+];
+
+export const DAY_CONDITION_LABELS: Record<DayConditionType, string> = {
+  shabbos: "Shabbos",
+  yom_tov: "Yom Tov",
+  erev_shabbos: "Erev Shabbos",
+  erev_yom_tov: "Erev Yom Tov",
+};
+
 export interface Rule {
   id: string;
   name: string;
   enabled: boolean;
   days: Weekday[];
+  date_mode: RuleDateMode;
+  dates: string[];
+  day_conditions: DayConditionType[];
   on_time: TimeSpec;
   off_time: TimeSpec;
   action: Action;
@@ -79,4 +123,7 @@ export interface Schedule {
   device_type: DeviceType;
   entities: string[];
   rules: Rule[];
+  /** Soonest upcoming on/off moment across all of this schedule's rules, computed server-side. */
+  next_event: string | null;
+  next_event_action: "on" | "off" | null;
 }

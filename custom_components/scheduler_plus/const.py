@@ -43,6 +43,20 @@ class TimeProviderType(StrEnum):
     YIDCAL = "yidcal"
 
 
+class DayConditionType(StrEnum):
+    """YidCal-backed day-type conditions a Rule's date filter can reference.
+
+    Identifiers only, like DeviceType/TimeProviderType - the scheduling
+    engine treats these as opaque keys into a day-condition plugin registry
+    and never branches on their meaning.
+    """
+
+    SHABBOS = "shabbos"
+    YOM_TOV = "yom_tov"
+    EREV_SHABBOS = "erev_shabbos"
+    EREV_YOM_TOV = "erev_yom_tov"
+
+
 # Options-flow keys and defaults for scheduling preferences (weekday/weekend
 # split, working hours). These power the frontend rule editor's quick-fill
 # presets (Weekdays/Weekend/After hours). They're stored on the config

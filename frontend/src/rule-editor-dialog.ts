@@ -3,8 +3,20 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, Preferences, RuleInput } from "./api";
 import { fetchPreferences } from "./api";
-import type { Action, DeviceType, TimeProviderType, TimeSpec, Weekday } from "./types";
+import type {
+  Action,
+  DayConditionType,
+  DeviceType,
+  RuleDateMode,
+  TimeProviderType,
+  TimeSpec,
+  Weekday,
+} from "./types";
 import {
+  DAY_CONDITION_LABELS,
+  DAY_CONDITION_TYPES,
+  RULE_DATE_MODE_LABELS,
+  RULE_DATE_MODES,
   TIME_PROVIDER_LABELS,
   TIME_PROVIDER_TYPES,
   WEEKDAYS,
@@ -67,6 +79,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _days: Weekday[] = [];
 
+  @state() private _dateMode: RuleDateMode = "always";
+
+  @state() private _dates: string[] = [];
+
+  @state() private _newDate = "";
+
+  @state() private _dayConditions: DayConditionType[] = [];
+
   @state() private _onTime: TimeSpec = { provider: "fixed", params: { time: "06:00" } };
 
   @state() private _offTime: TimeSpec = { provider: "fixed", params: { time: "21:00" } };
@@ -105,6 +125,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._name = rule?.name ?? "";
     this._enabled = rule?.enabled ?? true;
     this._days = rule ? [...rule.days] : [];
+    this._dateMode = rule?.date_mode ?? "always";
+    this._dates = rule ? [...rule.dates] : [];
+    this._newDate = "";
+    this._dayConditions = rule ? [...rule.day_conditions] : [];
     this._onTime = rule?.on_time ?? { provider: "fixed", params: { time: "06:00" } };
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
 
@@ -167,14 +191,51 @@ export class SchedulerPlusRuleEditor extends LitElement {
     };
   };
 
+  private _handleDateModeChange = (e: Event): void => {
+    const mode = (e.target as HTMLSelectElement).value as RuleDateMode;
+    this._dateMode = mode;
+    if (mode === "include") {
+      // Ignored by the engine in "include" mode, but the schema still
+      // requires at least one day - fill it in rather than nagging the
+      // user about a field this mode doesn't use.
+      this._days = [...WEEKDAYS];
+    }
+  };
+
+  private _addDate = (): void => {
+    if (!this._newDate || this._dates.includes(this._newDate)) {
+      return;
+    }
+    this._dates = [...this._dates, this._newDate].sort();
+    this._newDate = "";
+  };
+
+  private _removeDate = (dateToRemove: string): void => {
+    this._dates = this._dates.filter((d) => d !== dateToRemove);
+  };
+
+  private _toggleDayCondition = (condition: DayConditionType): void => {
+    this._dayConditions = this._dayConditions.includes(condition)
+      ? this._dayConditions.filter((c) => c !== condition)
+      : [...this._dayConditions, condition];
+  };
+
   private _save = (): void => {
     const name = this._name.trim();
     if (!name) {
       this._error = "Name is required.";
       return;
     }
-    if (this._days.length === 0) {
+    if (this._dateMode !== "include" && this._days.length === 0) {
       this._error = "At least one day is required.";
+      return;
+    }
+    if (
+      this._dateMode !== "always" &&
+      this._dates.length === 0 &&
+      this._dayConditions.length === 0
+    ) {
+      this._error = "At least one date or day condition is required.";
       return;
     }
 
@@ -199,6 +260,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
       name,
       enabled: this._enabled,
       days: this._days,
+      date_mode: this._dateMode,
+      dates: this._dates,
+      day_conditions: this._dayConditions,
       on_time: this._onTime,
       off_time: this._offTime,
       action,
@@ -265,6 +329,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 <button
                   type="button"
                   class="day-chip ${this._days.includes(day) ? "active" : ""}"
+                  ?disabled=${this._dateMode === "include"}
                   @click=${() => this._toggleDay(day)}
                 >
                   ${WEEKDAY_LABELS[day].slice(0, 3)}
@@ -272,6 +337,79 @@ export class SchedulerPlusRuleEditor extends LitElement {
               `,
             )}
           </div>
+
+          <label class="field-label" for="date-mode">Date filter</label>
+          <select
+            id="date-mode"
+            class="native-select"
+            .value=${this._dateMode}
+            @change=${this._handleDateModeChange}
+          >
+            ${RULE_DATE_MODES.map(
+              (mode) => html`<option value=${mode}>${RULE_DATE_MODE_LABELS[mode]}</option>`,
+            )}
+          </select>
+          ${this._dateMode !== "always"
+            ? html`
+                <span class="hint">
+                  ${this._dateMode === "include"
+                    ? "This rule only runs on the dates below, regardless of the Days selection."
+                    : "This rule follows the Days selection above, except on the dates below - use this to override a recurring rule for one date."}
+                </span>
+                <div class="dates">
+                  ${this._dates.map(
+                    (dateValue) => html`
+                      <div class="date-row">
+                        <span>${dateValue}</span>
+                        <button
+                          type="button"
+                          class="btn"
+                          @click=${() => this._removeDate(dateValue)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    `,
+                  )}
+                  <div class="date-row">
+                    <input
+                      type="date"
+                      class="native-input"
+                      .value=${this._newDate}
+                      @input=${(e: Event) => {
+                        this._newDate = (e.target as HTMLInputElement).value;
+                      }}
+                    />
+                    <button type="button" class="btn" @click=${this._addDate}>
+                      Add date
+                    </button>
+                  </div>
+                </div>
+
+                <label class="field-label">Day conditions (YidCal)</label>
+                <div class="days">
+                  ${DAY_CONDITION_TYPES.map(
+                    (condition) => html`
+                      <button
+                        type="button"
+                        class="day-chip ${this._dayConditions.includes(condition)
+                          ? "active"
+                          : ""}"
+                        @click=${() => this._toggleDayCondition(condition)}
+                      >
+                        ${DAY_CONDITION_LABELS[condition]}
+                      </button>
+                    `,
+                  )}
+                </div>
+                <span class="hint">
+                  Reflects YidCal's current state, so this can only be
+                  confirmed for today - a future Shabbos/Yom Tov won't show
+                  up in "Next event" ahead of time, but the rule still
+                  applies correctly once that day arrives.
+                </span>
+              `
+            : nothing}
 
           ${this._renderTimeFields(
             "On time",
@@ -555,6 +693,23 @@ export class SchedulerPlusRuleEditor extends LitElement {
       color: var(--text-primary-color, #fff);
       background: var(--primary-color);
       border-color: var(--primary-color);
+    }
+    .day-chip:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .dates {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .date-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .date-row span {
+      flex: 1;
     }
     .time-row {
       display: flex;

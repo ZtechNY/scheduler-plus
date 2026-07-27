@@ -29,11 +29,12 @@ from .const import (
     DEFAULT_WORKING_HOURS_END,
     DEFAULT_WORKING_HOURS_START,
     DOMAIN,
+    DayConditionType,
     DeviceType,
     TimeProviderType,
 )
 from .coordinator import SchedulerPlusCoordinator
-from .models import Rule, Schedule, Weekday
+from .models import Rule, RuleDateMode, Schedule, Weekday
 from .storage import SchedulerPlusStoreData
 
 
@@ -66,8 +67,20 @@ _RULE_SCHEMA = vol.Schema(
         vol.Optional("id"): str,
         vol.Required("name"): str,
         vol.Optional("enabled", default=True): bool,
+        # Required even for RuleDateMode.INCLUDE rules, which ignore it -
+        # keeping it non-optional avoids a conditional-on-date_mode schema.
+        # The frontend fills it with every day for INCLUDE rules.
         vol.Required("days"): vol.All(
             cv.ensure_list, [vol.Coerce(Weekday)], vol.Length(min=1)
+        ),
+        vol.Optional("date_mode", default=RuleDateMode.ALWAYS): vol.Coerce(
+            RuleDateMode
+        ),
+        vol.Optional("dates", default=list): vol.All(
+            cv.ensure_list, [vol.Match(r"^\d{4}-\d{2}-\d{2}$")]
+        ),
+        vol.Optional("day_conditions", default=list): vol.All(
+            cv.ensure_list, [vol.Coerce(DayConditionType)]
         ),
         vol.Required("on_time"): _TIME_SPEC_SCHEMA,
         vol.Required("off_time"): _TIME_SPEC_SCHEMA,
@@ -139,15 +152,34 @@ async def websocket_list_schedules(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Return the raw list of stored schedules."""
-    coordinator = _get_coordinator(hass)
-    if coordinator is None:
+    """Return the stored schedules, each annotated with its next event.
+
+    `next_event`/`next_event_action` are computed here (via the engine)
+    rather than left for the frontend to work out from a separate sensor
+    entity - a schedule's own list response is the one place the UI already
+    has to read, and it keeps "what's next" logic in one place instead of
+    duplicated between SchedulerEngine and the frontend.
+    """
+    entry = _get_entry(hass)
+    if entry is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
         )
         return
 
-    connection.send_result(msg["id"], {"schedules": coordinator.data["schedules"]})
+    engine = entry.runtime_data.engine
+    schedules = []
+    for raw_schedule in entry.runtime_data.coordinator.data["schedules"]:
+        next_event = await engine.async_get_next_event(Schedule.from_dict(raw_schedule))
+        schedules.append(
+            {
+                **raw_schedule,
+                "next_event": next_event[0].isoformat() if next_event else None,
+                "next_event_action": next_event[1] if next_event else None,
+            }
+        )
+
+    connection.send_result(msg["id"], {"schedules": schedules})
 
 
 @websocket_api.websocket_command(

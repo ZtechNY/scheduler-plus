@@ -9,7 +9,14 @@ import { createSchedule, updateSchedule } from "./api";
 import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
 import type { DeviceType, Schedule, TimeSpec } from "./types";
-import { DEVICE_TYPES, DEVICE_TYPE_LABELS, TIME_PROVIDER_LABELS, WEEKDAYS, WEEKDAY_LABELS } from "./types";
+import {
+  DAY_CONDITION_LABELS,
+  DEVICE_TYPES,
+  DEVICE_TYPE_LABELS,
+  TIME_PROVIDER_LABELS,
+  WEEKDAYS,
+  WEEKDAY_LABELS,
+} from "./types";
 
 /** Renders a fixed "HH:MM" as a 12-hour clock time, e.g. "06:00" -> "6:00 AM". */
 function formatFixedTime(time: string): string {
@@ -289,12 +296,26 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       .sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b))
       .map((day) => WEEKDAY_LABELS[day].slice(0, 3))
       .join(", ");
+    const filterParts = [
+      ...(rule.dates.length > 0
+        ? [`${rule.dates.length} date${rule.dates.length === 1 ? "" : "s"}`]
+        : []),
+      ...rule.day_conditions.map((condition) => DAY_CONDITION_LABELS[condition]),
+    ];
+    const dateNote =
+      filterParts.length === 0
+        ? ""
+        : rule.date_mode === "exclude"
+          ? ` · except ${filterParts.join(", ")}`
+          : rule.date_mode === "include"
+            ? ` · only ${filterParts.join(", ")}`
+            : "";
     return html`
       <li class="rule ${rule.enabled ? "" : "disabled"}">
         <div class="rule-info">
           <span class="rule-name">${rule.name}</span>
           <span class="rule-meta">
-            ${days} · ${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}
+            ${days} · ${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}${dateNote}
           </span>
         </div>
         <div class="row-actions">

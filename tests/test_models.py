@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
-from custom_components.scheduler_plus.const import DeviceType, TimeProviderType
-from custom_components.scheduler_plus.models import Rule, Schedule, TimeSpec, Weekday
+from custom_components.scheduler_plus.const import (
+    DayConditionType,
+    DeviceType,
+    TimeProviderType,
+)
+from custom_components.scheduler_plus.models import (
+    Rule,
+    RuleDateMode,
+    Schedule,
+    TimeSpec,
+    Weekday,
+)
 
 
 def test_time_spec_round_trip() -> None:
@@ -37,6 +47,59 @@ def test_rule_round_trip() -> None:
     restored = Rule.from_dict(rule.to_dict())
 
     assert restored == rule
+
+
+def test_rule_round_trip_with_date_filter() -> None:
+    """Rule's date_mode/dates should survive a to_dict/from_dict round trip."""
+    rule = Rule(
+        id="rule-1",
+        name="Every Monday, except this one",
+        days=frozenset({Weekday.MONDAY}),
+        date_mode=RuleDateMode.EXCLUDE,
+        dates=frozenset({"2024-01-08", "2024-03-04"}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+
+
+def test_rule_round_trip_with_day_conditions() -> None:
+    """Rule's day_conditions should survive a to_dict/from_dict round trip."""
+    rule = Rule(
+        id="rule-1",
+        name="Every day, except Yom Tov",
+        days=frozenset(Weekday),
+        date_mode=RuleDateMode.EXCLUDE,
+        day_conditions=frozenset({DayConditionType.YOM_TOV}),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+
+
+def test_rule_from_dict_defaults_date_mode_for_legacy_data() -> None:
+    """A stored rule from before date filtering existed still loads cleanly."""
+    legacy_data = {
+        "id": "rule-1",
+        "name": "Weekdays",
+        "enabled": True,
+        "days": ["mon"],
+        "on_time": {"provider": "fixed", "params": {"time": "06:00"}},
+        "off_time": {"provider": "fixed", "params": {"time": "21:00"}},
+        "action": {},
+    }
+
+    rule = Rule.from_dict(legacy_data)
+
+    assert rule.date_mode is RuleDateMode.ALWAYS
+    assert rule.dates == frozenset()
+    assert rule.day_conditions == frozenset()
 
 
 def test_rule_to_dict_sorts_days() -> None:

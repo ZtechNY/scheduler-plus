@@ -23,12 +23,13 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .coordinator import SchedulerPlusCoordinator
+from .day_conditions import DEFAULT_DAY_CONDITIONS, DayConditionRegistry
 from .device_handlers import (
     DEFAULT_DEVICE_HANDLERS,
     DeviceHandler,
     DeviceHandlerRegistry,
 )
-from .models import Rule, Schedule, Weekday
+from .models import Rule, RuleDateMode, Schedule, Weekday
 from .time_providers import DEFAULT_TIME_PROVIDERS, TimeProviderRegistry
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,18 +63,20 @@ class SchedulerEngine:
         *,
         time_providers: TimeProviderRegistry = DEFAULT_TIME_PROVIDERS,
         device_handlers: DeviceHandlerRegistry = DEFAULT_DEVICE_HANDLERS,
+        day_conditions: DayConditionRegistry = DEFAULT_DAY_CONDITIONS,
     ) -> None:
         """Initialize the engine.
 
-        `time_providers`/`device_handlers` default to the production
-        registries but can be overridden, so the engine can be unit tested
-        with fake plugins instead of real sun calculations or service
-        calls.
+        `time_providers`/`device_handlers`/`day_conditions` default to the
+        production registries but can be overridden, so the engine can be
+        unit tested with fake plugins instead of real sun calculations,
+        service calls, or YidCal sensor state.
         """
         self.hass = hass
         self._coordinator = coordinator
         self._time_providers = time_providers
         self._device_handlers = device_handlers
+        self._day_conditions = day_conditions
         self._unsub_rules: dict[str, list[CALLBACK_TYPE]] = {}
         self._unsub_midnight: CALLBACK_TYPE | None = None
         self._unsub_coordinator: CALLBACK_TYPE | None = None
@@ -117,10 +120,9 @@ class SchedulerEngine:
 
         Unlike _async_refresh_all (which only ever needs today and
         yesterday, since it re-runs every midnight to pick up each new
-        day), this looks from yesterday through 7 days ahead - enough to
-        guarantee checking every day-of-week at least once, so a rule
-        that e.g. only runs on Saturdays still reports its next occurrence
-        instead of appearing to have none just because today isn't Saturday.
+        day), this needs to look further ahead to answer "what's next" -
+        see _candidate_dates for how far, which depends on the rule's
+        RuleDateMode.
         """
         if not schedule.enabled:
             return None
@@ -132,8 +134,7 @@ class SchedulerEngine:
             if not rule.enabled:
                 continue
 
-            for days_offset in range(-1, 8):
-                reference_date = (now + timedelta(days=days_offset)).date()
+            for reference_date in self._candidate_dates(rule, now):
                 occurrence = await self._async_resolve_occurrence(
                     rule, reference_date
                 )
@@ -148,6 +149,34 @@ class SchedulerEngine:
                         soonest = (when, label)
 
         return soonest
+
+    @staticmethod
+    def _candidate_dates(rule: Rule, now: datetime) -> list[date]:
+        """Reference dates worth resolving `rule` against for async_get_next_event.
+
+        A RuleDateMode.INCLUDE rule can name a literal date arbitrarily far
+        in the future - a fixed day window could miss it entirely - so its
+        own `dates` list (not yet fully in the past) is used directly
+        instead. If it also has day_conditions, today is added too: a
+        day-condition's current-state-only sensor (see DayCondition) can
+        only ever confirm *today*, so that's the furthest such a rule can
+        be previewed, even though it will still fire correctly on some
+        future date once that date actually arrives.
+
+        Weekday-recurring rules (ALWAYS/EXCLUDE) only need yesterday
+        through 7 days ahead: enough to guarantee hitting every day-of-week
+        at least once, so e.g. a Saturday-only rule still reports its next
+        occurrence even when today isn't Saturday.
+        """
+        if rule.date_mode is RuleDateMode.INCLUDE:
+            yesterday = (now - timedelta(days=1)).date()
+            candidates = {
+                d for raw in rule.dates if (d := date.fromisoformat(raw)) >= yesterday
+            }
+            if rule.day_conditions:
+                candidates.add(now.date())
+            return sorted(candidates)
+        return [(now + timedelta(days=offset)).date() for offset in range(-1, 8)]
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -254,9 +283,25 @@ class SchedulerEngine:
         could not be resolved, or a referenced plugin is not registered. If
         off resolves to a clock time at or before on, this is an overnight
         rule and off is shifted to the following day.
+
+        RuleDateMode.INCLUDE rules ignore `days` entirely - they fire only
+        when _matches_date_filter matches (a listed date, or a currently-
+        true day condition, e.g. "only on Shabbos"). ALWAYS/EXCLUDE rules
+        follow `days` as always; EXCLUDE additionally skips a date matched
+        by _matches_date_filter, letting a normally-recurring rule be
+        overridden for a one-off date - or every Yom Tov - without
+        touching the rule's regular days/times.
         """
-        if _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days:
-            return None
+        if rule.date_mode is RuleDateMode.INCLUDE:
+            if not await self._matches_date_filter(rule, reference_date):
+                return None
+        else:
+            if _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days:
+                return None
+            if rule.date_mode is RuleDateMode.EXCLUDE and await self._matches_date_filter(
+                rule, reference_date
+            ):
+                return None
 
         try:
             on_provider = self._time_providers.get(rule.on_time.provider)
@@ -279,6 +324,30 @@ class SchedulerEngine:
             off_at += timedelta(days=1)
 
         return on_at, off_at
+
+    async def _matches_date_filter(self, rule: Rule, reference_date: date) -> bool:
+        """Return whether `reference_date` is named by rule.dates or rule.day_conditions.
+
+        The two are combined with OR: a rule can mix a literal blackout
+        date with e.g. "every Yom Tov" and either one is enough to match.
+        """
+        if reference_date.isoformat() in rule.dates:
+            return True
+
+        for condition_type in rule.day_conditions:
+            try:
+                condition = self._day_conditions.get(condition_type)
+            except LookupError:
+                _LOGGER.error(
+                    "Rule '%s' uses an unsupported day condition '%s'",
+                    rule.name,
+                    condition_type.value,
+                )
+                continue
+            if await condition.async_check(self.hass, reference_date):
+                return True
+
+        return False
 
     def _schedule_turn_on(
         self,

@@ -6,18 +6,6 @@
 
 import type { Rule, Schedule, Weekday } from "./types";
 
-/** The minimal shape of one entity's state, as found in `hass.states`. */
-export interface HassEntityState {
-  state: string;
-  attributes: Record<string, unknown>;
-}
-
-/** The minimal shape of one entity registry entry, as found in `hass.entities`. */
-export interface HassEntityRegistryEntry {
-  entity_id: string;
-  unique_id: string;
-}
-
 /**
  * The slice of Home Assistant's frontend `hass` object this card depends
  * on. Deliberately minimal: Home Assistant does not publish a small
@@ -27,8 +15,6 @@ export interface HassEntityRegistryEntry {
  */
 export interface HomeAssistant {
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
-  states: Record<string, HassEntityState>;
-  entities: Record<string, HassEntityRegistryEntry>;
 }
 
 const DOMAIN = "scheduler_plus";

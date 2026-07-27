@@ -21,13 +21,27 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from custom_components.scheduler_plus.const import DeviceType, TimeProviderType
+from custom_components.scheduler_plus.const import (
+    DayConditionType,
+    DeviceType,
+    TimeProviderType,
+)
 from custom_components.scheduler_plus.coordinator import SchedulerPlusCoordinator
+from custom_components.scheduler_plus.day_conditions.base import (
+    DayCondition,
+    DayConditionRegistry,
+)
 from custom_components.scheduler_plus.device_handlers.base import (
     DeviceHandler,
     DeviceHandlerRegistry,
 )
-from custom_components.scheduler_plus.models import Rule, Schedule, TimeSpec, Weekday
+from custom_components.scheduler_plus.models import (
+    Rule,
+    RuleDateMode,
+    Schedule,
+    TimeSpec,
+    Weekday,
+)
 from custom_components.scheduler_plus.scheduler import SchedulerEngine
 from custom_components.scheduler_plus.storage import SchedulerPlusStore
 from custom_components.scheduler_plus.time_providers.base import (
@@ -48,6 +62,18 @@ class UnresolvableTimeProvider(TimeProvider):
     ) -> datetime | None:
         """Always report the time as unresolvable."""
         return None
+
+
+class FakeDayCondition(DayCondition):
+    """A day condition that matches only one fixed date, for deterministic tests."""
+
+    def __init__(self, matches_date: date) -> None:
+        """Initialize with the single date this condition considers a match."""
+        self._matches_date = matches_date
+
+    async def async_check(self, hass: HomeAssistant, reference_date: date) -> bool:
+        """Match only the fixed date this instance was built with."""
+        return reference_date == self._matches_date
 
 
 class FakeDeviceHandler(DeviceHandler):
@@ -76,6 +102,9 @@ def _make_rule(
     on_provider: TimeProviderType = TimeProviderType.FIXED,
     off_provider: TimeProviderType = TimeProviderType.FIXED,
     days: frozenset[Weekday] = frozenset(Weekday),
+    date_mode: RuleDateMode = RuleDateMode.ALWAYS,
+    dates: frozenset[str] = frozenset(),
+    day_conditions: frozenset[DayConditionType] = frozenset(),
     enabled: bool = True,
 ) -> Rule:
     """Build a Rule, defaulting to a FIXED-time rule active every day."""
@@ -84,6 +113,9 @@ def _make_rule(
         name="Test rule",
         enabled=enabled,
         days=days,
+        date_mode=date_mode,
+        dates=dates,
+        day_conditions=day_conditions,
         on_time=TimeSpec(provider=on_provider, params={"time": on_time}),
         off_time=TimeSpec(provider=off_provider, params={"time": off_time}),
     )
@@ -131,12 +163,19 @@ async def engine(
         }
     )
     device_handlers = DeviceHandlerRegistry({DeviceType.LIGHT: fake_device_handler})
+    day_conditions = DayConditionRegistry(
+        {
+            DayConditionType.SHABBOS: FakeDayCondition(matches_date=_MONDAY),
+            # YOM_TOV is deliberately left unregistered.
+        }
+    )
 
     scheduler_engine = SchedulerEngine(
         hass,
         coordinator,
         time_providers=time_providers,
         device_handlers=device_handlers,
+        day_conditions=day_conditions,
     )
     yield scheduler_engine
     scheduler_engine.async_stop()
@@ -177,6 +216,126 @@ async def test_resolve_occurrence_overnight_shifts_off_to_next_day(
     assert on_at.date() == _MONDAY
     assert off_at.date() == date(2024, 1, 2)
     assert on_at < off_at
+
+
+async def test_resolve_occurrence_exclude_mode_skips_listed_date(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule is skipped on a listed date even though days match."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE, dates=frozenset({_MONDAY.isoformat()})
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is None
+
+
+async def test_resolve_occurrence_exclude_mode_runs_on_other_dates(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule still runs on days matching `days` that aren't excluded."""
+    other_monday = date(2024, 1, 8)
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE, dates=frozenset({_MONDAY.isoformat()})
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, other_monday)
+
+    assert occurrence is not None
+
+
+async def test_resolve_occurrence_include_mode_ignores_days(
+    engine: SchedulerEngine,
+) -> None:
+    """An INCLUDE rule fires on a listed date even if `days` wouldn't match."""
+    rule = _make_rule(
+        days=frozenset({Weekday.SUNDAY}),  # _MONDAY is a Monday, not Sunday
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_MONDAY.isoformat()}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is not None
+
+
+async def test_resolve_occurrence_include_mode_skips_unlisted_date(
+    engine: SchedulerEngine,
+) -> None:
+    """An INCLUDE rule does not fire on a date that isn't in `dates`."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({date(2024, 1, 8).isoformat()}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is None
+
+
+async def test_resolve_occurrence_exclude_mode_skips_matching_day_condition(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule is skipped when a day condition currently matches.
+
+    The `engine` fixture registers FakeDayCondition(matches_date=_MONDAY)
+    for SHABBOS, standing in for "today happens to be Shabbos" without
+    depending on real YidCal sensor state.
+    """
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE, day_conditions=frozenset({DayConditionType.SHABBOS})
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is None
+
+
+async def test_resolve_occurrence_exclude_mode_day_condition_not_matching(
+    engine: SchedulerEngine,
+) -> None:
+    """An EXCLUDE rule still runs when its day condition doesn't match today."""
+    other_monday = date(2024, 1, 8)
+    rule = _make_rule(
+        date_mode=RuleDateMode.EXCLUDE, day_conditions=frozenset({DayConditionType.SHABBOS})
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, other_monday)
+
+    assert occurrence is not None
+
+
+async def test_resolve_occurrence_include_mode_day_condition_matches(
+    engine: SchedulerEngine,
+) -> None:
+    """An INCLUDE rule fires when a day condition matches, ignoring `days`."""
+    rule = _make_rule(
+        days=frozenset({Weekday.SUNDAY}),  # _MONDAY is a Monday, not Sunday
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is not None
+
+
+async def test_resolve_occurrence_unregistered_day_condition_logs_and_continues(
+    engine: SchedulerEngine,
+) -> None:
+    """A rule referencing an unregistered day condition resolves to None, not an error.
+
+    YOM_TOV is deliberately left unregistered in the `engine` fixture,
+    mirroring how an unregistered TimeProvider is already handled.
+    """
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE, day_conditions=frozenset({DayConditionType.YOM_TOV})
+    )
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is None
 
 
 async def test_resolve_occurrence_unregistered_provider_returns_none(
@@ -280,6 +439,62 @@ async def test_get_next_event_finds_occurrence_later_in_week(
     when, label = next_event
     assert when.date() == future_date
     assert label == "on"
+
+
+async def test_get_next_event_include_mode_finds_date_beyond_week_window(
+    engine: SchedulerEngine,
+) -> None:
+    """An INCLUDE rule's next event is found even weeks in the future.
+
+    Regression test: the generic weekday-window lookahead used for
+    ALWAYS/EXCLUDE rules only spans about a week, which would miss an
+    INCLUDE rule's one-off date further out than that - _candidate_dates
+    has to use the rule's own `dates` directly for INCLUDE rules instead.
+    """
+    now = dt_util.now()
+    far_future_date = (now + timedelta(days=20)).date()
+    rule = _make_rule(
+        days=frozenset(),  # ignored in INCLUDE mode
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({far_future_date.isoformat()}),
+    )
+    schedule = _make_schedule(rule)
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is not None
+    when, label = next_event
+    assert when.date() == far_future_date
+    assert label == "on"
+
+
+def test_candidate_dates_include_mode_adds_today_for_day_conditions() -> None:
+    """An INCLUDE rule with a day condition includes today as a candidate.
+
+    A pure unit test of _candidate_dates (a @staticmethod, no hass needed):
+    day conditions can only ever be confirmed for *today* (see
+    DayCondition.async_check), so unlike literal dates, today has to be
+    added explicitly even though it's never actually listed in `dates`.
+    """
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert now.date() in candidates
+
+
+def test_candidate_dates_include_mode_without_day_conditions_excludes_today() -> None:
+    """An INCLUDE rule with only literal (non-matching) dates doesn't add today."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(date_mode=RuleDateMode.INCLUDE, dates=frozenset({"2024-06-01"}))
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert now.date() not in candidates
 
 
 async def test_refresh_all_skips_disabled_schedule(

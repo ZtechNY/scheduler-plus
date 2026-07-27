@@ -2,23 +2,28 @@ import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
-import type { HassEntityState, HomeAssistant } from "./api";
+import type { HomeAssistant } from "./api";
 import { deleteSchedule, fetchSchedules } from "./api";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
 import { DEVICE_TYPE_LABELS } from "./types";
 
-/** Formats a schedule's next-event sensor state as e.g. "Next: On Fri, 6:00 AM". */
-function formatNextEvent(entry: HassEntityState | undefined): string | undefined {
-  if (!entry || entry.state === "unknown" || entry.state === "unavailable") {
+/**
+ * Formats a schedule's server-computed next event as e.g. "Next: On Fri, 6:00 AM".
+ * `next_event`/`next_event_action` come straight from list_schedules (see
+ * websocket.py) rather than being looked up from a separate sensor entity -
+ * one less thing that can be missing/renamed/disabled out from under the card.
+ */
+function formatNextEvent(schedule: Schedule): string | undefined {
+  if (!schedule.next_event) {
     return undefined;
   }
-  const when = new Date(entry.state);
+  const when = new Date(schedule.next_event);
   if (Number.isNaN(when.getTime())) {
     return undefined;
   }
-  const action = entry.attributes.action === "off" ? "Off" : "On";
+  const action = schedule.next_event_action === "off" ? "Off" : "On";
   const formatted = when.toLocaleString(undefined, {
     weekday: "short",
     hour: "numeric",
@@ -95,19 +100,6 @@ export class SchedulerPlusCard extends LitElement {
     }
     await deleteSchedule(this.hass, schedule.id);
     await this._refresh();
-  }
-
-  /**
-   * Looks up a schedule's "next event" sensor by unique_id (ScheduleNextEventSensor
-   * sets `{schedule_id}_next_event`, see sensor.py) rather than a guessed
-   * entity_id, since the entity's name - and therefore its default
-   * entity_id - is derived from the schedule's own (user-editable) name.
-   */
-  private _nextEventFor(scheduleId: string): HassEntityState | undefined {
-    const entityId = Object.values(this.hass.entities ?? {}).find(
-      (entity) => entity.unique_id === `${scheduleId}_next_event`,
-    )?.entity_id;
-    return entityId ? this.hass.states[entityId] : undefined;
   }
 
   private _openAddDialog = (): void => {
@@ -218,9 +210,7 @@ export class SchedulerPlusCard extends LitElement {
   }
 
   private _renderSchedule(schedule: Schedule) {
-    const nextEvent = schedule.enabled
-      ? formatNextEvent(this._nextEventFor(schedule.id))
-      : undefined;
+    const nextEvent = schedule.enabled ? formatNextEvent(schedule) : undefined;
     return html`
       <li class="schedule ${schedule.enabled ? "" : "disabled"}">
         <div class="schedule-info">

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from .const import DeviceType, TimeProviderType
+from .const import DayConditionType, DeviceType, TimeProviderType
 
 
 class Weekday(StrEnum):
@@ -30,6 +30,22 @@ class Weekday(StrEnum):
     FRIDAY = "fri"
     SATURDAY = "sat"
     SUNDAY = "sun"
+
+
+class RuleDateMode(StrEnum):
+    """How a Rule's optional `dates` list constrains which days it's active on.
+
+    ALWAYS: `dates` is ignored - the rule follows `days` alone, every week.
+    INCLUDE: the rule ignores `days` entirely and only fires on the specific
+        dates listed in `dates` - a one-off/holiday-style rule.
+    EXCLUDE: the rule follows `days` as usual, except it's skipped entirely
+        on any date listed in `dates` - an override/blackout for otherwise-
+        recurring rules.
+    """
+
+    ALWAYS = "always"
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -70,6 +86,9 @@ class Rule:
     name: str
     enabled: bool = True
     days: frozenset[Weekday]
+    date_mode: RuleDateMode = RuleDateMode.ALWAYS
+    dates: frozenset[str] = field(default_factory=frozenset)
+    day_conditions: frozenset[DayConditionType] = field(default_factory=frozenset)
     on_time: TimeSpec
     off_time: TimeSpec
     action: dict[str, Any] = field(default_factory=dict)
@@ -81,6 +100,9 @@ class Rule:
             "name": self.name,
             "enabled": self.enabled,
             "days": sorted(day.value for day in self.days),
+            "date_mode": self.date_mode.value,
+            "dates": sorted(self.dates),
+            "day_conditions": sorted(cond.value for cond in self.day_conditions),
             "on_time": self.on_time.to_dict(),
             "off_time": self.off_time.to_dict(),
             "action": dict(self.action),
@@ -88,12 +110,23 @@ class Rule:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Rule:
-        """Deserialize from a plain dict loaded from storage."""
+        """Deserialize from a plain dict loaded from storage.
+
+        `date_mode`/`dates`/`day_conditions` use `.get()` with defaults
+        rather than direct indexing, since rules stored before these fields
+        existed won't have them - they behave exactly as before
+        (RuleDateMode.ALWAYS, no dates, no day conditions).
+        """
         return cls(
             id=data["id"],
             name=data["name"],
             enabled=data["enabled"],
             days=frozenset(Weekday(day) for day in data["days"]),
+            date_mode=RuleDateMode(data.get("date_mode", RuleDateMode.ALWAYS)),
+            dates=frozenset(data.get("dates", [])),
+            day_conditions=frozenset(
+                DayConditionType(cond) for cond in data.get("day_conditions", [])
+            ),
             on_time=TimeSpec.from_dict(data["on_time"]),
             off_time=TimeSpec.from_dict(data["off_time"]),
             action=dict(data["action"]),
