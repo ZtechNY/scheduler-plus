@@ -1,11 +1,10 @@
 import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { keyed } from "lit/directives/keyed.js";
-import { repeat } from "lit/directives/repeat.js";
 
 import type { HomeAssistant, RuleInput, ScheduleInput } from "./api";
 import { createSchedule, updateSchedule } from "./api";
+import "./entity-multi-picker";
 import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
 import type { DeviceType, Schedule, TimeSpec } from "./types";
@@ -95,11 +94,6 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._open = false;
   };
 
-  /** ha-entity-picker's includeEntities, or undefined (no restriction) when no filter is set. */
-  private get _includeEntities(): string[] | undefined {
-    return this.entityFilter && this.entityFilter.length > 0 ? this.entityFilter : undefined;
-  }
-
   private _handleDeviceTypeChange = (event: Event): void => {
     this._deviceType = (event.target as HTMLSelectElement).value as DeviceType;
     // Entities picked for the previous device type would no longer match
@@ -108,27 +102,6 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     // neither can carry over.
     this._entities = [];
     this._rules = [];
-  };
-
-  private _addEntity = (entityId: string | undefined): void => {
-    if (!entityId || this._entities.includes(entityId)) {
-      return;
-    }
-    this._entities = [...this._entities, entityId];
-  };
-
-  private _removeEntity = (index: number): void => {
-    this._entities = this._entities.filter((_, i) => i !== index);
-  };
-
-  private _updateEntity = (index: number, entityId: string | undefined): void => {
-    if (!entityId) {
-      this._removeEntity(index);
-      return;
-    }
-    this._entities = this._entities.map((existing, i) =>
-      i === index ? entityId : existing,
-    );
   };
 
   private _openAddRuleDialog = (): void => {
@@ -250,41 +223,15 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           </ha-formfield>
 
           <label class="field-label">Entities</label>
-          <div class="entities">
-            ${repeat(
-              this._entities,
-              (entityId) => entityId,
-              (entityId, index) => html`
-                <div class="entity-row">
-                  <ha-entity-picker
-                    .hass=${this.hass}
-                    .value=${entityId}
-                    .includeDomains=${[this._deviceType]}
-                    .includeEntities=${this._includeEntities}
-                    @value-changed=${(e: CustomEvent<{ value?: string }>) =>
-                      this._updateEntity(index, e.detail.value)}
-                  ></ha-entity-picker>
-                  <ha-icon-button
-                    .path=${mdiDelete}
-                    label="Remove entity"
-                    @click=${() => this._removeEntity(index)}
-                  ></ha-icon-button>
-                </div>
-              `,
-            )}
-            ${keyed(
-              this._entities.length,
-              html`
-                <ha-entity-picker
-                  .hass=${this.hass}
-                  .includeDomains=${[this._deviceType]}
-                  .includeEntities=${this._includeEntities}
-                  @value-changed=${(e: CustomEvent<{ value?: string }>) =>
-                    this._addEntity(e.detail.value)}
-                ></ha-entity-picker>
-              `,
-            )}
-          </div>
+          <scheduler-plus-entity-multi-picker
+            .hass=${this.hass}
+            .value=${this._entities}
+            .domains=${[this._deviceType]}
+            .includeEntities=${this.entityFilter}
+            @value-changed=${(e: CustomEvent<{ value: string[] }>) => {
+              this._entities = e.detail.value;
+            }}
+          ></scheduler-plus-entity-multi-picker>
 
           <div class="rules-header">
             <label class="field-label">Rules</label>
@@ -427,19 +374,6 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       border: 1px solid var(--divider-color);
       border-radius: 4px;
       padding: 8px;
-    }
-    .entities {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .entity-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .entity-row ha-entity-picker {
-      flex: 1;
     }
     .rules-header {
       display: flex;

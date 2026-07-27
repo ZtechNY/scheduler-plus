@@ -509,16 +509,18 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
           <section class="section">
             <h3 class="section-title">Time</h3>
-            ${this._renderTimeFields(
-              "On time",
-              this._onTime,
-              (spec) => (this._onTime = spec),
-            )}
-            ${this._renderTimeFields(
-              "Off time",
-              this._offTime,
-              (spec) => (this._offTime = spec),
-            )}
+            <div class="time-columns">
+              ${this._renderTimeFields(
+                "On time",
+                this._onTime,
+                (spec) => (this._onTime = spec),
+              )}
+              ${this._renderTimeFields(
+                "Off time",
+                this._offTime,
+                (spec) => (this._offTime = spec),
+              )}
+            </div>
           </section>
 
           <section class="section">
@@ -541,51 +543,53 @@ export class SchedulerPlusRuleEditor extends LitElement {
     onChange: (spec: TimeSpec) => void,
   ) {
     return html`
-      <label class="field-label">${label}</label>
-      <div class="time-row">
-        <select
-          class="native-select"
-          .value=${spec.provider}
-          @change=${(e: Event) => {
-            const provider = (e.target as HTMLSelectElement).value as TimeProviderType;
-            onChange({
-              provider,
-              params: provider === "fixed" ? { time: "06:00" } : { offset_minutes: 0 },
-            });
-          }}
-        >
-          ${TIME_PROVIDER_TYPES.map(
-            (type) => html`<option value=${type}>${TIME_PROVIDER_LABELS[type]}</option>`,
-          )}
-        </select>
-        ${spec.provider === "fixed"
-          ? html`
-              <input
-                type="time"
-                class="native-input"
-                .value=${(spec.params.time as string | undefined) ?? ""}
-                @input=${(e: Event) =>
-                  onChange({
-                    ...spec,
-                    params: { time: (e.target as HTMLInputElement).value },
-                  })}
-              />
-            `
-          : html`
-              <input
-                type="number"
-                class="native-input offset"
-                .value=${String(spec.params.offset_minutes ?? 0)}
-                @input=${(e: Event) =>
-                  onChange({
-                    ...spec,
-                    params: {
-                      offset_minutes: Number((e.target as HTMLInputElement).value) || 0,
-                    },
-                  })}
-              />
-              <span class="hint">minutes</span>
-            `}
+      <div class="time-field">
+        <label class="field-label">${label}</label>
+        <div class="time-row">
+          <select
+            class="native-select"
+            .value=${spec.provider}
+            @change=${(e: Event) => {
+              const provider = (e.target as HTMLSelectElement).value as TimeProviderType;
+              onChange({
+                provider,
+                params: provider === "fixed" ? { time: "06:00" } : { offset_minutes: 0 },
+              });
+            }}
+          >
+            ${TIME_PROVIDER_TYPES.map(
+              (type) => html`<option value=${type}>${TIME_PROVIDER_LABELS[type]}</option>`,
+            )}
+          </select>
+          ${spec.provider === "fixed"
+            ? html`
+                <input
+                  type="time"
+                  class="native-input"
+                  .value=${(spec.params.time as string | undefined) ?? ""}
+                  @input=${(e: Event) =>
+                    onChange({
+                      ...spec,
+                      params: { time: (e.target as HTMLInputElement).value },
+                    })}
+                />
+              `
+            : html`
+                <input
+                  type="number"
+                  class="native-input offset"
+                  .value=${String(spec.params.offset_minutes ?? 0)}
+                  @input=${(e: Event) =>
+                    onChange({
+                      ...spec,
+                      params: {
+                        offset_minutes: Number((e.target as HTMLInputElement).value) || 0,
+                      },
+                    })}
+                />
+                <span class="hint">minutes</span>
+              `}
+        </div>
       </div>
     `;
   }
@@ -870,6 +874,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     .date-row span {
       flex: 1;
+    }
+    .time-columns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .time-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1 1 200px;
     }
     .time-row {
       display: flex;

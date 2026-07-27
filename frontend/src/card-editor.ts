@@ -1,10 +1,8 @@
-import { mdiDelete } from "@mdi/js";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { keyed } from "lit/directives/keyed.js";
-import { repeat } from "lit/directives/repeat.js";
 
 import type { HomeAssistant } from "./api";
+import "./entity-multi-picker";
 import type { SchedulerPlusCardConfig } from "./scheduler-plus-card";
 import { DEVICE_TYPES } from "./types";
 
@@ -15,11 +13,6 @@ import { DEVICE_TYPES } from "./types";
  * device - the same "one card per page, each with its own device filter"
  * pattern used by other entity-scoped Lovelace cards, rather than a single
  * global visibility setting.
- *
- * Reuses the exact repeated-ha-entity-picker-rows pattern already proven
- * reliable in schedule-editor-dialog.ts's Entities section (including the
- * keyed() fix for the trailing "add" picker), rather than reaching for
- * ha-entities-picker (a different, untested component in this environment).
  */
 @customElement("scheduler-plus-card-editor")
 export class SchedulerPlusCardEditor extends LitElement {
@@ -44,31 +37,6 @@ export class SchedulerPlusCardEditor extends LitElement {
     });
   };
 
-  private get _entities(): string[] {
-    return this._config?.entities ?? [];
-  }
-
-  private _addEntity = (entityId: string | undefined): void => {
-    if (!entityId || this._entities.includes(entityId)) {
-      return;
-    }
-    this._fireConfigChanged({ ...this._config!, entities: [...this._entities, entityId] });
-  };
-
-  private _updateEntity = (index: number, entityId: string | undefined): void => {
-    if (!entityId) {
-      this._removeEntity(index);
-      return;
-    }
-    const entities = this._entities.map((existing, i) => (i === index ? entityId : existing));
-    this._fireConfigChanged({ ...this._config!, entities });
-  };
-
-  private _removeEntity = (index: number): void => {
-    const entities = this._entities.filter((_, i) => i !== index);
-    this._fireConfigChanged({ ...this._config!, entities });
-  };
-
   protected override render() {
     if (!this._config) {
       return html``;
@@ -91,39 +59,14 @@ export class SchedulerPlusCardEditor extends LitElement {
           useful for putting a device-specific card on a room's own
           dashboard page.
         </span>
-        <div class="entities">
-          ${repeat(
-            this._entities,
-            (entityId) => entityId,
-            (entityId, index) => html`
-              <div class="entity-row">
-                <ha-entity-picker
-                  .hass=${this.hass}
-                  .value=${entityId}
-                  .includeDomains=${DEVICE_TYPES}
-                  @value-changed=${(e: CustomEvent<{ value?: string }>) =>
-                    this._updateEntity(index, e.detail.value)}
-                ></ha-entity-picker>
-                <ha-icon-button
-                  .path=${mdiDelete}
-                  label="Remove device"
-                  @click=${() => this._removeEntity(index)}
-                ></ha-icon-button>
-              </div>
-            `,
-          )}
-          ${keyed(
-            this._entities.length,
-            html`
-              <ha-entity-picker
-                .hass=${this.hass}
-                .includeDomains=${DEVICE_TYPES}
-                @value-changed=${(e: CustomEvent<{ value?: string }>) =>
-                  this._addEntity(e.detail.value)}
-              ></ha-entity-picker>
-            `,
-          )}
-        </div>
+        <scheduler-plus-entity-multi-picker
+          .hass=${this.hass}
+          .value=${this._config.entities ?? []}
+          .domains=${DEVICE_TYPES}
+          @value-changed=${(e: CustomEvent<{ value: string[] }>) => {
+            this._fireConfigChanged({ ...this._config!, entities: e.detail.value });
+          }}
+        ></scheduler-plus-entity-multi-picker>
       </div>
     `;
   }
@@ -150,19 +93,6 @@ export class SchedulerPlusCardEditor extends LitElement {
       border: 1px solid var(--divider-color);
       border-radius: 4px;
       padding: 8px;
-    }
-    .entities {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .entity-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .entity-row ha-entity-picker {
-      flex: 1;
     }
   `;
 }
