@@ -222,7 +222,7 @@ export class SchedulerPlusDayView extends LitElement {
       group,
       events: this._events
         .filter((event) => reportGroupFor(event.device_type) === group)
-        .sort((a, b) => a.on_at.localeCompare(b.on_at)),
+        .sort((a, b) => (a.on_at ?? a.off_at ?? "").localeCompare(b.on_at ?? b.off_at ?? "")),
     })).filter((g) => g.events.length > 0);
 
     return html`
@@ -240,12 +240,19 @@ export class SchedulerPlusDayView extends LitElement {
   }
 
   private _renderEvent(event: DayScheduleEvent) {
-    const overnight = event.off_at.slice(0, 10) !== event.on_at.slice(0, 10);
+    const overnight =
+      event.on_at !== null &&
+      event.off_at !== null &&
+      event.off_at.slice(0, 10) !== event.on_at.slice(0, 10);
     const action = formatAction(event.device_type, event.action);
     return html`
       <li class="event">
         <span class="event-time">
-          ${formatTime(event.on_at)} → ${formatTime(event.off_at)}
+          ${event.on_at !== null && event.off_at !== null
+            ? html`${formatTime(event.on_at)} → ${formatTime(event.off_at)}`
+            : event.on_at !== null
+              ? html`On at ${formatTime(event.on_at)}`
+              : html`Off at ${formatTime(event.off_at!)}`}
           ${overnight ? html`<span class="hint">(next day)</span>` : nothing}
         </span>
         <span class="event-name">${event.schedule_name} · ${event.rule_name}</span>

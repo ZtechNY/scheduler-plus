@@ -49,6 +49,7 @@ export const TIME_PROVIDER_TYPES: readonly TimeProviderType[] = [
   "fixed",
   "sunrise",
   "sunset",
+  "yidcal",
 ];
 
 export const TIME_PROVIDER_LABELS: Record<TimeProviderType, string> = {
@@ -56,6 +57,23 @@ export const TIME_PROVIDER_LABELS: Record<TimeProviderType, string> = {
   sunrise: "Sunrise",
   sunset: "Sunset",
   yidcal: "YidCal",
+};
+
+/**
+ * YidCal zmanim (halachic times) selectable when a Rule's on_time/off_time
+ * provider is "yidcal", via TimeSpec.params.zman. Every value here has a
+ * registered backend entity - see time_providers/__init__.py.
+ */
+export type YidcalZmanType = "candle_lighting" | "motzei_shabbos";
+
+export const YIDCAL_ZMAN_TYPES: readonly YidcalZmanType[] = [
+  "candle_lighting",
+  "motzei_shabbos",
+];
+
+export const YIDCAL_ZMAN_LABELS: Record<YidcalZmanType, string> = {
+  candle_lighting: "הדלקות הנירות",
+  motzei_shabbos: 'מוצש"ק',
 };
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -144,6 +162,9 @@ export interface Rule {
   day_conditions: DayConditionType[];
   on_time: TimeSpec;
   off_time: TimeSpec;
+  /** Whether the engine acts on each side - a rule can be on-only or off-only, but not neither. */
+  on_enabled: boolean;
+  off_enabled: boolean;
   action: Action;
 }
 

@@ -21,7 +21,13 @@
       "Bash(python -m py_compile custom_components/scheduler_plus/models.py custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py)",
       "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py)",
       "Bash(python -m py_compile tests/test_scheduler.py)",
-      "Bash(python -m py_compile custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/storage.py)"
+      "Bash(python -m py_compile custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/storage.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/time_providers/*.py)",
+      "Bash(python -m py_compile tests/test_time_providers.py custom_components/scheduler_plus/time_providers/*.py)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/time_providers/__init__.py)",
+      "Bash(python -m py_compile tests/test_time_providers.py)"
     ]
   }
 }

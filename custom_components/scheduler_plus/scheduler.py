@@ -142,7 +142,12 @@ class SchedulerEngine:
                     continue
 
                 on_at, off_at = occurrence
-                for when, label in ((on_at, "on"), (off_at, "off")):
+                candidates: list[tuple[datetime, str]] = []
+                if rule.on_enabled:
+                    candidates.append((on_at, "on"))
+                if rule.off_enabled:
+                    candidates.append((off_at, "off"))
+                for when, label in candidates:
                     if when <= now:
                         continue
                     if soonest is None or when < soonest[0]:
@@ -152,7 +157,7 @@ class SchedulerEngine:
 
     async def async_get_day_events(
         self, schedule: Schedule, reference_date: date
-    ) -> list[tuple[Rule, datetime, datetime]]:
+    ) -> list[tuple[Rule, datetime | None, datetime | None]]:
         """Return (rule, on_at, off_at) for every enabled rule firing on `reference_date`.
 
         Read-only, like async_get_next_event - resolves without scheduling
@@ -161,18 +166,28 @@ class SchedulerEngine:
         resolves exactly the requested date, not yesterday/tomorrow - a
         report for a specific day should show exactly that day's
         occurrences, not an overnight rule's bookkeeping window.
+
+        on_at/off_at are None when the corresponding side is disabled
+        (rule.on_enabled/off_enabled) - an on-only or off-only rule only
+        ever reports the side it actually acts on.
         """
         if not schedule.enabled:
             return []
 
-        events: list[tuple[Rule, datetime, datetime]] = []
+        events: list[tuple[Rule, datetime | None, datetime | None]] = []
         for rule in schedule.rules:
             if not rule.enabled:
                 continue
             occurrence = await self._async_resolve_occurrence(rule, reference_date)
             if occurrence is not None:
                 on_at, off_at = occurrence
-                events.append((rule, on_at, off_at))
+                events.append(
+                    (
+                        rule,
+                        on_at if rule.on_enabled else None,
+                        off_at if rule.off_enabled else None,
+                    )
+                )
         return events
 
     @staticmethod
@@ -267,43 +282,51 @@ class SchedulerEngine:
         unsub_list: list[CALLBACK_TYPE] = []
 
         # An overnight rule that started yesterday can still be active right
-        # now, so both yesterday's and today's occurrences are candidates.
-        for days_ago in (1, 0):
+        # now, so both yesterday's and today's occurrences are candidates -
+        # but only when the rule has a genuine on->off window. An on-only
+        # or off-only rule has no window to carry over: it's a same-day
+        # fire-and-forget action, so only today is ever considered (this
+        # also avoids re-firing off a stale "yesterday" occurrence on every
+        # refresh, since there's no off/on boundary to close it out).
+        both_enabled = rule.on_enabled and rule.off_enabled
+        for days_ago in (1, 0) if both_enabled else (0,):
             reference_date = (now - timedelta(days=days_ago)).date()
             occurrence = await self._async_resolve_occurrence(rule, reference_date)
             if occurrence is None:
                 continue
 
             on_at, off_at = occurrence
-            if off_at <= now:
+            if rule.off_enabled and off_at <= now:
                 continue
 
             for entity_id in schedule.entities:
-                if on_at <= now:
-                    # Restarted/reloaded mid-window: catch the device up now.
-                    # Caught broadly and isolated per entity (e.g. an entity
-                    # still unavailable right after HA startup) so one
-                    # failure can't abort scheduling for other entities,
-                    # rules, or schedules in the same refresh pass.
-                    try:
-                        await device_handler.async_turn_on(
-                            self.hass, entity_id, rule.action
+                if rule.on_enabled:
+                    if on_at <= now:
+                        # Restarted/reloaded mid-window: catch the device up now.
+                        # Caught broadly and isolated per entity (e.g. an entity
+                        # still unavailable right after HA startup) so one
+                        # failure can't abort scheduling for other entities,
+                        # rules, or schedules in the same refresh pass.
+                        try:
+                            await device_handler.async_turn_on(
+                                self.hass, entity_id, rule.action
+                            )
+                        except Exception:  # noqa: BLE001
+                            _LOGGER.exception(
+                                "Failed to catch up '%s' to on for rule '%s'",
+                                entity_id,
+                                rule.name,
+                            )
+                    else:
+                        unsub_list.append(
+                            self._schedule_turn_on(
+                                device_handler, entity_id, rule.action, on_at
+                            )
                         )
-                    except Exception:  # noqa: BLE001
-                        _LOGGER.exception(
-                            "Failed to catch up '%s' to on for rule '%s'",
-                            entity_id,
-                            rule.name,
-                        )
-                else:
+                if rule.off_enabled:
                     unsub_list.append(
-                        self._schedule_turn_on(
-                            device_handler, entity_id, rule.action, on_at
-                        )
+                        self._schedule_turn_off(device_handler, entity_id, off_at)
                     )
-                unsub_list.append(
-                    self._schedule_turn_off(device_handler, entity_id, off_at)
-                )
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list

@@ -61,6 +61,18 @@ def _validate_date_range(value: Any) -> tuple[str, str]:
     return (start, end)
 
 
+def _validate_time_enabled(value: dict[str, Any]) -> dict[str, Any]:
+    """Require at least one of on_enabled/off_enabled to stay True.
+
+    A rule that acts on neither side would be scheduled and simply do
+    nothing, which is never useful and is almost certainly a UI bug or a
+    mistaken edit, so it's rejected here rather than silently accepted.
+    """
+    if not value.get("on_enabled", True) and not value.get("off_enabled", True):
+        raise vol.Invalid("At least one of on_enabled or off_enabled must be true")
+    return value
+
+
 def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
     """Return the single Scheduler+ config entry, if set up.
 
@@ -85,33 +97,38 @@ _TIME_SPEC_SCHEMA = vol.Schema(
     }
 )
 
-_RULE_SCHEMA = vol.Schema(
-    {
-        vol.Optional("id"): str,
-        vol.Required("name"): str,
-        vol.Optional("enabled", default=True): bool,
-        # Required even for RuleDateMode.INCLUDE rules, which ignore it -
-        # keeping it non-optional avoids a conditional-on-date_mode schema.
-        # The frontend fills it with every day for INCLUDE rules.
-        vol.Required("days"): vol.All(
-            cv.ensure_list, [vol.Coerce(Weekday)], vol.Length(min=1)
-        ),
-        vol.Optional("date_mode", default=RuleDateMode.ALWAYS): vol.Coerce(
-            RuleDateMode
-        ),
-        vol.Optional("dates", default=list): vol.All(
-            cv.ensure_list, [vol.Match(_DATE_RE)]
-        ),
-        vol.Optional("date_ranges", default=list): vol.All(
-            cv.ensure_list, [_validate_date_range]
-        ),
-        vol.Optional("day_conditions", default=list): vol.All(
-            cv.ensure_list, [vol.Coerce(DayConditionType)]
-        ),
-        vol.Required("on_time"): _TIME_SPEC_SCHEMA,
-        vol.Required("off_time"): _TIME_SPEC_SCHEMA,
-        vol.Optional("action", default=dict): dict,
-    }
+_RULE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("id"): str,
+            vol.Required("name"): str,
+            vol.Optional("enabled", default=True): bool,
+            # Required even for RuleDateMode.INCLUDE rules, which ignore it -
+            # keeping it non-optional avoids a conditional-on-date_mode schema.
+            # The frontend fills it with every day for INCLUDE rules.
+            vol.Required("days"): vol.All(
+                cv.ensure_list, [vol.Coerce(Weekday)], vol.Length(min=1)
+            ),
+            vol.Optional("date_mode", default=RuleDateMode.ALWAYS): vol.Coerce(
+                RuleDateMode
+            ),
+            vol.Optional("dates", default=list): vol.All(
+                cv.ensure_list, [vol.Match(_DATE_RE)]
+            ),
+            vol.Optional("date_ranges", default=list): vol.All(
+                cv.ensure_list, [_validate_date_range]
+            ),
+            vol.Optional("day_conditions", default=list): vol.All(
+                cv.ensure_list, [vol.Coerce(DayConditionType)]
+            ),
+            vol.Required("on_time"): _TIME_SPEC_SCHEMA,
+            vol.Required("off_time"): _TIME_SPEC_SCHEMA,
+            vol.Optional("on_enabled", default=True): bool,
+            vol.Optional("off_enabled", default=True): bool,
+            vol.Optional("action", default=dict): dict,
+        }
+    ),
+    _validate_time_enabled,
 )
 
 _SCHEDULE_FIELDS = {
@@ -477,8 +494,8 @@ async def websocket_get_day_schedule(
                     "rule_id": rule.id,
                     "rule_name": rule.name,
                     "action": dict(rule.action),
-                    "on_at": on_at.isoformat(),
-                    "off_at": off_at.isoformat(),
+                    "on_at": on_at.isoformat() if on_at else None,
+                    "off_at": off_at.isoformat() if off_at else None,
                 }
             )
 

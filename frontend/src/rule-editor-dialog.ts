@@ -23,6 +23,8 @@ import {
   TIME_PROVIDER_TYPES,
   WEEKDAYS,
   WEEKDAY_LABELS,
+  YIDCAL_ZMAN_LABELS,
+  YIDCAL_ZMAN_TYPES,
 } from "./types";
 
 /**
@@ -96,6 +98,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _offTime: TimeSpec = { provider: "fixed", params: { time: "21:00" } };
 
+  @state() private _onEnabled = true;
+
+  @state() private _offEnabled = true;
+
   @state() private _setBrightness = false;
 
   @state() private _brightnessPct = 100;
@@ -139,6 +145,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._dayConditions = rule ? [...rule.day_conditions] : [];
     this._onTime = rule?.on_time ?? { provider: "fixed", params: { time: "06:00" } };
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
+    this._onEnabled = rule?.on_enabled ?? true;
+    this._offEnabled = rule?.off_enabled ?? true;
 
     if (deviceType === "light") {
       this._setBrightness = rule?.action.brightness !== undefined;
@@ -283,6 +291,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._error = "At least one date, date range, or special condition is required.";
       return;
     }
+    if (!this._onEnabled && !this._offEnabled) {
+      this._error = "At least one of On time or Off time must be enabled.";
+      return;
+    }
 
     let action: Action = {};
     if (this._deviceType === "light") {
@@ -311,6 +323,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
       day_conditions: this._dayConditions,
       on_time: this._onTime,
       off_time: this._offTime,
+      on_enabled: this._onEnabled,
+      off_enabled: this._offEnabled,
       action,
     });
     this._open = false;
@@ -514,11 +528,15 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 "On time",
                 this._onTime,
                 (spec) => (this._onTime = spec),
+                this._onEnabled,
+                (enabled) => (this._onEnabled = enabled),
               )}
               ${this._renderTimeFields(
                 "Off time",
                 this._offTime,
                 (spec) => (this._offTime = spec),
+                this._offEnabled,
+                (enabled) => (this._offEnabled = enabled),
               )}
             </div>
           </section>
@@ -541,55 +559,110 @@ export class SchedulerPlusRuleEditor extends LitElement {
     label: string,
     spec: TimeSpec,
     onChange: (spec: TimeSpec) => void,
+    enabled: boolean,
+    onToggle: (enabled: boolean) => void,
   ) {
     return html`
       <div class="time-field">
-        <label class="field-label">${label}</label>
-        <div class="time-row">
-          <select
-            class="native-select"
-            .value=${spec.provider}
+        <ha-formfield label=${label}>
+          <ha-switch
+            .checked=${enabled}
             @change=${(e: Event) => {
-              const provider = (e.target as HTMLSelectElement).value as TimeProviderType;
-              onChange({
-                provider,
-                params: provider === "fixed" ? { time: "06:00" } : { offset_minutes: 0 },
-              });
+              onToggle((e.target as HTMLInputElement).checked);
             }}
-          >
-            ${TIME_PROVIDER_TYPES.map(
-              (type) => html`<option value=${type}>${TIME_PROVIDER_LABELS[type]}</option>`,
-            )}
-          </select>
-          ${spec.provider === "fixed"
-            ? html`
-                <input
-                  type="time"
-                  class="native-input"
-                  .value=${(spec.params.time as string | undefined) ?? ""}
-                  @input=${(e: Event) =>
-                    onChange({
-                      ...spec,
-                      params: { time: (e.target as HTMLInputElement).value },
-                    })}
-                />
-              `
-            : html`
-                <input
-                  type="number"
-                  class="native-input offset"
-                  .value=${String(spec.params.offset_minutes ?? 0)}
-                  @input=${(e: Event) =>
-                    onChange({
-                      ...spec,
-                      params: {
-                        offset_minutes: Number((e.target as HTMLInputElement).value) || 0,
-                      },
-                    })}
-                />
-                <span class="hint">minutes</span>
-              `}
-        </div>
+          ></ha-switch>
+        </ha-formfield>
+        ${enabled
+          ? html`
+              <div class="time-row">
+                <select
+                  class="native-select"
+                  .value=${spec.provider}
+                  @change=${(e: Event) => {
+                    const provider = (e.target as HTMLSelectElement)
+                      .value as TimeProviderType;
+                    let params: TimeSpec["params"] = { offset_minutes: 0 };
+                    if (provider === "fixed") {
+                      params = { time: "06:00" };
+                    } else if (provider === "yidcal") {
+                      params = { zman: "candle_lighting", offset_minutes: 0 };
+                    }
+                    onChange({ provider, params });
+                  }}
+                >
+                  ${TIME_PROVIDER_TYPES.map(
+                    (type) =>
+                      html`<option value=${type}>${TIME_PROVIDER_LABELS[type]}</option>`,
+                  )}
+                </select>
+                ${spec.provider === "fixed"
+                  ? html`
+                      <input
+                        type="time"
+                        class="native-input"
+                        .value=${(spec.params.time as string | undefined) ?? ""}
+                        @input=${(e: Event) =>
+                          onChange({
+                            ...spec,
+                            params: { time: (e.target as HTMLInputElement).value },
+                          })}
+                      />
+                    `
+                  : spec.provider === "yidcal"
+                    ? html`
+                        <select
+                          class="native-select"
+                          .value=${(spec.params.zman as string | undefined) ??
+                          "candle_lighting"}
+                          @change=${(e: Event) =>
+                            onChange({
+                              ...spec,
+                              params: {
+                                ...spec.params,
+                                zman: (e.target as HTMLSelectElement).value,
+                              },
+                            })}
+                        >
+                          ${YIDCAL_ZMAN_TYPES.map(
+                            (zman) =>
+                              html`<option value=${zman}>${YIDCAL_ZMAN_LABELS[zman]}</option>`,
+                          )}
+                        </select>
+                        <input
+                          type="number"
+                          class="native-input offset"
+                          .value=${String(spec.params.offset_minutes ?? 0)}
+                          @input=${(e: Event) =>
+                            onChange({
+                              ...spec,
+                              params: {
+                                ...spec.params,
+                                offset_minutes:
+                                  Number((e.target as HTMLInputElement).value) || 0,
+                              },
+                            })}
+                        />
+                        <span class="hint">minutes</span>
+                      `
+                    : html`
+                        <input
+                          type="number"
+                          class="native-input offset"
+                          .value=${String(spec.params.offset_minutes ?? 0)}
+                          @input=${(e: Event) =>
+                            onChange({
+                              ...spec,
+                              params: {
+                                offset_minutes:
+                                  Number((e.target as HTMLInputElement).value) || 0,
+                              },
+                            })}
+                        />
+                        <span class="hint">minutes</span>
+                      `}
+              </div>
+            `
+          : nothing}
       </div>
     `;
   }

@@ -39,6 +39,22 @@ function formatTimeSpec(spec: TimeSpec): string {
   return `${TIME_PROVIDER_LABELS[spec.provider]} ${offset > 0 ? "+" : ""}${offset}`;
 }
 
+/** Renders a rule's on/off summary, accounting for on-only/off-only rules. */
+function formatRuleTimes(rule: {
+  on_time: TimeSpec;
+  off_time: TimeSpec;
+  on_enabled: boolean;
+  off_enabled: boolean;
+}): string {
+  if (rule.on_enabled && rule.off_enabled) {
+    return `${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}`;
+  }
+  if (rule.on_enabled) {
+    return `${formatTimeSpec(rule.on_time)} only`;
+  }
+  return `until ${formatTimeSpec(rule.off_time)}`;
+}
+
 /**
  * Dialog for creating or editing a schedule: its top-level fields (name,
  * device type, enabled, entities) plus its rules. Rules are edited via the
@@ -295,7 +311,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         <div class="rule-info">
           <span class="rule-name">${rule.name}</span>
           <span class="rule-meta">
-            ${days} · ${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}${dateNote}
+            ${days} · ${formatRuleTimes(rule)}${dateNote}
           </span>
         </div>
         <div class="row-actions">

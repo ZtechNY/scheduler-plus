@@ -107,6 +107,8 @@ def _make_rule(
     date_ranges: frozenset[tuple[str, str]] = frozenset(),
     day_conditions: frozenset[DayConditionType] = frozenset(),
     enabled: bool = True,
+    on_enabled: bool = True,
+    off_enabled: bool = True,
 ) -> Rule:
     """Build a Rule, defaulting to a FIXED-time rule active every day."""
     return Rule(
@@ -120,6 +122,8 @@ def _make_rule(
         day_conditions=day_conditions,
         on_time=TimeSpec(provider=on_provider, params={"time": on_time}),
         off_time=TimeSpec(provider=off_provider, params={"time": off_time}),
+        on_enabled=on_enabled,
+        off_enabled=off_enabled,
     )
 
 
@@ -450,6 +454,89 @@ async def test_refresh_rule_disabled_rule_schedules_nothing(
     assert rule.id not in engine._unsub_rules
 
 
+async def test_refresh_rule_on_only_schedules_future_on_only(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An on-only rule schedules a future on and never touches off."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
+    schedule = _make_schedule(rule)
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+
+    assert fake_device_handler.turn_on_calls == []
+    assert fake_device_handler.turn_off_calls == []
+    assert len(engine._unsub_rules[rule.id]) == 1
+
+
+async def test_refresh_rule_on_only_catches_up_and_never_schedules_off(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An on-only rule catches up turn_on if already past, and schedules nothing else."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
+    schedule = _make_schedule(rule)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+
+    assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
+    # Off is never scheduled, and the catch-up itself isn't a pending
+    # callback, so nothing is left to track for this rule.
+    assert rule.id not in engine._unsub_rules
+
+
+async def test_refresh_rule_on_only_ignores_stale_yesterday_occurrence(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An on-only rule doesn't re-catch-up off a carried-over yesterday occurrence.
+
+    Regression test: unlike a BOTH-mode rule (where a stale yesterday
+    window is filtered out by `off_at <= now`), an on-only rule has no off
+    boundary to filter on - so yesterday's occurrence must be excluded from
+    consideration entirely, or every refresh would re-fire turn_on for it.
+    """
+    rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
+    schedule = _make_schedule(rule)
+    now = datetime(2024, 1, 1, 8, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+
+    assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
+
+
+async def test_refresh_rule_off_only_schedules_future_off_only(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An off-only rule schedules a future off and never touches on."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
+    schedule = _make_schedule(rule)
+    now = datetime(2024, 1, 1, 15, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+
+    assert fake_device_handler.turn_on_calls == []
+    assert fake_device_handler.turn_off_calls == []
+    assert len(engine._unsub_rules[rule.id]) == 1
+
+
+async def test_refresh_rule_off_only_skips_when_already_past(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An off-only rule does not catch up a missed off - it just skips it.
+
+    Mirrors a BOTH-mode rule's existing off-side behavior: off is only ever
+    scheduled forward, never fired as an immediate catch-up.
+    """
+    rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
+    schedule = _make_schedule(rule)
+    now = datetime(2024, 1, 1, 23, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, fake_device_handler, now)
+
+    assert fake_device_handler.turn_off_calls == []
+    assert rule.id not in engine._unsub_rules
+
+
 async def test_get_day_events_returns_occurrence_for_matching_rule(
     engine: SchedulerEngine,
 ) -> None:
@@ -476,6 +563,36 @@ async def test_get_day_events_skips_inactive_weekday(
     events = await engine.async_get_day_events(schedule, _MONDAY)
 
     assert events == []
+
+
+async def test_get_day_events_on_only_reports_none_for_off(
+    engine: SchedulerEngine,
+) -> None:
+    """An on-only rule's day-view occurrence has off_at=None."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
+    schedule = _make_schedule(rule)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert len(events) == 1
+    _, on_at, off_at = events[0]
+    assert on_at is not None
+    assert off_at is None
+
+
+async def test_get_day_events_off_only_reports_none_for_on(
+    engine: SchedulerEngine,
+) -> None:
+    """An off-only rule's day-view occurrence has on_at=None."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
+    schedule = _make_schedule(rule)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert len(events) == 1
+    _, on_at, off_at = events[0]
+    assert on_at is None
+    assert off_at is not None
 
 
 async def test_get_day_events_skips_disabled_rule(engine: SchedulerEngine) -> None:
@@ -534,6 +651,34 @@ async def test_get_next_event_finds_occurrence_later_in_week(
     when, label = next_event
     assert when.date() == future_date
     assert label == "on"
+
+
+async def test_get_next_event_on_only_reports_only_on(
+    engine: SchedulerEngine,
+) -> None:
+    """An on-only rule's next event is always labeled 'on', never 'off'."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
+    schedule = _make_schedule(rule)
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is not None
+    _, label = next_event
+    assert label == "on"
+
+
+async def test_get_next_event_off_only_reports_only_off(
+    engine: SchedulerEngine,
+) -> None:
+    """An off-only rule's next event is always labeled 'off', never 'on'."""
+    rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
+    schedule = _make_schedule(rule)
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is not None
+    _, label = next_event
+    assert label == "off"
 
 
 async def test_get_next_event_include_mode_finds_date_beyond_week_window(

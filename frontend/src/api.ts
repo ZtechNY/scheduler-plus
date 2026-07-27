@@ -119,8 +119,8 @@ export interface DayScheduleEvent {
   rule_id: string;
   rule_name: string;
   action: Action;
-  on_at: string;
-  off_at: string;
+  on_at: string | null;
+  off_at: string | null;
 }
 
 export async function fetchDaySchedule(

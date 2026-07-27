@@ -49,6 +49,43 @@ def test_rule_round_trip() -> None:
     assert restored == rule
 
 
+def test_rule_round_trip_on_only() -> None:
+    """An on-only rule's on_enabled/off_enabled should survive a round trip."""
+    rule = Rule(
+        id="rule-1",
+        name="Porch light",
+        days=frozenset(Weekday),
+        on_time=TimeSpec(provider=TimeProviderType.SUNSET, params={"offset_minutes": 0}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+        on_enabled=True,
+        off_enabled=False,
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+    assert restored.on_enabled is True
+    assert restored.off_enabled is False
+
+
+def test_rule_from_dict_defaults_on_off_enabled_for_legacy_data() -> None:
+    """A stored rule from before this field existed loads as both enabled."""
+    legacy_data = {
+        "id": "rule-1",
+        "name": "Weekdays",
+        "enabled": True,
+        "days": ["mon"],
+        "on_time": {"provider": "fixed", "params": {"time": "06:00"}},
+        "off_time": {"provider": "fixed", "params": {"time": "21:00"}},
+        "action": {},
+    }
+
+    rule = Rule.from_dict(legacy_data)
+
+    assert rule.on_enabled is True
+    assert rule.off_enabled is True
+
+
 def test_rule_round_trip_with_date_filter() -> None:
     """Rule's date_mode/dates should survive a to_dict/from_dict round trip."""
     rule = Rule(

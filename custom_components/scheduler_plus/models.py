@@ -80,6 +80,12 @@ class Rule:
     `action` is opaque here: its expected shape depends entirely on the
     owning Schedule's `device_type` and is defined/validated by that
     device-handler plugin, not by this class.
+
+    `on_time`/`off_time` are always populated, but `on_enabled`/
+    `off_enabled` control whether the engine actually acts on each side -
+    a rule can be on-only or off-only, firing once and then leaving the
+    device alone indefinitely. At least one of the two must be enabled;
+    that invariant is enforced at the websocket boundary, not here.
     """
 
     id: str
@@ -92,6 +98,8 @@ class Rule:
     day_conditions: frozenset[DayConditionType] = field(default_factory=frozenset)
     on_time: TimeSpec
     off_time: TimeSpec
+    on_enabled: bool = True
+    off_enabled: bool = True
     action: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,6 +115,8 @@ class Rule:
             "day_conditions": sorted(cond.value for cond in self.day_conditions),
             "on_time": self.on_time.to_dict(),
             "off_time": self.off_time.to_dict(),
+            "on_enabled": self.on_enabled,
+            "off_enabled": self.off_enabled,
             "action": dict(self.action),
         }
 
@@ -114,11 +124,11 @@ class Rule:
     def from_dict(cls, data: dict[str, Any]) -> Rule:
         """Deserialize from a plain dict loaded from storage.
 
-        `date_mode`/`dates`/`date_ranges`/`day_conditions` use `.get()`
-        with defaults rather than direct indexing, since rules stored
-        before these fields existed won't have them - they behave exactly
-        as before (RuleDateMode.ALWAYS, no dates, no ranges, no day
-        conditions).
+        `date_mode`/`dates`/`date_ranges`/`day_conditions`/`on_enabled`/
+        `off_enabled` use `.get()` with defaults rather than direct
+        indexing, since rules stored before these fields existed won't have
+        them - they behave exactly as before (RuleDateMode.ALWAYS, no
+        dates, no ranges, no day conditions, both on and off enabled).
         """
         return cls(
             id=data["id"],
@@ -135,6 +145,8 @@ class Rule:
             ),
             on_time=TimeSpec.from_dict(data["on_time"]),
             off_time=TimeSpec.from_dict(data["off_time"]),
+            on_enabled=bool(data.get("on_enabled", True)),
+            off_enabled=bool(data.get("off_enabled", True)),
             action=dict(data["action"]),
         )
 
