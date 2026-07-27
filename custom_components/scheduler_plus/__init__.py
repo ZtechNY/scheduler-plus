@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import PLATFORMS
+from .const import DOMAIN, PLATFORMS
 from .coordinator import SchedulerPlusCoordinator
 from .scheduler import SchedulerEngine
 from .storage import SchedulerPlusStore
 from .websocket import async_register_websocket_commands
+
+_LOGGER = logging.getLogger(__name__)
+
+_CARD_URL_PATH = f"/{DOMAIN}_files/scheduler-plus-card.js"
+_CARD_FILE_PATH = Path(__file__).parent / "www" / "scheduler-plus-card.js"
 
 
 @dataclass
@@ -35,7 +43,31 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_entry() re-runs on every config entry reload.
     """
     async_register_websocket_commands(hass)
+    await _async_register_frontend(hass)
     return True
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Serve the built Lovelace card, if it has been built.
+
+    The card is a separate npm-built artifact (frontend/), not something
+    Python packages automatically - if it hasn't been built yet, the
+    backend must still set up successfully, just without the card
+    available. cache_headers is disabled since the bundle's filename
+    never changes between versions; caching it would risk browsers
+    keeping a stale copy after an update.
+    """
+    if not await hass.async_add_executor_job(_CARD_FILE_PATH.exists):
+        _LOGGER.warning(
+            "Scheduler+ frontend bundle not found at %s; run `npm run build` "
+            "in frontend/ to make the Lovelace card available",
+            _CARD_FILE_PATH,
+        )
+        return
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(_CARD_URL_PATH, str(_CARD_FILE_PATH), cache_headers=False)]
+    )
 
 
 async def async_setup_entry(
