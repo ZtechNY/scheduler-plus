@@ -14,6 +14,7 @@ scheduling engine never has to know about lights, climate, or YidCal.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from enum import StrEnum
 from typing import Any
 
@@ -153,7 +154,25 @@ class Rule:
 
 @dataclass(slots=True, kw_only=True)
 class Schedule:
-    """A named collection of rules targeting one or more entities of a single device type."""
+    """A named collection of rules targeting one or more entities of a single device type.
+
+    `active_date_mode`/`active_date_ranges` gate the whole schedule to a
+    seasonal window (e.g. "Jul 1-Aug 31 only"), independent of each rule's
+    own `date_mode`/`dates`/`date_ranges` - this exists so a multi-rule
+    schedule doesn't need the same range repeated on every rule, and so a
+    manager can pair two schedules (e.g. "Summer Hours" / "Regular Hours")
+    targeting the same entities without them fighting over which one is
+    "active" outside of literal per-rule date filtering. Deliberately
+    date-range-only (no individual `dates`, no day_conditions) - unlike a
+    Rule's date filter, this is a pure/synchronous check with no need for
+    the day-conditions plugin registry.
+
+    `override_until` is a separate, temporary concept: a manager-triggered
+    pause ("paused through <date>") that suppresses the schedule entirely
+    regardless of `enabled`/`active_date_mode`, auto-reverting once that
+    date has passed. Date-granularity (not datetime) so it piggybacks on
+    the engine's existing midnight rescan instead of needing its own timer.
+    """
 
     id: str
     name: str
@@ -161,6 +180,33 @@ class Schedule:
     device_type: DeviceType
     entities: list[str]
     rules: list[Rule] = field(default_factory=list)
+    active_date_mode: RuleDateMode = RuleDateMode.ALWAYS
+    active_date_ranges: frozenset[tuple[str, str]] = field(default_factory=frozenset)
+    override_until: str | None = None
+
+    def is_active_on(self, reference_date: date) -> bool:
+        """Whether this schedule's seasonal active window includes `reference_date`.
+
+        ALWAYS ignores active_date_ranges entirely. INCLUDE only counts as
+        active while reference_date falls in one of active_date_ranges;
+        EXCLUDE is active everywhere except those ranges.
+        """
+        if self.active_date_mode is RuleDateMode.ALWAYS:
+            return True
+        date_str = reference_date.isoformat()
+        matches = any(start <= date_str <= end for start, end in self.active_date_ranges)
+        return matches if self.active_date_mode is RuleDateMode.INCLUDE else not matches
+
+    def is_overridden(self, reference_date: date) -> bool:
+        """Whether a manager-triggered pause suppresses this schedule on `reference_date`.
+
+        Comparing against whichever reference_date is in question (today
+        for live engine checks, a report's own date for Day View) makes
+        this exact for both callers rather than needing separate handling.
+        """
+        if self.override_until is None:
+            return False
+        return reference_date <= date.fromisoformat(self.override_until)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict for storage."""
@@ -171,16 +217,70 @@ class Schedule:
             "device_type": self.device_type.value,
             "entities": list(self.entities),
             "rules": [rule.to_dict() for rule in self.rules],
+            "active_date_mode": self.active_date_mode.value,
+            "active_date_ranges": sorted([list(r) for r in self.active_date_ranges]),
+            "override_until": self.override_until,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Schedule:
-        """Deserialize from a plain dict loaded from storage."""
+        """Deserialize from a plain dict loaded from storage.
+
+        `active_date_mode`/`active_date_ranges`/`override_until` use
+        `.get()` with defaults, since schedules stored before these fields
+        existed won't have them - they behave exactly as before (always
+        active, never overridden).
+        """
         return cls(
             id=data["id"],
             name=data["name"],
             enabled=data["enabled"],
             device_type=DeviceType(data["device_type"]),
             entities=list(data["entities"]),
+            rules=[Rule.from_dict(rule) for rule in data["rules"]],
+            active_date_mode=RuleDateMode(
+                data.get("active_date_mode", RuleDateMode.ALWAYS)
+            ),
+            active_date_ranges=frozenset(
+                (start, end) for start, end in data.get("active_date_ranges", [])
+            ),
+            override_until=data.get("override_until"),
+        )
+
+
+@dataclass(slots=True, kw_only=True)
+class ScheduleTemplate:
+    """A reusable, entity-agnostic set of rules a manager can apply to a new schedule.
+
+    Deliberately has no `entities`/`enabled` - unlike a Schedule, a
+    template is never itself scheduled or dispatched to a device, so it
+    never appears in coordinator.data["schedules"] and never spawns an HA
+    device/entity pair (see entity.py). "Applying" a template means
+    building a real Schedule from its device_type/rules plus
+    caller-supplied entities (see websocket.py's
+    websocket_create_schedule_from_template).
+    """
+
+    id: str
+    name: str
+    device_type: DeviceType
+    rules: list[Rule] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a plain dict for storage."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "device_type": self.device_type.value,
+            "rules": [rule.to_dict() for rule in self.rules],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ScheduleTemplate:
+        """Deserialize from a plain dict loaded from storage."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            device_type=DeviceType(data["device_type"]),
             rules=[Rule.from_dict(rule) for rule in data["rules"]],
         )

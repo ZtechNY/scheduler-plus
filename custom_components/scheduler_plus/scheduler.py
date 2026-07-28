@@ -131,10 +131,10 @@ class SchedulerEngine:
         see _candidate_dates for how far, which depends on the rule's
         RuleDateMode.
         """
-        if not schedule.enabled:
+        now = dt_util.now()
+        if not schedule.enabled or schedule.is_overridden(now.date()):
             return None
 
-        now = dt_util.now()
         soonest: tuple[datetime, str] | None = None
 
         for rule in schedule.rules:
@@ -142,6 +142,8 @@ class SchedulerEngine:
                 continue
 
             for reference_date in self._candidate_dates(rule, now):
+                if not schedule.is_active_on(reference_date):
+                    continue
                 occurrence = await self._async_resolve_occurrence(
                     rule, reference_date
                 )
@@ -178,7 +180,11 @@ class SchedulerEngine:
         (rule.on_enabled/off_enabled) - an on-only or off-only rule only
         ever reports the side it actually acts on.
         """
-        if not schedule.enabled:
+        if (
+            not schedule.enabled
+            or not schedule.is_active_on(reference_date)
+            or schedule.is_overridden(reference_date)
+        ):
             return []
 
         events: list[tuple[Rule, datetime | None, datetime | None]] = []
@@ -244,11 +250,22 @@ class SchedulerEngine:
         await self._async_refresh_all()
 
     async def _async_refresh_all(self) -> None:
-        """Recompute and reschedule every enabled rule in every enabled schedule."""
+        """Recompute and reschedule every enabled, non-overridden rule in every schedule.
+
+        A schedule that's disabled or paused (Schedule.is_overridden) is
+        never handed to _async_refresh_rule, so its rules' callbacks are
+        cancelled explicitly here instead - _async_refresh_rule's own
+        _cancel_rule call never runs for them otherwise, which would
+        silently leave an already-scheduled on/off pending even though the
+        schedule was just disabled or paused.
+        """
         now = dt_util.now()
+        today = now.date()
         for raw_schedule in self._coordinator.data["schedules"]:
             schedule = Schedule.from_dict(raw_schedule)
-            if not schedule.enabled:
+            if not schedule.enabled or schedule.is_overridden(today):
+                for rule in schedule.rules:
+                    self._cancel_rule(rule.id)
                 continue
 
             for rule in schedule.rules:
@@ -306,6 +323,8 @@ class SchedulerEngine:
         both_enabled = rule.on_enabled and rule.off_enabled
         for days_ago in (1, 0) if both_enabled else (0,):
             reference_date = (now - timedelta(days=days_ago)).date()
+            if not schedule.is_active_on(reference_date):
+                continue
             occurrence = await self._async_resolve_occurrence(rule, reference_date)
             if occurrence is None:
                 continue

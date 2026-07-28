@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from custom_components.scheduler_plus.const import (
     DayConditionType,
     DeviceType,
@@ -203,3 +205,112 @@ def test_schedule_defaults_enabled_and_rules() -> None:
 
     assert schedule.enabled is True
     assert schedule.rules == []
+
+
+def test_schedule_round_trip_with_active_window_and_override() -> None:
+    """Schedule's active_date_mode/active_date_ranges/override_until round-trip."""
+    schedule = Schedule(
+        id="sched-1",
+        name="Summer Hours",
+        device_type=DeviceType.LIGHT,
+        entities=["light.gym"],
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({("2024-07-01", "2024-08-31")}),
+        override_until="2024-07-10",
+    )
+
+    restored = Schedule.from_dict(schedule.to_dict())
+
+    assert restored == schedule
+
+
+def test_schedule_from_dict_defaults_active_window_and_override_for_legacy_data() -> None:
+    """A stored schedule from before these fields existed loads cleanly."""
+    legacy_data = {
+        "id": "sched-1",
+        "name": "Office Lights",
+        "enabled": True,
+        "device_type": "light",
+        "entities": ["light.office"],
+        "rules": [],
+    }
+
+    schedule = Schedule.from_dict(legacy_data)
+
+    assert schedule.active_date_mode is RuleDateMode.ALWAYS
+    assert schedule.active_date_ranges == frozenset()
+    assert schedule.override_until is None
+
+
+def test_schedule_is_active_on_always() -> None:
+    """ALWAYS mode ignores active_date_ranges entirely."""
+    schedule = Schedule(
+        id="sched-1",
+        name="Regular Hours",
+        device_type=DeviceType.LIGHT,
+        entities=["light.office"],
+    )
+
+    assert schedule.is_active_on(date(2024, 1, 1)) is True
+    assert schedule.is_active_on(date(2024, 12, 31)) is True
+
+
+def test_schedule_is_active_on_include() -> None:
+    """INCLUDE mode is only active while reference_date falls in a range."""
+    schedule = Schedule(
+        id="sched-1",
+        name="Summer Hours",
+        device_type=DeviceType.LIGHT,
+        entities=["light.gym"],
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({("2024-07-01", "2024-08-31")}),
+    )
+
+    assert schedule.is_active_on(date(2024, 7, 15)) is True
+    assert schedule.is_active_on(date(2024, 7, 1)) is True
+    assert schedule.is_active_on(date(2024, 8, 31)) is True
+    assert schedule.is_active_on(date(2024, 6, 30)) is False
+    assert schedule.is_active_on(date(2024, 9, 1)) is False
+
+
+def test_schedule_is_active_on_exclude() -> None:
+    """EXCLUDE mode is active everywhere except the listed ranges."""
+    schedule = Schedule(
+        id="sched-1",
+        name="Regular Hours",
+        device_type=DeviceType.LIGHT,
+        entities=["light.office"],
+        active_date_mode=RuleDateMode.EXCLUDE,
+        active_date_ranges=frozenset({("2024-07-01", "2024-08-31")}),
+    )
+
+    assert schedule.is_active_on(date(2024, 7, 15)) is False
+    assert schedule.is_active_on(date(2024, 6, 30)) is True
+    assert schedule.is_active_on(date(2024, 9, 1)) is True
+
+
+def test_schedule_is_overridden() -> None:
+    """A schedule is overridden through and including override_until, never after."""
+    schedule = Schedule(
+        id="sched-1",
+        name="AC",
+        device_type=DeviceType.CLIMATE,
+        entities=["climate.gym"],
+        override_until="2024-07-10",
+    )
+
+    assert schedule.is_overridden(date(2024, 7, 5)) is True
+    assert schedule.is_overridden(date(2024, 7, 10)) is True
+    assert schedule.is_overridden(date(2024, 7, 11)) is False
+
+
+def test_schedule_is_overridden_none_when_unset() -> None:
+    """A schedule with no override_until is never overridden."""
+    schedule = Schedule(
+        id="sched-1",
+        name="AC",
+        device_type=DeviceType.CLIMATE,
+        entities=["climate.gym"],
+    )
+
+    assert schedule.is_overridden(date(2024, 7, 5)) is False

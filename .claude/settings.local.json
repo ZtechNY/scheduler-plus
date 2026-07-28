@@ -29,7 +29,13 @@
       "Bash(python -m py_compile custom_components/scheduler_plus/time_providers/__init__.py)",
       "Bash(python -m py_compile tests/test_time_providers.py)",
       "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/websocket.py)",
-      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py)"
+      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py)",
+      "Bash(git fetch *)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/models.py custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py tests/test_models.py tests/test_scheduler.py)",
+      "Bash(python -c \"import pytest, homeassistant\")",
+      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/binary_sensor.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/binary_sensor.py custom_components/scheduler_plus/models.py tests/test_scheduler.py tests/test_models.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/models.py custom_components/scheduler_plus/storage.py custom_components/scheduler_plus/websocket.py)"
     ]
   }
 }

@@ -7,12 +7,15 @@ import { createSchedule, updateSchedule } from "./api";
 import "./entity-multi-picker";
 import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
-import type { DeviceType, Schedule, TimeSpec, YidcalZmanType } from "./types";
+import "./template-editor-dialog";
+import type { SchedulerPlusTemplateEditor } from "./template-editor-dialog";
+import type { DeviceType, RuleDateMode, Schedule, TimeSpec, YidcalZmanType } from "./types";
 import {
   DAY_CONDITION_LABELS,
   DEVICE_TYPES,
   DEVICE_TYPE_DOMAINS,
   DEVICE_TYPE_LABELS,
+  RULE_DATE_MODES,
   TIME_PROVIDER_LABELS,
   WEEKDAYS,
   WEEKDAY_LABELS,
@@ -94,12 +97,24 @@ export class SchedulerPlusScheduleEditor extends LitElement {
 
   @state() private _rules: RuleInput[] = [];
 
+  /** Seasonal active window - see Schedule.is_active_on's docstring in models.py. */
+  @state() private _activeDateMode: RuleDateMode = "always";
+
+  @state() private _activeDateRanges: [string, string][] = [];
+
+  @state() private _newActiveRangeStart = "";
+
+  @state() private _newActiveRangeEnd = "";
+
   @state() private _saving = false;
 
   @state() private _error?: string;
 
   @query("scheduler-plus-rule-editor")
   private _ruleEditor?: SchedulerPlusRuleEditor;
+
+  @query("scheduler-plus-template-editor")
+  private _templateEditor?: SchedulerPlusTemplateEditor;
 
   public showDialog(schedule?: Schedule): void {
     this._schedule = schedule;
@@ -108,6 +123,35 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._enabled = schedule?.enabled ?? true;
     this._entities = schedule ? [...schedule.entities] : [];
     this._rules = schedule ? schedule.rules.map((rule) => ({ ...rule })) : [];
+    this._activeDateMode = schedule?.active_date_mode ?? "always";
+    this._activeDateRanges = schedule ? [...schedule.active_date_ranges] : [];
+    this._newActiveRangeStart = "";
+    this._newActiveRangeEnd = "";
+    this._error = undefined;
+    this._open = true;
+  }
+
+  /**
+   * Opens the dialog pre-filled from an existing schedule, but as a new
+   * schedule to be created rather than an update - `_schedule` stays
+   * undefined so `_save()` calls createSchedule, and each cloned rule has
+   * its `id` stripped so the backend assigns fresh ones (same path new
+   * rules already take when a rule is added from scratch).
+   */
+  public showDialogDuplicate(schedule: Schedule): void {
+    this._schedule = undefined;
+    this._name = `Copy of ${schedule.name}`;
+    this._deviceType = schedule.device_type;
+    this._enabled = schedule.enabled;
+    this._entities = [...schedule.entities];
+    this._rules = schedule.rules.map((rule) => {
+      const { id: _id, ...rest } = rule;
+      return { ...rest };
+    });
+    this._activeDateMode = schedule.active_date_mode;
+    this._activeDateRanges = [...schedule.active_date_ranges];
+    this._newActiveRangeStart = "";
+    this._newActiveRangeEnd = "";
     this._error = undefined;
     this._open = true;
   }
@@ -124,6 +168,31 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     // neither can carry over.
     this._entities = [];
     this._rules = [];
+  };
+
+  private _handleActiveDateModeChange = (event: Event): void => {
+    this._activeDateMode = (event.target as HTMLSelectElement).value as RuleDateMode;
+  };
+
+  private _addActiveDateRange = (): void => {
+    const start = this._newActiveRangeStart;
+    const end = this._newActiveRangeEnd;
+    if (!start || !end || start > end) {
+      return;
+    }
+    if (!this._activeDateRanges.some(([s, e]) => s === start && e === end)) {
+      this._activeDateRanges = [...this._activeDateRanges, [start, end]];
+    }
+    this._newActiveRangeStart = "";
+    this._newActiveRangeEnd = "";
+  };
+
+  private _removeActiveDateRange = (index: number): void => {
+    this._activeDateRanges = this._activeDateRanges.filter((_, i) => i !== index);
+  };
+
+  private _openSaveAsTemplate = (): void => {
+    this._templateEditor?.showDialog(this._deviceType, this._rules);
   };
 
   private _openAddRuleDialog = (): void => {
@@ -184,6 +253,12 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         entities: this._entities,
         enabled: this._enabled,
         rules: this._rules,
+        active_date_mode: this._activeDateMode,
+        active_date_ranges: this._activeDateRanges,
+        // Not editable from this dialog (see override-dialog.ts) - carried
+        // forward unchanged so editing a schedule's rules doesn't silently
+        // clear an active pause.
+        override_until: this._schedule?.override_until ?? null,
       };
       if (this._schedule) {
         await updateSchedule(this.hass, this._schedule.id, input);
@@ -244,6 +319,26 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             ></ha-switch>
           </ha-formfield>
 
+          <label class="field-label" for="active-date-mode">Active period</label>
+          <select
+            id="active-date-mode"
+            class="native-select"
+            .value=${this._activeDateMode}
+            @change=${this._handleActiveDateModeChange}
+          >
+            ${RULE_DATE_MODES.map(
+              (mode) =>
+                html`<option value=${mode}>
+                  ${mode === "always"
+                    ? "Always active"
+                    : mode === "include"
+                      ? "Only during these date ranges"
+                      : "Except during these date ranges"}
+                </option>`,
+            )}
+          </select>
+          ${this._activeDateMode !== "always" ? this._renderActivePeriodPanel() : nothing}
+
           <label class="field-label">Entities</label>
           <scheduler-plus-entity-multi-picker
             .hass=${this.hass}
@@ -270,6 +365,10 @@ export class SchedulerPlusScheduleEditor extends LitElement {
               `}
 
           <div class="dialog-actions">
+            <button type="button" class="btn" @click=${this._openSaveAsTemplate}>
+              Save as template
+            </button>
+            <span class="spacer"></span>
             <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
             <button
               type="button"
@@ -283,6 +382,57 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         </div>
       </ha-dialog>
       <scheduler-plus-rule-editor .hass=${this.hass}></scheduler-plus-rule-editor>
+      <scheduler-plus-template-editor .hass=${this.hass}></scheduler-plus-template-editor>
+    `;
+  }
+
+  private _renderActivePeriodPanel() {
+    return html`
+      <div class="filter-panel">
+        <span class="panel-label">Date ranges</span>
+        ${this._activeDateRanges.length === 0
+          ? html`<span class="hint">None added yet.</span>`
+          : html`
+              <ul class="dates">
+                ${this._activeDateRanges.map(
+                  ([start, end], index) => html`
+                    <li class="date-row">
+                      <span>${start} → ${end}</span>
+                      <button
+                        type="button"
+                        class="btn"
+                        @click=${() => this._removeActiveDateRange(index)}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  `,
+                )}
+              </ul>
+            `}
+        <div class="range-add-row">
+          <input
+            type="date"
+            class="native-input"
+            .value=${this._newActiveRangeStart}
+            @input=${(e: Event) => {
+              this._newActiveRangeStart = (e.target as HTMLInputElement).value;
+            }}
+          />
+          <span class="sep">to</span>
+          <input
+            type="date"
+            class="native-input"
+            .value=${this._newActiveRangeEnd}
+            @input=${(e: Event) => {
+              this._newActiveRangeEnd = (e.target as HTMLInputElement).value;
+            }}
+          />
+          <button type="button" class="btn" @click=${this._addActiveDateRange}>
+            Add range
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -350,10 +500,14 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     }
     .dialog-actions {
       display: flex;
+      align-items: center;
       justify-content: flex-end;
       gap: 8px;
       padding-top: 8px;
       border-top: 1px solid var(--divider-color);
+    }
+    .spacer {
+      flex: 1;
     }
     .btn {
       font: inherit;
@@ -401,6 +555,47 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
+    }
+    .filter-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 6px;
+    }
+    .panel-label {
+      font-size: 0.85em;
+      font-weight: 500;
+      color: var(--secondary-text-color);
+    }
+    .hint {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+    }
+    ul.dates {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .date-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .range-add-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .sep {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
     }
     .placeholder {
       padding: 8px 0;

@@ -29,16 +29,26 @@ class SchedulerPlusStoreData(TypedDict):
     defaults in the options flow (const.py's CONF_WEEKDAY_DAYS etc.) - a
     per-user override, not a replacement, so it only needs an entry for
     users who have actually set their own.
+
+    `templates` holds reusable, entity-agnostic ScheduleTemplate payloads
+    (see models.py) - kept separate from `schedules` since a template is
+    never itself scheduled/dispatched.
     """
 
     version: int
     schedules: list[dict[str, Any]]
     user_preferences: dict[str, dict[str, Any]]
+    templates: list[dict[str, Any]]
 
 
 def _default_data() -> SchedulerPlusStoreData:
     """Return the empty default payload for a fresh installation."""
-    return {"version": STORAGE_VERSION, "schedules": [], "user_preferences": {}}
+    return {
+        "version": STORAGE_VERSION,
+        "schedules": [],
+        "user_preferences": {},
+        "templates": [],
+    }
 
 
 class SchedulerPlusStore:
@@ -53,14 +63,15 @@ class SchedulerPlusStore:
     async def async_load(self) -> SchedulerPlusStoreData:
         """Load persisted data, seeding defaults on first run.
 
-        `user_preferences` is filled in with `.setdefault()` rather than
-        assumed present, since data saved before this field existed won't
-        have it.
+        `user_preferences`/`templates` are filled in with `.setdefault()`
+        rather than assumed present, since data saved before these fields
+        existed won't have them.
         """
         data = await self._store.async_load()
         if data is None:
             return _default_data()
         data.setdefault("user_preferences", {})
+        data.setdefault("templates", [])
         return data
 
     async def async_save(self, data: SchedulerPlusStoreData) -> None:

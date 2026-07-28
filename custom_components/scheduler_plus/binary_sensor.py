@@ -11,6 +11,7 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import SchedulerPlusConfigEntry
 from .coordinator import SchedulerPlusCoordinator
@@ -32,9 +33,11 @@ class ScheduleEnabledBinarySensor(ScheduleEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return whether the schedule is currently enabled."""
+        """Return whether the schedule is currently enabled and not paused."""
         schedule = self._get_schedule()
-        return schedule.enabled if schedule is not None else None
+        if schedule is None:
+            return None
+        return schedule.enabled and not schedule.is_overridden(dt_util.now().date())
 
 
 async def async_setup_entry(

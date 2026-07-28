@@ -4,7 +4,7 @@
  * `hass.callWS()` message directly.
  */
 
-import type { Action, DeviceType, Rule, Schedule, Weekday } from "./types";
+import type { Action, DeviceType, Rule, RuleDateMode, Schedule, Weekday } from "./types";
 
 /** The minimal shape of one entity's state, as found in `hass.states`. */
 export interface HassEntityState {
@@ -38,6 +38,30 @@ export interface ScheduleInput {
   entities: string[];
   enabled?: boolean;
   rules?: RuleInput[];
+  active_date_mode?: RuleDateMode;
+  active_date_ranges?: [string, string][];
+  override_until?: string | null;
+}
+
+/**
+ * Maps an existing Schedule back into an update_schedule payload, carrying
+ * every field forward unchanged. update_schedule always replaces the whole
+ * schedule, so a call site that wants to change just one field (the card's
+ * quick-toggle, the pause dialog) must still resend every other field -
+ * hand-picking a field list at each such call site is how a newly added
+ * Schedule field silently gets dropped the next time that call site fires.
+ */
+export function toScheduleInput(schedule: Schedule): ScheduleInput {
+  return {
+    name: schedule.name,
+    device_type: schedule.device_type,
+    entities: schedule.entities,
+    enabled: schedule.enabled,
+    rules: schedule.rules,
+    active_date_mode: schedule.active_date_mode,
+    active_date_ranges: schedule.active_date_ranges,
+    override_until: schedule.override_until,
+  };
 }
 
 export async function fetchSchedules(hass: HomeAssistant): Promise<Schedule[]> {
@@ -134,4 +158,81 @@ export async function fetchDaySchedule(
     ...(deviceType ? { device_type: deviceType } : {}),
   });
   return result.events;
+}
+
+/** One day's worth of events, as returned by fetchWeekSchedule. */
+export interface WeekScheduleDay {
+  date: string;
+  events: DayScheduleEvent[];
+}
+
+export async function fetchWeekSchedule(
+  hass: HomeAssistant,
+  startDate: string,
+  deviceType?: DeviceType,
+): Promise<WeekScheduleDay[]> {
+  const result = await hass.callWS<{ days: WeekScheduleDay[] }>({
+    type: `${DOMAIN}/get_week_schedule`,
+    start_date: startDate,
+    ...(deviceType ? { device_type: deviceType } : {}),
+  });
+  return result.days;
+}
+
+/**
+ * A reusable, entity-agnostic set of rules a manager can apply to a new
+ * schedule ("Save as template" / "New from template"). Has no
+ * entities/enabled of its own - see ScheduleTemplate in models.py.
+ */
+export interface ScheduleTemplate {
+  id: string;
+  name: string;
+  device_type: DeviceType;
+  rules: Rule[];
+}
+
+export interface TemplateInput {
+  name: string;
+  device_type: DeviceType;
+  rules?: RuleInput[];
+}
+
+export async function fetchTemplates(hass: HomeAssistant): Promise<ScheduleTemplate[]> {
+  const result = await hass.callWS<{ templates: ScheduleTemplate[] }>({
+    type: `${DOMAIN}/list_templates`,
+  });
+  return result.templates;
+}
+
+export async function createTemplate(
+  hass: HomeAssistant,
+  input: TemplateInput,
+): Promise<ScheduleTemplate> {
+  const result = await hass.callWS<{ template: ScheduleTemplate }>({
+    type: `${DOMAIN}/create_template`,
+    ...input,
+  });
+  return result.template;
+}
+
+export async function deleteTemplate(hass: HomeAssistant, templateId: string): Promise<void> {
+  await hass.callWS({
+    type: `${DOMAIN}/delete_template`,
+    template_id: templateId,
+  });
+}
+
+export async function createScheduleFromTemplate(
+  hass: HomeAssistant,
+  templateId: string,
+  name: string,
+  entities: string[],
+): Promise<Schedule> {
+  const result = await hass.callWS<{ schedule: Schedule }>({
+    type: `${DOMAIN}/create_schedule_from_template`,
+    template_id: templateId,
+    name,
+    entities,
+  });
+  return result.schedule;
 }

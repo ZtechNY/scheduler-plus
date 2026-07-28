@@ -200,4 +200,17 @@ export interface Schedule {
   /** Soonest upcoming on/off moment across all of this schedule's rules, computed server-side. */
   next_event: string | null;
   next_event_action: "on" | "off" | null;
+  /**
+   * Seasonal active window, e.g. "Jul 1-Aug 31 only" - independent of each
+   * rule's own date_mode/dates/date_ranges. See Schedule.is_active_on's
+   * docstring in models.py for why this is schedule-level and range-only.
+   */
+  active_date_mode: RuleDateMode;
+  active_date_ranges: [string, string][];
+  /** Manager-triggered pause, "YYYY-MM-DD" (paused through and including this date) or null. */
+  override_until: string | null;
+  /** Whether the schedule's seasonal window (if any) currently includes today - server-computed. */
+  active_now: boolean;
+  /** Soonest upcoming date active_date_ranges turns the schedule on, if currently inactive. */
+  next_active_date: string | null;
 }

@@ -1,8 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import type { DayScheduleEvent, HomeAssistant } from "./api";
-import { fetchDaySchedule } from "./api";
+import type { DayScheduleEvent, HomeAssistant, WeekScheduleDay } from "./api";
+import { fetchDaySchedule, fetchWeekSchedule } from "./api";
 import type { DeviceType } from "./types";
 import { CLIMATE_HVAC_MODE_LABELS } from "./types";
 
@@ -96,17 +96,22 @@ export class SchedulerPlusDayView extends LitElement {
 
   @state() private _open = false;
 
+  @state() private _viewMode: "day" | "week" = "day";
+
   @state() private _date = todayIso();
 
   @state() private _reportFilter: ReportFilter = "all";
 
   @state() private _events: DayScheduleEvent[] = [];
 
+  @state() private _weekDays: WeekScheduleDay[] = [];
+
   @state() private _loading = false;
 
   @state() private _error?: string;
 
   public showDialog(): void {
+    this._viewMode = "day";
     this._date = todayIso();
     this._reportFilter = "all";
     this._open = true;
@@ -123,34 +128,49 @@ export class SchedulerPlusDayView extends LitElement {
     return typeof friendlyName === "string" ? friendlyName : entityId;
   }
 
+  /**
+   * Applies the report-group filter and the card's own device filter, the
+   * same two client-side filters day and week mode both need - neither is
+   * something the backend endpoints take directly: "Lights & Switches"
+   * spans two backend DeviceTypes (no single value to send), and the
+   * card's entity filter is a card-level (per-dashboard-page) concern.
+   */
+  private _matchesFilters(event: DayScheduleEvent): boolean {
+    if (this._reportFilter !== "all" && reportGroupFor(event.device_type) !== this._reportFilter) {
+      return false;
+    }
+    const filter = this.entityFilter;
+    if (filter && filter.length > 0 && !event.entities.some((id) => filter.includes(id))) {
+      return false;
+    }
+    return true;
+  }
+
   private async _load(): Promise<void> {
     this._loading = true;
     this._error = undefined;
     try {
-      // Always fetched unfiltered and split client-side by ReportGroup
-      // instead of passing device_type through to the backend - "Lights &
-      // Switches" spans two backend DeviceTypes, so there's no single
-      // value to send anyway.
-      const events = await fetchDaySchedule(this.hass, this._date);
-      const byGroup =
-        this._reportFilter === "all"
-          ? events
-          : events.filter((event) => reportGroupFor(event.device_type) === this._reportFilter);
-
-      // The card's own device filter is a card-level (per-dashboard-page)
-      // concern, not something the backend endpoint needs to know about -
-      // filtered the same way the card's own schedule list already is.
-      const filter = this.entityFilter;
-      this._events =
-        filter && filter.length > 0
-          ? byGroup.filter((event) => event.entities.some((id) => filter.includes(id)))
-          : byGroup;
+      if (this._viewMode === "day") {
+        const events = await fetchDaySchedule(this.hass, this._date);
+        this._events = events.filter((event) => this._matchesFilters(event));
+      } else {
+        const days = await fetchWeekSchedule(this.hass, this._date);
+        this._weekDays = days.map((day) => ({
+          date: day.date,
+          events: day.events.filter((event) => this._matchesFilters(event)),
+        }));
+      }
     } catch (err) {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
       this._loading = false;
     }
   }
+
+  private _handleViewModeChange = (mode: "day" | "week"): void => {
+    this._viewMode = mode;
+    void this._load();
+  };
 
   private _handleDateChange = (e: Event): void => {
     this._date = (e.target as HTMLInputElement).value;
@@ -168,12 +188,31 @@ export class SchedulerPlusDayView extends LitElement {
     }
     return html`
       <ha-dialog open @closed=${this._closeDialog}>
-        <div class="form">
+        <div class="form ${this._viewMode === "week" ? "form-wide" : ""}">
           <div class="dialog-title">Day view</div>
+
+          <div class="view-toggle">
+            <button
+              type="button"
+              class="day-chip ${this._viewMode === "day" ? "active" : ""}"
+              @click=${() => this._handleViewModeChange("day")}
+            >
+              Day
+            </button>
+            <button
+              type="button"
+              class="day-chip ${this._viewMode === "week" ? "active" : ""}"
+              @click=${() => this._handleViewModeChange("week")}
+            >
+              Week
+            </button>
+          </div>
 
           <div class="controls">
             <div class="control">
-              <label class="field-label" for="day-view-date">Date</label>
+              <label class="field-label" for="day-view-date">
+                ${this._viewMode === "week" ? "Week starting" : "Date"}
+              </label>
               <input
                 id="day-view-date"
                 type="date"
@@ -197,7 +236,9 @@ export class SchedulerPlusDayView extends LitElement {
             </div>
           </div>
 
-          <div class="content">${this._renderContent()}</div>
+          <div class="content">
+            ${this._viewMode === "day" ? this._renderContent() : this._renderWeekContent()}
+          </div>
 
           <div class="dialog-actions">
             <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
@@ -239,6 +280,58 @@ export class SchedulerPlusDayView extends LitElement {
     `;
   }
 
+  private _renderWeekContent() {
+    if (this._loading) {
+      return html`<div class="placeholder">Loading…</div>`;
+    }
+    if (this._error) {
+      return html`<div class="placeholder error">${this._error}</div>`;
+    }
+    return html`
+      <div class="week-grid-scroll">
+        <div class="week-grid">${this._weekDays.map((day) => this._renderWeekDay(day))}</div>
+      </div>
+    `;
+  }
+
+  private _renderWeekDay(day: WeekScheduleDay) {
+    const label = new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const sorted = [...day.events].sort((a, b) =>
+      (a.on_at ?? a.off_at ?? "").localeCompare(b.on_at ?? b.off_at ?? ""),
+    );
+    return html`
+      <div class="week-day">
+        <div class="week-day-header">${label}</div>
+        ${sorted.length === 0
+          ? html`<span class="hint">Nothing scheduled</span>`
+          : html`
+              <ul class="week-events">
+                ${sorted.map((event) => this._renderWeekEvent(event))}
+              </ul>
+            `}
+      </div>
+    `;
+  }
+
+  private _renderWeekEvent(event: DayScheduleEvent) {
+    const time =
+      event.on_at !== null
+        ? formatTime(event.on_at)
+        : event.off_at !== null
+          ? formatTime(event.off_at)
+          : "";
+    return html`
+      <li class="week-event" title="${event.schedule_name} · ${event.rule_name}">
+        <span class="week-event-time">${time}</span>
+        <span class="week-event-name">${event.schedule_name}</span>
+      </li>
+    `;
+  }
+
   private _renderEvent(event: DayScheduleEvent) {
     const overnight =
       event.on_at !== null &&
@@ -272,10 +365,79 @@ export class SchedulerPlusDayView extends LitElement {
       min-width: 320px;
       max-width: 460px;
     }
+    .form-wide {
+      max-width: min(92vw, 900px);
+    }
     .dialog-title {
       font-size: 1.25rem;
       font-weight: 500;
       color: var(--primary-text-color);
+    }
+    .view-toggle {
+      display: flex;
+      gap: 4px;
+    }
+    .day-chip {
+      font: inherit;
+      color: var(--primary-text-color);
+      background: var(--card-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: 16px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .day-chip.active {
+      color: var(--text-primary-color, #fff);
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+    }
+    .week-grid-scroll {
+      overflow-x: auto;
+    }
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(110px, 1fr));
+      gap: 8px;
+    }
+    .week-day {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      border: 1px solid var(--divider-color);
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .week-day-header {
+      font-size: 0.8em;
+      font-weight: 600;
+      color: var(--secondary-text-color);
+    }
+    ul.week-events {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .week-event {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.78em;
+      line-height: 1.3;
+    }
+    .week-event-time {
+      font-weight: 500;
+      color: var(--primary-text-color);
+    }
+    .week-event-name {
+      color: var(--secondary-text-color);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .controls {
       display: flex;

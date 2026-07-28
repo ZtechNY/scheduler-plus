@@ -132,6 +132,9 @@ def _make_schedule(
     *,
     entities: list[str] | None = None,
     device_type: DeviceType = DeviceType.LIGHT,
+    active_date_mode: RuleDateMode = RuleDateMode.ALWAYS,
+    active_date_ranges: frozenset[tuple[str, str]] = frozenset(),
+    override_until: str | None = None,
 ) -> Schedule:
     """Build a single-rule Schedule targeting `entities` (default: one light)."""
     return Schedule(
@@ -140,6 +143,9 @@ def _make_schedule(
         device_type=device_type,
         entities=entities or ["light.test"],
         rules=[rule],
+        active_date_mode=active_date_mode,
+        active_date_ranges=active_date_ranges,
+        override_until=override_until,
     )
 
 
@@ -840,3 +846,167 @@ async def test_refresh_all_skips_disabled_schedule(
 
     assert fake_device_handler.turn_on_calls == []
     assert engine._unsub_rules == {}
+
+
+async def test_refresh_rule_skips_seasonally_inactive_date(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """A schedule outside its active_date_ranges window schedules nothing.
+
+    _MONDAY (2024-01-01) falls outside the INCLUDE window below, so even
+    though the rule itself would otherwise match every day, the
+    schedule-level seasonal gate should suppress it entirely.
+    """
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule,
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({("2024-07-01", "2024-08-31")}),
+    )
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert fake_device_handler.turn_on_calls == []
+    assert fake_device_handler.turn_off_calls == []
+    assert rule.id not in engine._unsub_rules
+
+
+async def test_refresh_rule_runs_during_seasonally_active_date(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """A schedule inside its active_date_ranges window schedules as normal."""
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule,
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({("2024-01-01", "2024-01-31")}),
+    )
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert len(engine._unsub_rules[rule.id]) == 2
+
+
+async def test_get_day_events_skips_seasonally_inactive_date(
+    engine: SchedulerEngine,
+) -> None:
+    """The day-view report respects a schedule's seasonal active window."""
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule,
+        active_date_mode=RuleDateMode.EXCLUDE,
+        active_date_ranges=frozenset({(_MONDAY.isoformat(), _MONDAY.isoformat())}),
+    )
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert events == []
+
+
+async def test_refresh_all_cancels_pending_callbacks_when_overridden(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """Pausing a schedule cancels its already-scheduled callbacks, not just future refreshes.
+
+    Regression test for the pre-existing bug this feature's cancellation
+    fix addresses: _async_refresh_all used to `continue` past a
+    disabled/overridden schedule without ever calling _cancel_rule, so an
+    already-scheduled on/off would still fire despite the schedule being
+    paused in the meantime.
+    """
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule)
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [schedule.to_dict()]}
+    )
+
+    await engine._async_refresh_all()
+    assert len(engine._unsub_rules[rule.id]) == 2
+
+    schedule.override_until = "2024-01-02"
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [schedule.to_dict()]}
+    )
+    await engine._async_refresh_all()
+
+    assert rule.id not in engine._unsub_rules
+    assert fake_device_handler.turn_on_calls == []
+
+
+async def test_refresh_all_skips_overridden_schedule(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """An overridden schedule's rules are never evaluated, like a disabled one."""
+    rule = _make_rule()
+    schedule = _make_schedule(rule, override_until="2024-01-02")
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [schedule.to_dict()]}
+    )
+
+    await engine._async_refresh_all()
+
+    assert fake_device_handler.turn_on_calls == []
+    assert engine._unsub_rules == {}
+
+
+async def test_get_day_events_skips_overridden_date(engine: SchedulerEngine) -> None:
+    """The day-view report respects an active pause through the requested date."""
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule, override_until=_MONDAY.isoformat())
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert events == []
+
+
+async def test_get_day_events_runs_after_override_expires(engine: SchedulerEngine) -> None:
+    """The day-view report resumes reporting normally past override_until."""
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule, override_until=date(2023, 12, 31).isoformat())
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert len(events) == 1
+
+
+async def test_get_next_event_skips_overridden_schedule(engine: SchedulerEngine) -> None:
+    """A currently-paused schedule reports no next event."""
+    rule = _make_rule()
+    today = dt_util.now().date()
+    schedule = _make_schedule(rule, override_until=(today + timedelta(days=1)).isoformat())
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is None
+
+
+async def test_get_next_event_skips_seasonally_inactive_candidates(
+    engine: SchedulerEngine,
+) -> None:
+    """async_get_next_event only reports occurrences inside the active window.
+
+    A rule active every day would otherwise report "next event" as soon as
+    tomorrow - the seasonal gate should push that out to the window's start.
+    Kept within _candidate_dates' ~week-long lookahead for an ALWAYS-mode
+    rule (a schedule whose seasonal window starts further out than that
+    is a separate, known reporting gap covered by next_active_date in
+    websocket.py, not by extending the candidate-date search here).
+    """
+    now = dt_util.now()
+    window_start = (now + timedelta(days=3)).date()
+    window_end = (now + timedelta(days=5)).date()
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule,
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({(window_start.isoformat(), window_end.isoformat())}),
+    )
+
+    next_event = await engine.async_get_next_event(schedule)
+
+    assert next_event is not None
+    when, _ = next_event
+    assert when.date() >= window_start

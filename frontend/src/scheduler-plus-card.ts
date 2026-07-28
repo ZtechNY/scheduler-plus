@@ -1,18 +1,47 @@
-import { mdiAccountClock, mdiCalendarClock, mdiDelete, mdiPencil } from "@mdi/js";
+import {
+  mdiAccountClock,
+  mdiCalendarClock,
+  mdiCalendarPlus,
+  mdiContentCopy,
+  mdiDelete,
+  mdiPauseCircleOutline,
+  mdiPencil,
+  mdiPlayCircleOutline,
+  mdiViewGridPlusOutline,
+} from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
 import type { HomeAssistant } from "./api";
-import { deleteSchedule, fetchSchedules, updateSchedule } from "./api";
+import { deleteSchedule, fetchSchedules, toScheduleInput, updateSchedule } from "./api";
+import "./apply-template-dialog";
+import type { SchedulerPlusApplyTemplateDialog } from "./apply-template-dialog";
 import "./card-editor";
 import "./day-view-dialog";
 import type { SchedulerPlusDayView } from "./day-view-dialog";
+import "./override-dialog";
+import type { SchedulerPlusOverrideDialog } from "./override-dialog";
 import "./preferences-dialog";
 import type { SchedulerPlusPreferences } from "./preferences-dialog";
+import "./quick-event-dialog";
+import type { SchedulerPlusQuickEventDialog } from "./quick-event-dialog";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
 import { DEVICE_TYPE_LABELS } from "./types";
+
+/** Local "YYYY-MM-DD" for today, for comparing against override_until (also a plain date string). */
+function todayIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+/** Whether `schedule` is currently paused (override_until is set and not yet past). */
+function isPaused(schedule: Schedule): boolean {
+  return !!schedule.override_until && schedule.override_until >= todayIso();
+}
 
 /**
  * Formats a schedule's server-computed next event as e.g. "Next: On Fri, 6:00 AM".
@@ -35,6 +64,44 @@ function formatNextEvent(schedule: Schedule): string | undefined {
     minute: "2-digit",
   });
   return `Next: ${action} ${formatted}`;
+}
+
+/**
+ * Formats a schedule's seasonal-window status as e.g. "Inactive until Jul 1",
+ * when its active_date_ranges currently exclude today (see
+ * Schedule.is_active_on/websocket_list_schedules for how active_now/
+ * next_active_date are computed server-side). Undefined when the schedule
+ * is active right now, so this only ever adds a badge for the exception.
+ */
+function formatSeasonalStatus(schedule: Schedule): string | undefined {
+  if (schedule.active_now) {
+    return undefined;
+  }
+  if (!schedule.next_active_date) {
+    return "Inactive (outside its active dates)";
+  }
+  const when = new Date(`${schedule.next_active_date}T00:00:00`);
+  if (Number.isNaN(when.getTime())) {
+    return "Inactive (outside its active dates)";
+  }
+  const formatted = when.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `Inactive until ${formatted}`;
+}
+
+/** Formats a paused schedule's status as e.g. "Paused through Jul 29". */
+function formatPauseStatus(schedule: Schedule): string | undefined {
+  if (!isPaused(schedule) || !schedule.override_until) {
+    return undefined;
+  }
+  const when = new Date(`${schedule.override_until}T00:00:00`);
+  if (Number.isNaN(when.getTime())) {
+    return "Paused";
+  }
+  const formatted = when.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `Paused through ${formatted}`;
 }
 
 export interface SchedulerPlusCardConfig {
@@ -75,6 +142,15 @@ export class SchedulerPlusCard extends LitElement {
 
   @query("scheduler-plus-preferences")
   private _preferences?: SchedulerPlusPreferences;
+
+  @query("scheduler-plus-override-dialog")
+  private _overrideDialog?: SchedulerPlusOverrideDialog;
+
+  @query("scheduler-plus-quick-event-dialog")
+  private _quickEventDialog?: SchedulerPlusQuickEventDialog;
+
+  @query("scheduler-plus-apply-template-dialog")
+  private _applyTemplateDialog?: SchedulerPlusApplyTemplateDialog;
 
   static getStubConfig(): SchedulerPlusCardConfig {
     return { type: "custom:scheduler-plus-card" };
@@ -147,11 +223,8 @@ export class SchedulerPlusCard extends LitElement {
     this._pendingToggle = new Set(this._pendingToggle).add(schedule.id);
     try {
       await updateSchedule(this.hass, schedule.id, {
-        name: schedule.name,
-        device_type: schedule.device_type,
-        entities: schedule.entities,
+        ...toScheduleInput(schedule),
         enabled: !schedule.enabled,
-        rules: schedule.rules,
       });
       await this._refresh();
     } catch (err) {
@@ -171,12 +244,46 @@ export class SchedulerPlusCard extends LitElement {
     this._editor?.showDialog(schedule);
   };
 
+  private _openDuplicateDialog = (schedule: Schedule): void => {
+    this._editor?.showDialogDuplicate(schedule);
+  };
+
+  private _openPauseDialog = (schedule: Schedule): void => {
+    this._overrideDialog?.showDialog(schedule);
+  };
+
+  /** Clears an active pause immediately - no dialog needed, there's no input to collect. */
+  private _resumeNow = async (schedule: Schedule): Promise<void> => {
+    this._pendingToggle = new Set(this._pendingToggle).add(schedule.id);
+    try {
+      await updateSchedule(this.hass, schedule.id, {
+        ...toScheduleInput(schedule),
+        override_until: null,
+      });
+      await this._refresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      const next = new Set(this._pendingToggle);
+      next.delete(schedule.id);
+      this._pendingToggle = next;
+    }
+  };
+
   private _openDayView = (): void => {
     this._dayView?.showDialog();
   };
 
   private _openPreferences = (): void => {
     this._preferences?.showDialog();
+  };
+
+  private _openQuickEvent = (): void => {
+    this._quickEventDialog?.showDialog();
+  };
+
+  private _openApplyTemplate = (): void => {
+    this._applyTemplateDialog?.showDialog();
   };
 
   protected override render() {
@@ -194,6 +301,16 @@ export class SchedulerPlusCard extends LitElement {
             .path=${mdiCalendarClock}
             label="Day view"
             @click=${this._openDayView}
+          ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiCalendarPlus}
+            label="Quick event"
+            @click=${this._openQuickEvent}
+          ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiViewGridPlusOutline}
+            label="From template"
+            @click=${this._openApplyTemplate}
           ></ha-icon-button>
         </div>
         <div class="content">${this._renderContent()}</div>
@@ -213,6 +330,20 @@ export class SchedulerPlusCard extends LitElement {
         .entityFilter=${this._config?.entities}
       ></scheduler-plus-day-view>
       <scheduler-plus-preferences .hass=${this.hass}></scheduler-plus-preferences>
+      <scheduler-plus-override-dialog
+        .hass=${this.hass}
+        @schedule-plus-saved=${this._refresh}
+      ></scheduler-plus-override-dialog>
+      <scheduler-plus-quick-event-dialog
+        .hass=${this.hass}
+        .entityFilter=${this._config?.entities}
+        @schedule-plus-saved=${this._refresh}
+      ></scheduler-plus-quick-event-dialog>
+      <scheduler-plus-apply-template-dialog
+        .hass=${this.hass}
+        .entityFilter=${this._config?.entities}
+        @schedule-plus-saved=${this._refresh}
+      ></scheduler-plus-apply-template-dialog>
     `;
   }
 
@@ -300,7 +431,13 @@ export class SchedulerPlusCard extends LitElement {
   }
 
   private _renderSchedule(schedule: Schedule) {
-    const nextEvent = schedule.enabled ? formatNextEvent(schedule) : undefined;
+    const paused = isPaused(schedule);
+    const nextEvent = schedule.enabled && !paused ? formatNextEvent(schedule) : undefined;
+    const pauseStatus = schedule.enabled ? formatPauseStatus(schedule) : undefined;
+    // Pause status takes priority over the seasonal badge when both apply -
+    // the manager-triggered pause is the more actionable/urgent of the two.
+    const seasonalStatus =
+      schedule.enabled && !paused ? formatSeasonalStatus(schedule) : undefined;
     return html`
       <li class="schedule ${schedule.enabled ? "" : "disabled"}">
         <ha-switch
@@ -317,6 +454,10 @@ export class SchedulerPlusCard extends LitElement {
             ${schedule.rules.length}
             ${schedule.rules.length === 1 ? "rule" : "rules"}
           </span>
+          ${pauseStatus ? html`<span class="schedule-paused">${pauseStatus}</span>` : nothing}
+          ${seasonalStatus
+            ? html`<span class="schedule-seasonal">${seasonalStatus}</span>`
+            : nothing}
           ${nextEvent ? html`<span class="schedule-next">${nextEvent}</span>` : nothing}
         </div>
         <div class="row-actions">
@@ -325,6 +466,23 @@ export class SchedulerPlusCard extends LitElement {
             label="Edit"
             @click=${() => this._openEditDialog(schedule)}
           ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiContentCopy}
+            label="Duplicate"
+            @click=${() => this._openDuplicateDialog(schedule)}
+          ></ha-icon-button>
+          ${paused
+            ? html`<ha-icon-button
+                .path=${mdiPlayCircleOutline}
+                label="Resume now"
+                ?disabled=${this._pendingToggle.has(schedule.id)}
+                @click=${() => this._resumeNow(schedule)}
+              ></ha-icon-button>`
+            : html`<ha-icon-button
+                .path=${mdiPauseCircleOutline}
+                label="Pause"
+                @click=${() => this._openPauseDialog(schedule)}
+              ></ha-icon-button>`}
           <ha-icon-button
             .path=${mdiDelete}
             label="Delete"
@@ -431,6 +589,14 @@ export class SchedulerPlusCard extends LitElement {
     .schedule-next {
       font-size: 0.85em;
       color: var(--primary-color);
+    }
+    .schedule-seasonal {
+      font-size: 0.85em;
+      color: var(--warning-color, #ffa600);
+    }
+    .schedule-paused {
+      font-size: 0.85em;
+      color: var(--error-color, #db4437);
     }
     .row-actions {
       display: flex;
