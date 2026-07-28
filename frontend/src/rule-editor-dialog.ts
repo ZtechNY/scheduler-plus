@@ -409,7 +409,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._error = error;
       return;
     }
-    this._templateEditor?.showDialog(this._deviceType, [this._buildRuleInput()]);
+    this._templateEditor?.showDialog(this._deviceType, [this._buildRuleInput()], "rule");
   };
 
   protected override render() {

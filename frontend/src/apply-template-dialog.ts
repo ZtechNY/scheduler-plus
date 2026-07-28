@@ -3,24 +3,21 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, ScheduleTemplate } from "./api";
-import { createScheduleFromTemplate, deleteTemplate, fetchTemplates } from "./api";
-import "./entity-multi-picker";
-import { DEVICE_TYPE_DOMAINS, DEVICE_TYPE_LABELS } from "./types";
+import { deleteTemplate, fetchTemplates } from "./api";
+import { DEVICE_TYPE_LABELS } from "./types";
 
 /**
- * "From template": browse saved schedule templates and turn one into a
- * real schedule. A two-step flow in one dialog rather than two separate
- * dialogs - picking "Use" on a template row reveals the Name/Entities
- * fields needed to materialize it, keeping template management (the list
- * + Delete) and template application (the form) together since browsing
- * templates is what motivates opening this dialog in the first place.
+ * "From template": browse saved schedule templates (scope="schedule" -
+ * rule templates live only in the rule editor's "Start from template" and
+ * never show here) and hand one off to be applied. "Use" doesn't create a
+ * schedule directly - it dispatches scheduler-plus-use-template and closes,
+ * so the card can open the full schedule editor pre-filled from the
+ * template, letting the manager add entities and review/adjust rules
+ * before saving, exactly like creating a schedule from scratch.
  */
 @customElement("scheduler-plus-apply-template-dialog")
 export class SchedulerPlusApplyTemplateDialog extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
-
-  /** The owning card's own device filter, if configured - see scheduler-plus-card.ts. */
-  @property({ attribute: false }) entityFilter?: string[];
 
   @state() private _open = false;
 
@@ -30,16 +27,7 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
 
   @state() private _error?: string;
 
-  @state() private _selected?: ScheduleTemplate;
-
-  @state() private _name = "";
-
-  @state() private _entities: string[] = [];
-
-  @state() private _saving = false;
-
   public showDialog(): void {
-    this._selected = undefined;
     this._error = undefined;
     this._open = true;
     void this._load();
@@ -53,7 +41,8 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
     this._loading = true;
     this._error = undefined;
     try {
-      this._templates = await fetchTemplates(this.hass);
+      const templates = await fetchTemplates(this.hass);
+      this._templates = templates.filter((template) => template.scope === "schedule");
     } catch (err) {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -61,16 +50,11 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
     }
   }
 
-  private _selectTemplate = (template: ScheduleTemplate): void => {
-    this._selected = template;
-    this._name = template.name;
-    this._entities = [];
-    this._error = undefined;
-  };
-
-  private _backToList = (): void => {
-    this._selected = undefined;
-    this._error = undefined;
+  private _useTemplate = (template: ScheduleTemplate): void => {
+    this._open = false;
+    this.dispatchEvent(
+      new CustomEvent("scheduler-plus-use-template", { detail: { template } }),
+    );
   };
 
   private _deleteTemplateRow = async (template: ScheduleTemplate): Promise<void> => {
@@ -85,33 +69,6 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
     }
   };
 
-  private _createFromTemplate = async (): Promise<void> => {
-    if (!this._selected) {
-      return;
-    }
-    const name = this._name.trim();
-    if (!name) {
-      this._error = "Name is required.";
-      return;
-    }
-    if (this._entities.length === 0) {
-      this._error = "At least one entity is required.";
-      return;
-    }
-
-    this._saving = true;
-    this._error = undefined;
-    try {
-      await createScheduleFromTemplate(this.hass, this._selected.id, name, this._entities);
-      this._open = false;
-      this.dispatchEvent(new CustomEvent("schedule-plus-saved"));
-    } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
-    } finally {
-      this._saving = false;
-    }
-  };
-
   protected override render() {
     if (!this._open) {
       return nothing;
@@ -121,24 +78,24 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
         <div class="form">
           <div class="dialog-title">From template</div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
-          ${this._selected ? this._renderApplyForm(this._selected) : this._renderTemplateList()}
+          ${this._renderContent()}
+          <div class="dialog-actions">
+            <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
+          </div>
         </div>
       </ha-dialog>
     `;
   }
 
-  private _renderTemplateList() {
+  private _renderContent() {
     if (this._loading) {
       return html`<div class="placeholder">Loading templates…</div>`;
     }
     if (this._templates.length === 0) {
       return html`
         <div class="placeholder">
-          No templates saved yet. Save one from an existing schedule's editor
-          ("Save as template").
-        </div>
-        <div class="dialog-actions">
-          <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
+          No schedule templates saved yet. Save one from an existing
+          schedule's editor ("Save as template").
         </div>
       `;
     }
@@ -156,7 +113,7 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
                 </span>
               </div>
               <div class="row-actions">
-                <button type="button" class="btn" @click=${() => this._selectTemplate(template)}>
+                <button type="button" class="btn" @click=${() => this._useTemplate(template)}>
                   Use
                 </button>
                 <ha-icon-button
@@ -169,53 +126,6 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
           `,
         )}
       </ul>
-      <div class="dialog-actions">
-        <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
-      </div>
-    `;
-  }
-
-  private _renderApplyForm(template: ScheduleTemplate) {
-    return html`
-      <span class="hint">
-        Creating a new schedule from "${template.name}"
-        (${DEVICE_TYPE_LABELS[template.device_type]}) - pick a name and the
-        entities it should control.
-      </span>
-
-      <label class="field-label" for="apply-template-name">Name</label>
-      <input
-        id="apply-template-name"
-        type="text"
-        class="native-input"
-        .value=${this._name}
-        @input=${(e: Event) => {
-          this._name = (e.target as HTMLInputElement).value;
-        }}
-      />
-
-      <label class="field-label">Entities</label>
-      <scheduler-plus-entity-multi-picker
-        .hass=${this.hass}
-        .value=${this._entities}
-        .domains=${DEVICE_TYPE_DOMAINS[template.device_type]}
-        .includeEntities=${this.entityFilter}
-        @value-changed=${(e: CustomEvent<{ value: string[] }>) => {
-          this._entities = e.detail.value;
-        }}
-      ></scheduler-plus-entity-multi-picker>
-
-      <div class="dialog-actions">
-        <button type="button" class="btn" @click=${this._backToList}>Back</button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          ?disabled=${this._saving}
-          @click=${this._createFromTemplate}
-        >
-          Create schedule
-        </button>
-      </div>
     `;
   }
 
@@ -232,24 +142,8 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
       font-weight: 500;
       color: var(--primary-text-color);
     }
-    .hint {
-      font-size: 0.85em;
-      color: var(--secondary-text-color);
-    }
     .error {
       color: var(--error-color);
-    }
-    .field-label {
-      font-size: 0.85em;
-      color: var(--secondary-text-color);
-    }
-    .native-input {
-      font: inherit;
-      color: var(--primary-text-color);
-      background: var(--card-background-color);
-      border: 1px solid var(--divider-color);
-      border-radius: 4px;
-      padding: 8px;
     }
     .placeholder {
       padding: 16px 0;
@@ -308,18 +202,6 @@ export class SchedulerPlusApplyTemplateDialog extends LitElement {
     }
     .btn:hover {
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
-    }
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-    .btn-primary {
-      background: var(--primary-color);
-      border-color: var(--primary-color);
-      color: var(--text-primary-color, #fff);
-    }
-    .btn-primary:hover {
-      filter: brightness(0.95);
     }
   `;
 }

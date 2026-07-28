@@ -3,18 +3,18 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, RuleInput } from "./api";
 import { createTemplate } from "./api";
-import type { DeviceType } from "./types";
+import type { DeviceType, TemplateScope } from "./types";
 
 /**
- * "Save as template" - a nested child of scheduler-plus-schedule-editor,
- * mirroring how scheduler-plus-rule-editor is nested there: opened
- * imperatively via showDialog(), pre-filled with the schedule editor's
- * current in-progress device type/rules rather than re-collecting them,
- * so a manager doesn't have to rebuild rules from scratch just to save
- * what they already configured as a reusable template. Persists
- * immediately via createTemplate - unlike the rule editor, there's no
- * parent save step to defer to, since a template is independent of
- * whether the schedule itself ends up being saved.
+ * "Save as template" - a nested child of both scheduler-plus-schedule-
+ * editor (whole rule set, scope="schedule") and scheduler-plus-rule-editor
+ * (one rule, scope="rule"): opened imperatively via showDialog(),
+ * pre-filled with the caller's current in-progress device type/rules
+ * rather than re-collecting them, so a manager doesn't have to rebuild
+ * anything from scratch just to save what they already configured.
+ * Persists immediately via createTemplate - unlike the rule editor,
+ * there's no parent save step to defer to, since a template is
+ * independent of whether the schedule/rule itself ends up being saved.
  */
 @customElement("scheduler-plus-template-editor")
 export class SchedulerPlusTemplateEditor extends LitElement {
@@ -32,9 +32,12 @@ export class SchedulerPlusTemplateEditor extends LitElement {
 
   private _rules: RuleInput[] = [];
 
-  public showDialog(deviceType: DeviceType, rules: RuleInput[]): void {
+  private _scope: TemplateScope = "schedule";
+
+  public showDialog(deviceType: DeviceType, rules: RuleInput[], scope: TemplateScope): void {
     this._deviceType = deviceType;
     this._rules = rules;
+    this._scope = scope;
     this._name = "";
     this._error = undefined;
     this._open = true;
@@ -65,6 +68,7 @@ export class SchedulerPlusTemplateEditor extends LitElement {
         name,
         device_type: this._deviceType,
         rules: this._rules,
+        scope: this._scope,
       });
       this._open = false;
     } catch (err) {
@@ -81,11 +85,13 @@ export class SchedulerPlusTemplateEditor extends LitElement {
     return html`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
-          <div class="dialog-title">Save as template</div>
+          <div class="dialog-title">
+            ${this._scope === "rule" ? "Save rule as template" : "Save schedule as template"}
+          </div>
           <span class="hint">
-            Saves this schedule's device type and rules as a reusable
-            template - no specific entities - so another schedule can be
-            built from the same setup later via "From template".
+            ${this._scope === "rule"
+              ? "Saves this one rule as a reusable template - no specific entities - so it can be added to another schedule later via \"Start from template\"."
+              : "Saves this schedule's device type and rules as a reusable template - no specific entities - so another schedule can be built from the same setup later via \"From template\"."}
           </span>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
 

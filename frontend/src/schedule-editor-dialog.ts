@@ -2,7 +2,7 @@ import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
-import type { HomeAssistant, RuleInput, ScheduleInput } from "./api";
+import type { HomeAssistant, RuleInput, ScheduleInput, ScheduleTemplate } from "./api";
 import { createSchedule, updateSchedule } from "./api";
 import "./entity-multi-picker";
 import "./rule-editor-dialog";
@@ -156,6 +156,33 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._open = true;
   }
 
+  /**
+   * Opens the dialog pre-filled from a saved schedule template - like
+   * showDialogDuplicate, this creates a new schedule rather than updating
+   * one, but the source has no entities/enabled of its own (see
+   * ScheduleTemplate in models.py), so those start blank/default rather
+   * than copied. The manager still goes through the normal editor - add
+   * entities, review/adjust rules, then Save - rather than the template
+   * being applied sight-unseen.
+   */
+  public showDialogFromTemplate(template: ScheduleTemplate): void {
+    this._schedule = undefined;
+    this._name = template.name;
+    this._deviceType = template.device_type;
+    this._enabled = true;
+    this._entities = [];
+    this._rules = template.rules.map((rule) => {
+      const { id: _id, ...rest } = rule;
+      return { ...rest };
+    });
+    this._activeDateMode = "always";
+    this._activeDateRanges = [];
+    this._newActiveRangeStart = "";
+    this._newActiveRangeEnd = "";
+    this._error = undefined;
+    this._open = true;
+  }
+
   private _closeDialog = (): void => {
     this._open = false;
   };
@@ -192,7 +219,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   };
 
   private _openSaveAsTemplate = (): void => {
-    this._templateEditor?.showDialog(this._deviceType, this._rules);
+    this._templateEditor?.showDialog(this._deviceType, this._rules, "schedule");
   };
 
   private _openAddRuleDialog = (): void => {

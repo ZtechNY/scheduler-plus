@@ -248,23 +248,40 @@ class Schedule:
         )
 
 
+class TemplateScope(StrEnum):
+    """Whether a ScheduleTemplate represents one reusable rule or a whole schedule's rule set.
+
+    Purely a frontend-facing tag: the engine never reads templates at all
+    (see ScheduleTemplate's own docstring), so this only exists to let the
+    UI show a rule template solely where a single rule is being picked
+    (the rule editor's "Start from template") and a schedule template
+    solely where a whole rule set is being picked (the card's "From
+    template") - the two lists never mix.
+    """
+
+    RULE = "rule"
+    SCHEDULE = "schedule"
+
+
 @dataclass(slots=True, kw_only=True)
 class ScheduleTemplate:
-    """A reusable, entity-agnostic set of rules a manager can apply to a new schedule.
+    """A reusable, entity-agnostic set of rules a manager can save and reapply later.
 
     Deliberately has no `entities`/`enabled` - unlike a Schedule, a
     template is never itself scheduled or dispatched to a device, so it
     never appears in coordinator.data["schedules"] and never spawns an HA
-    device/entity pair (see entity.py). "Applying" a template means
-    building a real Schedule from its device_type/rules plus
-    caller-supplied entities (see websocket.py's
-    websocket_create_schedule_from_template).
+    device/entity pair (see entity.py). "Applying" a template happens
+    entirely in the frontend, by pre-filling the schedule/rule editor from
+    this template's device_type/rules - there is no dedicated "create from
+    template" websocket command, since the manager should still get the
+    normal editor to review/adjust before saving.
     """
 
     id: str
     name: str
     device_type: DeviceType
     rules: list[Rule] = field(default_factory=list)
+    scope: TemplateScope = TemplateScope.SCHEDULE
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict for storage."""
@@ -273,14 +290,21 @@ class ScheduleTemplate:
             "name": self.name,
             "device_type": self.device_type.value,
             "rules": [rule.to_dict() for rule in self.rules],
+            "scope": self.scope.value,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ScheduleTemplate:
-        """Deserialize from a plain dict loaded from storage."""
+        """Deserialize from a plain dict loaded from storage.
+
+        `scope` uses `.get()` with a SCHEDULE default, since templates
+        saved before this field existed (schedule-only templates, at the
+        time) won't have it.
+        """
         return cls(
             id=data["id"],
             name=data["name"],
             device_type=DeviceType(data["device_type"]),
             rules=[Rule.from_dict(rule) for rule in data["rules"]],
+            scope=TemplateScope(data.get("scope", TemplateScope.SCHEDULE)),
         )

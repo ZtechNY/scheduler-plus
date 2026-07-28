@@ -37,7 +37,7 @@ from .const import (
     TimeProviderType,
 )
 from .coordinator import SchedulerPlusCoordinator
-from .models import Rule, RuleDateMode, Schedule, ScheduleTemplate, Weekday
+from .models import Rule, RuleDateMode, Schedule, ScheduleTemplate, TemplateScope, Weekday
 from .scheduler import SchedulerEngine
 from .storage import SchedulerPlusStoreData
 
@@ -162,6 +162,7 @@ _TEMPLATE_FIELDS = {
     vol.Required("name"): str,
     vol.Required("device_type"): vol.Coerce(DeviceType),
     vol.Optional("rules", default=list): [_RULE_SCHEMA],
+    vol.Optional("scope", default=TemplateScope.SCHEDULE): vol.Coerce(TemplateScope),
 }
 
 
@@ -223,6 +224,7 @@ def _build_template(template_id: str, msg: dict[str, Any]) -> ScheduleTemplate:
         name=msg["name"],
         device_type=msg["device_type"],
         rules=[Rule.from_dict(_prepare_rule_data(rule)) for rule in msg["rules"]],
+        scope=msg["scope"],
     )
 
 
@@ -746,72 +748,6 @@ async def websocket_delete_template(
     connection.send_result(msg["id"], {})
 
 
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): f"{DOMAIN}/create_schedule_from_template",
-        vol.Required("template_id"): str,
-        vol.Required("name"): str,
-        vol.Required("entities"): vol.All(
-            cv.ensure_list, [cv.entity_id], vol.Length(min=1)
-        ),
-    }
-)
-@websocket_api.async_response
-async def websocket_create_schedule_from_template(
-    hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
-    msg: dict[str, Any],
-) -> None:
-    """Create a new schedule from a saved template's device_type/rules.
-
-    Every rule gets a freshly generated id, never the template's own
-    stored rule ids - SchedulerEngine._unsub_rules is keyed by rule id
-    across *all* schedules, so two schedules created from the same
-    template would otherwise clobber each other's scheduled callbacks.
-    """
-    coordinator = _get_coordinator(hass)
-    if coordinator is None:
-        connection.send_error(
-            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
-        )
-        return
-
-    raw_template = next(
-        (t for t in coordinator.data["templates"] if t["id"] == msg["template_id"]),
-        None,
-    )
-    if raw_template is None:
-        connection.send_error(
-            msg["id"], websocket_api.ERR_NOT_FOUND, "Template not found"
-        )
-        return
-    template = ScheduleTemplate.from_dict(raw_template)
-
-    if mismatched := _mismatched_entities(template.device_type, msg["entities"]):
-        connection.send_error(
-            msg["id"],
-            websocket_api.ERR_INVALID_FORMAT,
-            f"Entities do not match device_type '{template.device_type.value}': "
-            f"{mismatched}",
-        )
-        return
-
-    schedule = Schedule(
-        id=str(uuid.uuid4()),
-        name=msg["name"],
-        device_type=template.device_type,
-        entities=list(msg["entities"]),
-        rules=[
-            Rule.from_dict({**rule.to_dict(), "id": str(uuid.uuid4())})
-            for rule in template.rules
-        ],
-    )
-    schedules = [*coordinator.data["schedules"], schedule.to_dict()]
-    await _async_persist(coordinator, schedules)
-
-    connection.send_result(msg["id"], {"schedule": schedule.to_dict()})
-
-
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all Scheduler+ websocket commands."""
     websocket_api.async_register_command(hass, websocket_list_schedules)
@@ -825,4 +761,3 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_list_templates)
     websocket_api.async_register_command(hass, websocket_create_template)
     websocket_api.async_register_command(hass, websocket_delete_template)
-    websocket_api.async_register_command(hass, websocket_create_schedule_from_template)

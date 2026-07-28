@@ -1,19 +1,19 @@
+import { mdiDelete } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, ScheduleTemplate } from "./api";
-import { fetchTemplates } from "./api";
+import { deleteTemplate, fetchTemplates } from "./api";
 import type { DeviceType, Rule } from "./types";
 
 /**
  * "Start from template", opened from the rule editor. Reuses the exact
  * same template storage as whole-schedule templates (scheduler_plus
- * templates) rather than a separate rule-template concept - a "rule
- * template" here is simply a saved template with exactly one rule, which
- * "Save as template" on the rule editor produces directly. Filtered to the
- * current rule's device_type (a light action wouldn't make sense applied
- * to a climate rule) and to single-rule templates only, since a multi-rule
- * template represents a whole schedule's setup, not one reusable rule.
+ * templates), filtered to scope="rule" (see TemplateScope in models.py)
+ * and the current rule's device_type - a light action wouldn't make sense
+ * applied to a climate rule, and a schedule-scoped template belongs in the
+ * card's "From template" list instead, never here. Since rule templates
+ * are never listed anywhere else, this is also where they're deleted from.
  */
 @customElement("scheduler-plus-rule-template-picker")
 export class SchedulerPlusRuleTemplatePicker extends LitElement {
@@ -49,7 +49,7 @@ export class SchedulerPlusRuleTemplatePicker extends LitElement {
     try {
       const templates = await fetchTemplates(this.hass);
       this._templates = templates.filter(
-        (template) => template.device_type === this._deviceType && template.rules.length === 1,
+        (template) => template.scope === "rule" && template.device_type === this._deviceType,
       );
     } catch (err) {
       this._error = err instanceof Error ? err.message : String(err);
@@ -65,6 +65,18 @@ export class SchedulerPlusRuleTemplatePicker extends LitElement {
     }
     this._onPick?.(rule);
     this._open = false;
+  };
+
+  private _deleteTemplateRow = async (template: ScheduleTemplate): Promise<void> => {
+    if (!window.confirm(`Delete template "${template.name}"?`)) {
+      return;
+    }
+    try {
+      await deleteTemplate(this.hass, template.id);
+      await this._load();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    }
   };
 
   protected override render() {
@@ -92,8 +104,8 @@ export class SchedulerPlusRuleTemplatePicker extends LitElement {
     if (this._templates.length === 0) {
       return html`
         <div class="placeholder">
-          No single-rule templates saved yet for this device type. Save one
-          from a rule's editor with "Save as template".
+          No rule templates saved yet for this device type. Save one from a
+          rule's editor with "Save as template".
         </div>
       `;
     }
@@ -103,7 +115,16 @@ export class SchedulerPlusRuleTemplatePicker extends LitElement {
           (template) => html`
             <li class="template">
               <span class="template-name">${template.name}</span>
-              <button type="button" class="btn" @click=${() => this._pick(template)}>Use</button>
+              <div class="row-actions">
+                <button type="button" class="btn" @click=${() => this._pick(template)}>
+                  Use
+                </button>
+                <ha-icon-button
+                  .path=${mdiDelete}
+                  label="Delete template"
+                  @click=${() => this._deleteTemplateRow(template)}
+                ></ha-icon-button>
+              </div>
             </li>
           `,
         )}
@@ -150,6 +171,11 @@ export class SchedulerPlusRuleTemplatePicker extends LitElement {
     }
     .template-name {
       font-weight: 500;
+    }
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
     .dialog-actions {
       display: flex;

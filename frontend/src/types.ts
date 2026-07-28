@@ -37,6 +37,15 @@ export const DEVICE_TYPE_DOMAINS: Record<DeviceType, string[]> = {
 export const ALL_DEVICE_DOMAINS: readonly string[] = ["light", "climate", "switch"];
 
 /**
+ * Whether a ScheduleTemplate represents one reusable rule or a whole
+ * schedule's rule set - see models.py's TemplateScope. Purely a display/
+ * filtering tag: "rule" templates only ever show in the rule editor's
+ * "Start from template" picker, "schedule" templates only in the card's
+ * "From template" list - the two never mix.
+ */
+export type TemplateScope = "rule" | "schedule";
+
+/**
  * Climate "on" HVAC modes a rule can select. "off" is deliberately
  * excluded - a rule's off_time already turns the entity off via
  * ClimateDeviceHandler.async_turn_off, so it's never a meaningful

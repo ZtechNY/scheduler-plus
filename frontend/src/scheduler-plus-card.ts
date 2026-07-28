@@ -12,7 +12,7 @@ import {
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
-import type { HomeAssistant } from "./api";
+import type { HomeAssistant, ScheduleTemplate } from "./api";
 import { deleteSchedule, fetchSchedules, toScheduleInput, updateSchedule } from "./api";
 import "./apply-template-dialog";
 import type { SchedulerPlusApplyTemplateDialog } from "./apply-template-dialog";
@@ -286,6 +286,12 @@ export class SchedulerPlusCard extends LitElement {
     this._applyTemplateDialog?.showDialog();
   };
 
+  /** Opens the full schedule editor pre-filled from a picked template, rather than
+   *  creating the schedule sight-unseen - see apply-template-dialog.ts. */
+  private _handleUseTemplate = (e: CustomEvent<{ template: ScheduleTemplate }>): void => {
+    this._editor?.showDialogFromTemplate(e.detail.template);
+  };
+
   protected override render() {
     return html`
       <ha-card>
@@ -341,8 +347,7 @@ export class SchedulerPlusCard extends LitElement {
       ></scheduler-plus-quick-event-dialog>
       <scheduler-plus-apply-template-dialog
         .hass=${this.hass}
-        .entityFilter=${this._config?.entities}
-        @schedule-plus-saved=${this._refresh}
+        @scheduler-plus-use-template=${this._handleUseTemplate}
       ></scheduler-plus-apply-template-dialog>
     `;
   }

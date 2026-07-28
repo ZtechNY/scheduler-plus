@@ -4,7 +4,15 @@
  * `hass.callWS()` message directly.
  */
 
-import type { Action, DeviceType, Rule, RuleDateMode, Schedule, Weekday } from "./types";
+import type {
+  Action,
+  DeviceType,
+  Rule,
+  RuleDateMode,
+  Schedule,
+  TemplateScope,
+  Weekday,
+} from "./types";
 
 /** The minimal shape of one entity's state, as found in `hass.states`. */
 export interface HassEntityState {
@@ -180,21 +188,24 @@ export async function fetchWeekSchedule(
 }
 
 /**
- * A reusable, entity-agnostic set of rules a manager can apply to a new
- * schedule ("Save as template" / "New from template"). Has no
- * entities/enabled of its own - see ScheduleTemplate in models.py.
+ * A reusable, entity-agnostic set of rules a manager can save and reapply
+ * later ("Save as template" / "From template" / "Start from template").
+ * Has no entities/enabled of its own - see ScheduleTemplate in models.py.
+ * `scope` determines which of the two pickers it shows up in.
  */
 export interface ScheduleTemplate {
   id: string;
   name: string;
   device_type: DeviceType;
   rules: Rule[];
+  scope: TemplateScope;
 }
 
 export interface TemplateInput {
   name: string;
   device_type: DeviceType;
   rules?: RuleInput[];
+  scope: TemplateScope;
 }
 
 export async function fetchTemplates(hass: HomeAssistant): Promise<ScheduleTemplate[]> {
@@ -222,17 +233,3 @@ export async function deleteTemplate(hass: HomeAssistant, templateId: string): P
   });
 }
 
-export async function createScheduleFromTemplate(
-  hass: HomeAssistant,
-  templateId: string,
-  name: string,
-  entities: string[],
-): Promise<Schedule> {
-  const result = await hass.callWS<{ schedule: Schedule }>({
-    type: `${DOMAIN}/create_schedule_from_template`,
-    template_id: templateId,
-    name,
-    entities,
-  });
-  return result.schedule;
-}
