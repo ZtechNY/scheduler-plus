@@ -1,9 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 
 import type { HomeAssistant, Preferences, RuleInput } from "./api";
 import { fetchPreferences } from "./api";
-import type { Action, DayConditionType, DeviceType, RuleDateMode, TimeSpec, Weekday } from "./types";
+import "./rule-template-picker-dialog";
+import type { SchedulerPlusRuleTemplatePicker } from "./rule-template-picker-dialog";
+import "./template-editor-dialog";
+import type { SchedulerPlusTemplateEditor } from "./template-editor-dialog";
+import type { Action, DayConditionType, DeviceType, Rule, RuleDateMode, TimeSpec, Weekday } from "./types";
 import {
   CLIMATE_HVAC_MODES,
   CLIMATE_HVAC_MODE_LABELS,
@@ -157,6 +161,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   private _onSave?: (rule: RuleInput) => void;
 
+  @query("scheduler-plus-template-editor")
+  private _templateEditor?: SchedulerPlusTemplateEditor;
+
+  @query("scheduler-plus-rule-template-picker")
+  private _templatePicker?: SchedulerPlusRuleTemplatePicker;
+
   public showDialog(options: {
     deviceType: DeviceType;
     rule?: RuleInput;
@@ -167,7 +177,21 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._rule = rule;
     this._onSave = onSave;
     void this._loadPreferences();
+    this._hydrateFromRule(rule);
+    this._error = undefined;
+    this._open = true;
+  }
 
+  /**
+   * Populates every field from `rule` (or defaults, if undefined) - shared
+   * by showDialog (opening for add/edit) and _applyRuleTemplate (rewriting
+   * the form in place once a template is picked mid-edit). Deliberately
+   * does not touch `_rule`/`_onSave`: picking a template should replace
+   * this rule's contents, not detach it from whichever existing rule it
+   * was opened to edit (its id, and the onSave it'll be committed through,
+   * must stay put).
+   */
+  private _hydrateFromRule(rule: RuleInput | undefined): void {
     this._name = rule?.name ?? "";
     this._enabled = rule?.enabled ?? true;
     this._days = rule ? [...rule.days] : [];
@@ -183,23 +207,28 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
 
-    if (deviceType === "light" || deviceType === "light_switch") {
+    if (this._deviceType === "light" || this._deviceType === "light_switch") {
       this._setBrightness = rule?.action.brightness !== undefined;
       const brightness = (rule?.action.brightness as number | undefined) ?? 255;
       this._brightnessPct = Math.round((brightness / 255) * 100);
       this._useTransition = rule?.action.transition !== undefined;
       this._transitionSeconds = (rule?.action.transition as number | undefined) ?? 0;
-    } else if (deviceType === "climate") {
+    } else if (this._deviceType === "climate") {
       this._hvacMode = (rule?.action.hvac_mode as string | undefined) ?? "heat";
       this._useTargetTemperature = rule?.action.target_temperature !== undefined;
       this._targetTemperature = (rule?.action.target_temperature as number | undefined) ?? 70;
     }
     // Switches have no action-specific state to populate - Rule.action is
     // always {} for a switch rule.
-
-    this._error = undefined;
-    this._open = true;
   }
+
+  private _applyRuleTemplate = (rule: Rule): void => {
+    this._hydrateFromRule(rule);
+  };
+
+  private _openTemplatePicker = (): void => {
+    this._templatePicker?.showDialog(this._deviceType, this._applyRuleTemplate);
+  };
 
   private async _loadPreferences(): Promise<void> {
     try {
@@ -307,15 +336,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
       : [...this._dayConditions, condition];
   };
 
-  private _save = (): void => {
-    const name = this._name.trim();
-    if (!name) {
-      this._error = "Name is required.";
-      return;
+  /** Returns an error message if the current form state isn't saveable, else null. */
+  private _validate(): string | null {
+    if (!this._name.trim()) {
+      return "Name is required.";
     }
     if (this._dateMode !== "include" && this._days.length === 0) {
-      this._error = "At least one day is required.";
-      return;
+      return "At least one day is required.";
     }
     if (
       this._dateMode !== "always" &&
@@ -323,14 +350,16 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._dateRanges.length === 0 &&
       this._dayConditions.length === 0
     ) {
-      this._error = "At least one date, date range, or special condition is required.";
-      return;
+      return "At least one date, date range, or special condition is required.";
     }
     if (!this._onEnabled && !this._offEnabled) {
-      this._error = "At least one of On time or Off time must be enabled.";
-      return;
+      return "At least one of On time or Off time must be enabled.";
     }
+    return null;
+  }
 
+  /** Builds the RuleInput from current form state - assumes _validate() already passed. */
+  private _buildRuleInput(): RuleInput {
     let action: Action = {};
     if (this._deviceType === "light" || this._deviceType === "light_switch") {
       action = {
@@ -347,9 +376,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     // Switches have no action - action stays {}.
 
-    this._onSave?.({
+    return {
       id: this._rule?.id,
-      name,
+      name: this._name.trim(),
       enabled: this._enabled,
       days: this._days,
       date_mode: this._dateMode,
@@ -361,8 +390,26 @@ export class SchedulerPlusRuleEditor extends LitElement {
       on_enabled: this._onEnabled,
       off_enabled: this._offEnabled,
       action,
-    });
+    };
+  }
+
+  private _save = (): void => {
+    const error = this._validate();
+    if (error) {
+      this._error = error;
+      return;
+    }
+    this._onSave?.(this._buildRuleInput());
     this._open = false;
+  };
+
+  private _openSaveAsTemplate = (): void => {
+    const error = this._validate();
+    if (error) {
+      this._error = error;
+      return;
+    }
+    this._templateEditor?.showDialog(this._deviceType, [this._buildRuleInput()]);
   };
 
   protected override render() {
@@ -374,6 +421,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
         <div class="form">
           <div class="dialog-title">${this._rule ? "Edit rule" : "Add rule"}</div>
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
+
+          <button type="button" class="btn" @click=${this._openTemplatePicker}>
+            Start from template
+          </button>
 
           <section class="section">
             <label class="field-label" for="rule-name">Name</label>
@@ -582,11 +633,19 @@ export class SchedulerPlusRuleEditor extends LitElement {
           </section>
 
           <div class="dialog-actions">
+            <button type="button" class="btn" @click=${this._openSaveAsTemplate}>
+              Save as template
+            </button>
+            <span class="spacer"></span>
             <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
             <button type="button" class="btn btn-primary" @click=${this._save}>Save</button>
           </div>
         </div>
       </ha-dialog>
+      <scheduler-plus-template-editor .hass=${this.hass}></scheduler-plus-template-editor>
+      <scheduler-plus-rule-template-picker
+        .hass=${this.hass}
+      ></scheduler-plus-rule-template-picker>
     `;
   }
 
@@ -850,10 +909,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     .dialog-actions {
       display: flex;
+      align-items: center;
       justify-content: flex-end;
       gap: 8px;
       padding-top: 8px;
       border-top: 1px solid var(--divider-color);
+    }
+    .spacer {
+      flex: 1;
     }
     .btn {
       font: inherit;

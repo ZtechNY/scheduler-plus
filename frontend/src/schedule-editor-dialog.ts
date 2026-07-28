@@ -124,7 +124,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._entities = schedule ? [...schedule.entities] : [];
     this._rules = schedule ? schedule.rules.map((rule) => ({ ...rule })) : [];
     this._activeDateMode = schedule?.active_date_mode ?? "always";
-    this._activeDateRanges = schedule ? [...schedule.active_date_ranges] : [];
+    this._activeDateRanges = schedule?.active_date_ranges ? [...schedule.active_date_ranges] : [];
     this._newActiveRangeStart = "";
     this._newActiveRangeEnd = "";
     this._error = undefined;
@@ -148,8 +148,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       const { id: _id, ...rest } = rule;
       return { ...rest };
     });
-    this._activeDateMode = schedule.active_date_mode;
-    this._activeDateRanges = [...schedule.active_date_ranges];
+    this._activeDateMode = schedule.active_date_mode ?? "always";
+    this._activeDateRanges = schedule.active_date_ranges ? [...schedule.active_date_ranges] : [];
     this._newActiveRangeStart = "";
     this._newActiveRangeEnd = "";
     this._error = undefined;
