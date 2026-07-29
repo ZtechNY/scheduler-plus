@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import type { HomeAssistant, Preferences } from "./api";
+import type { HomeAssistant, UserPreferences } from "./api";
 import { fetchPreferences, updatePreferences } from "./api";
 import type { Weekday } from "./types";
 import { WEEKDAYS, WEEKDAY_LABELS } from "./types";
@@ -89,7 +89,7 @@ export class SchedulerPlusPreferences extends LitElement {
     this._saving = true;
     this._error = undefined;
     try {
-      const preferences: Preferences = {
+      const preferences: UserPreferences = {
         weekday_days: this._weekdayDays,
         weekend_days: this._weekendDays,
         working_hours_start: this._workingHoursStart,

@@ -16,7 +16,9 @@
           "weekday_days": "Weekday days",
           "weekend_days": "Weekend days",
           "working_hours_start": "Working hours start",
-          "working_hours_end": "Working hours end"
+          "working_hours_end": "Working hours end",
+          "enable_brightness": "Allow brightness control in light rules",
+          "enable_fade_in": "Allow fade-in transitions in light rules"
         }
       }
     }

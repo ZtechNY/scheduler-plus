@@ -1206,7 +1206,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn-primary:hover {
       filter: brightness(0.95);
     }
-  `,e([m({attribute:!1})],B.prototype,"hass",2),e([i()],B.prototype,"_open",2),e([i()],B.prototype,"_name",2),e([i()],B.prototype,"_saving",2),e([i()],B.prototype,"_error",2),B=e([x("scheduler-plus-template-editor")],B);var Q2={weekday_days:["mon","tue","wed","thu","fri"],weekend_days:["sat","sun"],working_hours_start:"09:00",working_hours_end:"17:00"},F1=[{key:"fixed",label:G.fixed,makeSpec:()=>({provider:"fixed",params:{time:"06:00"}}),matches:L=>L.provider==="fixed"},{key:"sunrise",label:G.sunrise,makeSpec:()=>({provider:"sunrise",params:{offset_minutes:0}}),matches:L=>L.provider==="sunrise"},{key:"sunset",label:G.sunset,makeSpec:()=>({provider:"sunset",params:{offset_minutes:0}}),matches:L=>L.provider==="sunset"},...v2.map(L=>({key:`yidcal:${L}`,label:c1[L],makeSpec:()=>({provider:"yidcal",params:{zman:L,offset_minutes:0}}),matches:V=>V.provider==="yidcal"&&V.params.zman===L}))];function X(L){let V=new Date(`${L}T00:00:00`);return Number.isNaN(V.getTime())?L:V.toLocaleDateString(void 0,{month:"short",day:"numeric",year:"numeric"})}var p=class extends n{constructor(){super(...arguments);this._open=!1;this._preferences=Q2;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._dateMode="always";this._dates=[];this._newDate="";this._dateRanges=[];this._newRangeStart="";this._newRangeEnd="";this._dayConditions=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._onEnabled=!0;this._offEnabled=!0;this._setBrightness=!1;this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._applyRuleTemplate=C=>{this._hydrateFromRule(C)};this._openTemplatePicker=()=>{this._templatePicker?.showDialog(this._deviceType,this._applyRuleTemplate)};this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(H=>H!==C):[...this._days,C]};this._applyDayPreset=C=>{this._days=[...C]};this._applyAfterHoursPreset=()=>{this._days=[...f],this._onTime={provider:"fixed",params:{time:this._preferences.working_hours_end.slice(0,5)}},this._offTime={provider:"fixed",params:{time:this._preferences.working_hours_start.slice(0,5)}}};this._handleDateModeChange=C=>{let H=C.target.value;this._dateMode=H,H==="include"&&(this._days=[...f])};this._addDate=()=>{!this._newDate||this._dates.includes(this._newDate)||(this._dates=[...this._dates,this._newDate].sort(),this._newDate="")};this._removeDate=C=>{this._dates=this._dates.filter(H=>H!==C)};this._addDateRange=()=>{!this._newRangeStart||!this._newRangeEnd||this._newRangeStart>this._newRangeEnd||(this._dateRanges=[...this._dateRanges,[this._newRangeStart,this._newRangeEnd]],this._newRangeStart="",this._newRangeEnd="")};this._removeDateRange=C=>{this._dateRanges=this._dateRanges.filter(H=>H[0]!==C[0]||H[1]!==C[1])};this._toggleDayCondition=C=>{this._dayConditions=this._dayConditions.includes(C)?this._dayConditions.filter(H=>H!==C):[...this._dayConditions,C]};this._save=()=>{let C=this._validate();if(C){this._error=C;return}this._onSave?.(this._buildRuleInput()),this._open=!1};this._openSaveAsTemplate=()=>{let C=this._validate();if(C){this._error=C;return}this._templateEditor?.showDialog(this._deviceType,[this._buildRuleInput()],"rule")}}showDialog(C){let{deviceType:H,rule:M,onSave:r}=C;this._deviceType=H,this._rule=M,this._onSave=r,this._loadPreferences(),this._hydrateFromRule(M),this._error=void 0,this._open=!0}_hydrateFromRule(C){if(this._name=C?.name??"",this._enabled=C?.enabled??!0,this._days=C?[...C.days]:[],this._dateMode=C?.date_mode??"always",this._dates=C?[...C.dates]:[],this._newDate="",this._dateRanges=C?C.date_ranges.map(([H,M])=>[H,M]):[],this._newRangeStart="",this._newRangeEnd="",this._dayConditions=C?[...C.day_conditions]:[],this._onTime=C?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=C?.off_time??{provider:"fixed",params:{time:"21:00"}},this._onEnabled=C?.on_enabled??!0,this._offEnabled=C?.off_enabled??!0,this._deviceType==="light"||this._deviceType==="light_switch"){this._setBrightness=C?.action.brightness!==void 0;let H=C?.action.brightness??255;this._brightnessPct=Math.round(H/255*100),this._useTransition=C?.action.transition!==void 0,this._transitionSeconds=C?.action.transition??0}else this._deviceType==="climate"&&(this._hvacMode=C?.action.hvac_mode??"heat",this._useTargetTemperature=C?.action.target_temperature!==void 0,this._targetTemperature=C?.action.target_temperature??70)}async _loadPreferences(){try{this._preferences=await v1(this.hass)}catch{}}_summarizeDateFilter(){let C=[...this._dates.map(H=>X(H)),...this._dateRanges.map(([H,M])=>`${X(H)}\u2013${X(M)}`),...this._dayConditions.map(H=>i1[H])];return this._dateMode==="include"?C.length===0?"Nothing selected yet - as configured, this rule will never run.":`Runs only when it's ${C.join(", ")} - the Days above are ignored.`:C.length===0?"Nothing excluded yet - this behaves the same as \u201CAlways\u201D.":`Runs on the Days above as usual, except when it's ${C.join(", ")}.`}_validate(){return this._name.trim()?this._dateMode!=="include"&&this._days.length===0?"At least one day is required.":this._dateMode!=="always"&&this._dates.length===0&&this._dateRanges.length===0&&this._dayConditions.length===0?"At least one date, date range, or special condition is required.":!this._onEnabled&&!this._offEnabled?"At least one of On time or Off time must be enabled.":null:"Name is required."}_buildRuleInput(){let C={};return this._deviceType==="light"||this._deviceType==="light_switch"?C={...this._setBrightness?{brightness:Math.round(this._brightnessPct/100*255)}:{},...this._useTransition?{transition:this._transitionSeconds}:{}}:this._deviceType==="climate"&&(C={hvac_mode:this._hvacMode,...this._useTargetTemperature?{target_temperature:this._targetTemperature}:{}}),{id:this._rule?.id,name:this._name.trim(),enabled:this._enabled,days:this._days,date_mode:this._dateMode,dates:this._dates,date_ranges:this._dateRanges,day_conditions:this._dayConditions,on_time:this._onTime,off_time:this._offTime,on_enabled:this._onEnabled,off_enabled:this._offEnabled,action:C}}render(){return this._open?t`
+  `,e([m({attribute:!1})],B.prototype,"hass",2),e([i()],B.prototype,"_open",2),e([i()],B.prototype,"_name",2),e([i()],B.prototype,"_saving",2),e([i()],B.prototype,"_error",2),B=e([x("scheduler-plus-template-editor")],B);var Q2={weekday_days:["mon","tue","wed","thu","fri"],weekend_days:["sat","sun"],working_hours_start:"09:00",working_hours_end:"17:00",enable_brightness:!0,enable_fade_in:!0},F1=[{key:"fixed",label:G.fixed,makeSpec:()=>({provider:"fixed",params:{time:"06:00"}}),matches:L=>L.provider==="fixed"},{key:"sunrise",label:G.sunrise,makeSpec:()=>({provider:"sunrise",params:{offset_minutes:0}}),matches:L=>L.provider==="sunrise"},{key:"sunset",label:G.sunset,makeSpec:()=>({provider:"sunset",params:{offset_minutes:0}}),matches:L=>L.provider==="sunset"},...v2.map(L=>({key:`yidcal:${L}`,label:c1[L],makeSpec:()=>({provider:"yidcal",params:{zman:L,offset_minutes:0}}),matches:V=>V.provider==="yidcal"&&V.params.zman===L}))];function X(L){let V=new Date(`${L}T00:00:00`);return Number.isNaN(V.getTime())?L:V.toLocaleDateString(void 0,{month:"short",day:"numeric",year:"numeric"})}var p=class extends n{constructor(){super(...arguments);this._open=!1;this._preferences=Q2;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._dateMode="always";this._dates=[];this._newDate="";this._dateRanges=[];this._newRangeStart="";this._newRangeEnd="";this._dayConditions=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._onEnabled=!0;this._offEnabled=!0;this._setBrightness=!1;this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._applyRuleTemplate=C=>{this._hydrateFromRule(C)};this._openTemplatePicker=()=>{this._templatePicker?.showDialog(this._deviceType,this._applyRuleTemplate)};this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(H=>H!==C):[...this._days,C]};this._applyDayPreset=C=>{this._days=[...C]};this._applyAfterHoursPreset=()=>{this._days=[...f],this._onTime={provider:"fixed",params:{time:this._preferences.working_hours_end.slice(0,5)}},this._offTime={provider:"fixed",params:{time:this._preferences.working_hours_start.slice(0,5)}}};this._handleDateModeChange=C=>{let H=C.target.value;this._dateMode=H,H==="include"&&(this._days=[...f])};this._addDate=()=>{!this._newDate||this._dates.includes(this._newDate)||(this._dates=[...this._dates,this._newDate].sort(),this._newDate="")};this._removeDate=C=>{this._dates=this._dates.filter(H=>H!==C)};this._addDateRange=()=>{!this._newRangeStart||!this._newRangeEnd||this._newRangeStart>this._newRangeEnd||(this._dateRanges=[...this._dateRanges,[this._newRangeStart,this._newRangeEnd]],this._newRangeStart="",this._newRangeEnd="")};this._removeDateRange=C=>{this._dateRanges=this._dateRanges.filter(H=>H[0]!==C[0]||H[1]!==C[1])};this._toggleDayCondition=C=>{this._dayConditions=this._dayConditions.includes(C)?this._dayConditions.filter(H=>H!==C):[...this._dayConditions,C]};this._save=()=>{let C=this._validate();if(C){this._error=C;return}this._onSave?.(this._buildRuleInput()),this._open=!1};this._openSaveAsTemplate=()=>{let C=this._validate();if(C){this._error=C;return}this._templateEditor?.showDialog(this._deviceType,[this._buildRuleInput()],"rule")}}showDialog(C){let{deviceType:H,rule:M,onSave:r}=C;this._deviceType=H,this._rule=M,this._onSave=r,this._loadPreferences(),this._hydrateFromRule(M),this._error=void 0,this._open=!0}_hydrateFromRule(C){if(this._name=C?.name??"",this._enabled=C?.enabled??!0,this._days=C?[...C.days]:[],this._dateMode=C?.date_mode??"always",this._dates=C?[...C.dates]:[],this._newDate="",this._dateRanges=C?C.date_ranges.map(([H,M])=>[H,M]):[],this._newRangeStart="",this._newRangeEnd="",this._dayConditions=C?[...C.day_conditions]:[],this._onTime=C?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=C?.off_time??{provider:"fixed",params:{time:"21:00"}},this._onEnabled=C?.on_enabled??!0,this._offEnabled=C?.off_enabled??!0,this._deviceType==="light"||this._deviceType==="light_switch"){this._setBrightness=C?.action.brightness!==void 0;let H=C?.action.brightness??255;this._brightnessPct=Math.round(H/255*100),this._useTransition=C?.action.transition!==void 0,this._transitionSeconds=C?.action.transition??0}else this._deviceType==="climate"&&(this._hvacMode=C?.action.hvac_mode??"heat",this._useTargetTemperature=C?.action.target_temperature!==void 0,this._targetTemperature=C?.action.target_temperature??70)}async _loadPreferences(){try{this._preferences=await v1(this.hass)}catch{}}_summarizeDateFilter(){let C=[...this._dates.map(H=>X(H)),...this._dateRanges.map(([H,M])=>`${X(H)}\u2013${X(M)}`),...this._dayConditions.map(H=>i1[H])];return this._dateMode==="include"?C.length===0?"Nothing selected yet - as configured, this rule will never run.":`Runs only when it's ${C.join(", ")} - the Days above are ignored.`:C.length===0?"Nothing excluded yet - this behaves the same as \u201CAlways\u201D.":`Runs on the Days above as usual, except when it's ${C.join(", ")}.`}_validate(){return this._name.trim()?this._dateMode!=="include"&&this._days.length===0?"At least one day is required.":this._dateMode!=="always"&&this._dates.length===0&&this._dateRanges.length===0&&this._dayConditions.length===0?"At least one date, date range, or special condition is required.":!this._onEnabled&&!this._offEnabled?"At least one of On time or Off time must be enabled.":null:"Name is required."}_buildRuleInput(){let C={};return this._deviceType==="light"||this._deviceType==="light_switch"?C={...this._setBrightness?{brightness:Math.round(this._brightnessPct/100*255)}:{},...this._useTransition?{transition:this._transitionSeconds}:{}}:this._deviceType==="climate"&&(C={hvac_mode:this._hvacMode,...this._useTargetTemperature?{target_temperature:this._targetTemperature}:{}}),{id:this._rule?.id,name:this._name.trim(),enabled:this._enabled,days:this._days,date_mode:this._dateMode,dates:this._dates,date_ranges:this._dateRanges,day_conditions:this._dayConditions,on_time:this._onTime,off_time:this._offTime,on_enabled:this._onEnabled,off_enabled:this._offEnabled,action:C}}render(){return this._open?t`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">${this._rule?"Edit rule":"Add rule"}</div>
@@ -1437,47 +1437,50 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     `}_renderActionFields(){return this._deviceType==="light"||this._deviceType==="light_switch"?this._renderLightAction():this._deviceType==="climate"?this._renderClimateAction():t`
       <span class="hint">Switches just turn on and off - nothing else to configure.</span>
     `}_renderLightAction(){return t`
-      <ha-formfield label="Set brightness">
-        <ha-switch
-          .checked=${this._setBrightness}
-          @change=${C=>{this._setBrightness=C.target.checked}}
-        ></ha-switch>
-      </ha-formfield>
-      <span class="hint">
-        Off by default - the light just turns on at whatever brightness it
-        was last set to.
-      </span>
-      ${this._setBrightness?t`
-            <label class="field-label">Brightness (${this._brightnessPct}%)</label>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              class="native-input"
-              .value=${String(this._brightnessPct)}
-              @input=${C=>{this._brightnessPct=Number(C.target.value)}}
-            />
+      ${this._preferences.enable_brightness?t`
+            <ha-formfield label="Set brightness">
+              <ha-switch
+                .checked=${this._setBrightness}
+                @change=${C=>{this._setBrightness=C.target.checked}}
+              ></ha-switch>
+            </ha-formfield>
+            <span class="hint">
+              Off by default - the light just turns on at whatever brightness it
+              was last set to.
+            </span>
+            ${this._setBrightness?t`
+                  <label class="field-label">Brightness (${this._brightnessPct}%)</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    class="native-input"
+                    .value=${String(this._brightnessPct)}
+                    @input=${C=>{this._brightnessPct=Number(C.target.value)}}
+                  />
+                `:A}
           `:A}
-
-      <ha-formfield label="Fade in gradually">
-        <ha-switch
-          .checked=${this._useTransition}
-          @change=${C=>{this._useTransition=C.target.checked}}
-        ></ha-switch>
-      </ha-formfield>
-      <span class="hint">
-        Instead of snapping on instantly, the light ramps up to its target
-        level over the given number of seconds.
-      </span>
-      ${this._useTransition?t`
-            <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
-            <input
-              id="fade-duration"
-              type="number"
-              class="native-input"
-              .value=${String(this._transitionSeconds)}
-              @input=${C=>{this._transitionSeconds=Number(C.target.value)||0}}
-            />
+      ${this._preferences.enable_fade_in?t`
+            <ha-formfield label="Fade in gradually">
+              <ha-switch
+                .checked=${this._useTransition}
+                @change=${C=>{this._useTransition=C.target.checked}}
+              ></ha-switch>
+            </ha-formfield>
+            <span class="hint">
+              Instead of snapping on instantly, the light ramps up to its target
+              level over the given number of seconds.
+            </span>
+            ${this._useTransition?t`
+                  <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
+                  <input
+                    id="fade-duration"
+                    type="number"
+                    class="native-input"
+                    .value=${String(this._transitionSeconds)}
+                    @input=${C=>{this._transitionSeconds=Number(C.target.value)||0}}
+                  />
+                `:A}
           `:A}
     `}_renderClimateAction(){return t`
       <label class="field-label" for="hvac-mode">HVAC mode</label>

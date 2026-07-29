@@ -11,10 +11,14 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ENABLE_BRIGHTNESS,
+    CONF_ENABLE_FADE_IN,
     CONF_WEEKDAY_DAYS,
     CONF_WEEKEND_DAYS,
     CONF_WORKING_HOURS_END,
     CONF_WORKING_HOURS_START,
+    DEFAULT_ENABLE_BRIGHTNESS,
+    DEFAULT_ENABLE_FADE_IN,
     DEFAULT_WEEKDAY_DAYS,
     DEFAULT_WEEKEND_DAYS,
     DEFAULT_WORKING_HOURS_END,
@@ -70,12 +74,15 @@ class SchedulerPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class SchedulerPlusOptionsFlow(OptionsFlow):
-    """Handle Scheduler+'s options: weekday/weekend split and working hours.
+    """Handle Scheduler+'s options: scheduling preferences and feature toggles.
 
     Reachable via Settings > Devices & Services > Scheduler+ > Configure.
-    These are scheduling *preferences* the frontend's rule editor reads to
-    power its Weekdays/Weekend/After hours quick-fill presets - not schedule
-    data itself.
+    The weekday/weekend/working-hours fields power the frontend rule
+    editor's Weekdays/Weekend/After hours quick-fill presets. The
+    enable_brightness/enable_fade_in fields are org-wide feature toggles -
+    unlike the presets, there's no per-user override for these - that
+    control whether the rule editor's brightness/fade-in controls appear
+    at all for light rules.
     """
 
     async def async_step_init(
@@ -124,6 +131,16 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
                         CONF_WORKING_HOURS_END, DEFAULT_WORKING_HOURS_END
                     ),
                 ): selector.TimeSelector(),
+                vol.Required(
+                    CONF_ENABLE_BRIGHTNESS,
+                    default=options.get(
+                        CONF_ENABLE_BRIGHTNESS, DEFAULT_ENABLE_BRIGHTNESS
+                    ),
+                ): selector.BooleanSelector(),
+                vol.Required(
+                    CONF_ENABLE_FADE_IN,
+                    default=options.get(CONF_ENABLE_FADE_IN, DEFAULT_ENABLE_FADE_IN),
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -83,3 +83,14 @@ DEFAULT_WEEKDAY_DAYS: Final[list[str]] = ["mon", "tue", "wed", "thu", "fri"]
 DEFAULT_WEEKEND_DAYS: Final[list[str]] = ["sat", "sun"]
 DEFAULT_WORKING_HOURS_START: Final = "09:00"
 DEFAULT_WORKING_HOURS_END: Final = "17:00"
+
+# Org-wide feature toggles for the light rule editor's optional action
+# controls (brightness, fade-in transition). Unlike the preferences above,
+# these have no per-user override - they're a single admin-controlled
+# switch for the whole installation, gating whether the corresponding
+# control even appears in the rule editor at all.
+CONF_ENABLE_BRIGHTNESS: Final = "enable_brightness"
+CONF_ENABLE_FADE_IN: Final = "enable_fade_in"
+
+DEFAULT_ENABLE_BRIGHTNESS: Final = True
+DEFAULT_ENABLE_FADE_IN: Final = True

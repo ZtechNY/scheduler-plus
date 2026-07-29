@@ -33,6 +33,8 @@ const DEFAULT_PREFERENCES: Preferences = {
   weekend_days: ["sat", "sun"],
   working_hours_start: "09:00",
   working_hours_end: "17:00",
+  enable_brightness: true,
+  enable_fade_in: true,
 };
 
 /**
@@ -737,59 +739,66 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   private _renderLightAction() {
     return html`
-      <ha-formfield label="Set brightness">
-        <ha-switch
-          .checked=${this._setBrightness}
-          @change=${(e: Event) => {
-            this._setBrightness = (e.target as HTMLInputElement).checked;
-          }}
-        ></ha-switch>
-      </ha-formfield>
-      <span class="hint">
-        Off by default - the light just turns on at whatever brightness it
-        was last set to.
-      </span>
-      ${this._setBrightness
+      ${this._preferences.enable_brightness
         ? html`
-            <label class="field-label">Brightness (${this._brightnessPct}%)</label>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              class="native-input"
-              .value=${String(this._brightnessPct)}
-              @input=${(e: Event) => {
-                this._brightnessPct = Number((e.target as HTMLInputElement).value);
-              }}
-            />
+            <ha-formfield label="Set brightness">
+              <ha-switch
+                .checked=${this._setBrightness}
+                @change=${(e: Event) => {
+                  this._setBrightness = (e.target as HTMLInputElement).checked;
+                }}
+              ></ha-switch>
+            </ha-formfield>
+            <span class="hint">
+              Off by default - the light just turns on at whatever brightness it
+              was last set to.
+            </span>
+            ${this._setBrightness
+              ? html`
+                  <label class="field-label">Brightness (${this._brightnessPct}%)</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    class="native-input"
+                    .value=${String(this._brightnessPct)}
+                    @input=${(e: Event) => {
+                      this._brightnessPct = Number((e.target as HTMLInputElement).value);
+                    }}
+                  />
+                `
+              : nothing}
           `
         : nothing}
-
-      <ha-formfield label="Fade in gradually">
-        <ha-switch
-          .checked=${this._useTransition}
-          @change=${(e: Event) => {
-            this._useTransition = (e.target as HTMLInputElement).checked;
-          }}
-        ></ha-switch>
-      </ha-formfield>
-      <span class="hint">
-        Instead of snapping on instantly, the light ramps up to its target
-        level over the given number of seconds.
-      </span>
-      ${this._useTransition
+      ${this._preferences.enable_fade_in
         ? html`
-            <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
-            <input
-              id="fade-duration"
-              type="number"
-              class="native-input"
-              .value=${String(this._transitionSeconds)}
-              @input=${(e: Event) => {
-                this._transitionSeconds =
-                  Number((e.target as HTMLInputElement).value) || 0;
-              }}
-            />
+            <ha-formfield label="Fade in gradually">
+              <ha-switch
+                .checked=${this._useTransition}
+                @change=${(e: Event) => {
+                  this._useTransition = (e.target as HTMLInputElement).checked;
+                }}
+              ></ha-switch>
+            </ha-formfield>
+            <span class="hint">
+              Instead of snapping on instantly, the light ramps up to its target
+              level over the given number of seconds.
+            </span>
+            ${this._useTransition
+              ? html`
+                  <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
+                  <input
+                    id="fade-duration"
+                    type="number"
+                    class="native-input"
+                    .value=${String(this._transitionSeconds)}
+                    @input=${(e: Event) => {
+                      this._transitionSeconds =
+                        Number((e.target as HTMLInputElement).value) || 0;
+                    }}
+                  />
+                `
+              : nothing}
           `
         : nothing}
     `;

@@ -120,23 +120,36 @@ export async function deleteSchedule(
  * updatePreferences/"My preferences" on the card); a user who hasn't set
  * one yet gets the admin-configured fallback from Scheduler+'s options
  * flow (Settings > Devices & Services > Scheduler+ > Configure) instead.
+ *
+ * enable_brightness/enable_fade_in are different: they're org-wide feature
+ * toggles with no per-user override - set once by an admin in that same
+ * options flow, and always the same for every user regardless of their own
+ * saved weekday/weekend/hours preferences.
  */
 export interface Preferences {
   weekday_days: Weekday[];
   weekend_days: Weekday[];
   working_hours_start: string;
   working_hours_end: string;
+  enable_brightness: boolean;
+  enable_fade_in: boolean;
 }
 
 export async function fetchPreferences(hass: HomeAssistant): Promise<Preferences> {
   return hass.callWS<Preferences>({ type: `${DOMAIN}/get_preferences` });
 }
 
+/** The subset of Preferences a user can actually set for themselves - see updatePreferences. */
+export type UserPreferences = Pick<
+  Preferences,
+  "weekday_days" | "weekend_days" | "working_hours_start" | "working_hours_end"
+>;
+
 export async function updatePreferences(
   hass: HomeAssistant,
-  preferences: Preferences,
-): Promise<Preferences> {
-  return hass.callWS<Preferences>({
+  preferences: UserPreferences,
+): Promise<UserPreferences> {
+  return hass.callWS<UserPreferences>({
     type: `${DOMAIN}/set_preferences`,
     ...preferences,
   });

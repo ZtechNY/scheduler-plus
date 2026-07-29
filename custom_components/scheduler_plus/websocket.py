@@ -23,10 +23,14 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_ENABLE_BRIGHTNESS,
+    CONF_ENABLE_FADE_IN,
     CONF_WEEKDAY_DAYS,
     CONF_WEEKEND_DAYS,
     CONF_WORKING_HOURS_END,
     CONF_WORKING_HOURS_START,
+    DEFAULT_ENABLE_BRIGHTNESS,
+    DEFAULT_ENABLE_FADE_IN,
     DEFAULT_WEEKDAY_DAYS,
     DEFAULT_WEEKEND_DAYS,
     DEFAULT_WORKING_HOURS_END,
@@ -459,6 +463,12 @@ async def websocket_get_preferences(
     Configure) only for a user who hasn't set their own yet. The rule
     editor uses the result to power its Weekdays/Weekend/After hours
     quick-fill presets.
+
+    enable_brightness/enable_fade_in are different: they're org-wide
+    feature toggles with no per-user override at all, so they're always
+    read from the options flow and merged into the response regardless of
+    which branch below fires - unlike weekday_days/etc., a user's own
+    saved preferences dict never contains them.
     """
     entry = _get_entry(hass)
     if entry is None:
@@ -467,14 +477,19 @@ async def websocket_get_preferences(
         )
         return
 
+    options = entry.options
+    feature_toggles = {
+        "enable_brightness": options.get(CONF_ENABLE_BRIGHTNESS, DEFAULT_ENABLE_BRIGHTNESS),
+        "enable_fade_in": options.get(CONF_ENABLE_FADE_IN, DEFAULT_ENABLE_FADE_IN),
+    }
+
     user_preferences = entry.runtime_data.coordinator.data["user_preferences"].get(
         connection.user.id
     )
     if user_preferences is not None:
-        connection.send_result(msg["id"], user_preferences)
+        connection.send_result(msg["id"], {**user_preferences, **feature_toggles})
         return
 
-    options = entry.options
     connection.send_result(
         msg["id"],
         {
@@ -486,6 +501,7 @@ async def websocket_get_preferences(
             "working_hours_end": options.get(
                 CONF_WORKING_HOURS_END, DEFAULT_WORKING_HOURS_END
             ),
+            **feature_toggles,
         },
     )
 
