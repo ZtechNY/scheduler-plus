@@ -131,6 +131,10 @@ _RULE_SCHEMA = vol.All(
             vol.Required("off_time"): _TIME_SPEC_SCHEMA,
             vol.Optional("on_enabled", default=True): bool,
             vol.Optional("off_enabled", default=True): bool,
+            vol.Optional("allow_override", default=True): bool,
+            vol.Optional("override_grace_minutes", default=15): vol.All(
+                vol.Coerce(int), vol.Range(min=1)
+            ),
             vol.Optional("action", default=dict): dict,
         }
     ),

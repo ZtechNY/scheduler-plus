@@ -38,7 +38,10 @@
       "Bash(python -m py_compile custom_components/scheduler_plus/models.py custom_components/scheduler_plus/storage.py custom_components/scheduler_plus/websocket.py)",
       "Bash(python -m py_compile custom_components/scheduler_plus/models.py custom_components/scheduler_plus/websocket.py)",
       "Bash(python -c \"import homeassistant, os; print\\(os.path.dirname\\(homeassistant.__file__\\)\\)\")",
-      "Bash(python -c \"import json; json.load\\(open\\('custom_components/scheduler_plus/strings.json'\\)\\); json.load\\(open\\('custom_components/scheduler_plus/translations/en.json'\\)\\); print\\('OK'\\)\")"
+      "Bash(python -c \"import json; json.load\\(open\\('custom_components/scheduler_plus/strings.json'\\)\\); json.load\\(open\\('custom_components/scheduler_plus/translations/en.json'\\)\\); print\\('OK'\\)\")",
+      "Bash(python -m py_compile custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/device_handlers/base.py custom_components/scheduler_plus/device_handlers/climate.py custom_components/scheduler_plus/device_handlers/light.py custom_components/scheduler_plus/device_handlers/switch.py custom_components/scheduler_plus/models.py)",
+      "Bash(python -m py_compile tests/test_device_handlers.py)",
+      "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/models.py custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/config_flow.py custom_components/scheduler_plus/device_handlers/base.py custom_components/scheduler_plus/device_handlers/climate.py custom_components/scheduler_plus/device_handlers/light.py custom_components/scheduler_plus/device_handlers/switch.py tests/test_models.py tests/test_scheduler.py tests/test_device_handlers.py)"
     ]
   }
 }

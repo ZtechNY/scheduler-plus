@@ -157,6 +157,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _targetTemperature = 70;
 
+  @state() private _allowOverride = true;
+
+  @state() private _overrideGraceMinutes = 15;
+
   @state() private _error?: string;
 
   private _rule?: RuleInput;
@@ -208,6 +212,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
+    this._allowOverride = rule?.allow_override ?? true;
+    this._overrideGraceMinutes = rule?.override_grace_minutes ?? 15;
 
     if (this._deviceType === "light" || this._deviceType === "light_switch") {
       this._setBrightness = rule?.action.brightness !== undefined;
@@ -391,6 +397,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
       off_time: this._offTime,
       on_enabled: this._onEnabled,
       off_enabled: this._offEnabled,
+      allow_override: this._allowOverride,
+      override_grace_minutes: this._overrideGraceMinutes,
       action,
     };
   }
@@ -839,6 +847,38 @@ export class SchedulerPlusRuleEditor extends LitElement {
               @input=${(e: Event) => {
                 this._targetTemperature =
                   Number((e.target as HTMLInputElement).value) || 0;
+              }}
+            />
+          `
+        : nothing}
+
+      <ha-formfield label="Allow override">
+        <ha-switch
+          .checked=${this._allowOverride}
+          @change=${(e: Event) => {
+            this._allowOverride = (e.target as HTMLInputElement).checked;
+          }}
+        ></ha-switch>
+      </ha-formfield>
+      <span class="hint">
+        ${this._allowOverride
+          ? "Manual changes made directly on the thermostat stick until the next scheduled event."
+          : `If someone changes this away from the rule's setting, Scheduler+ waits ${this._overrideGraceMinutes} minutes and then reapplies it if it still doesn't match.`}
+      </span>
+      ${!this._allowOverride
+        ? html`
+            <label class="field-label" for="override-grace-minutes">
+              Grace period (minutes)
+            </label>
+            <input
+              id="override-grace-minutes"
+              type="number"
+              min="1"
+              class="native-input"
+              .value=${String(this._overrideGraceMinutes)}
+              @input=${(e: Event) => {
+                this._overrideGraceMinutes =
+                  Number((e.target as HTMLInputElement).value) || 1;
               }}
             />
           `

@@ -87,6 +87,13 @@ class Rule:
     a rule can be on-only or off-only, firing once and then leaving the
     device alone indefinitely. At least one of the two must be enabled;
     that invariant is enforced at the websocket boundary, not here.
+
+    `allow_override`/`override_grace_minutes` are climate-only enforcement
+    settings: when `allow_override` is False, the engine watches the
+    entity during the on-window and reapplies `action` if a manual change
+    still doesn't match after `override_grace_minutes` (debounced - reset
+    on each further manual change). Only meaningful when both `on_enabled`
+    and `off_enabled` are True, since enforcement needs a defined window.
     """
 
     id: str
@@ -101,6 +108,8 @@ class Rule:
     off_time: TimeSpec
     on_enabled: bool = True
     off_enabled: bool = True
+    allow_override: bool = True
+    override_grace_minutes: int = 15
     action: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -118,6 +127,8 @@ class Rule:
             "off_time": self.off_time.to_dict(),
             "on_enabled": self.on_enabled,
             "off_enabled": self.off_enabled,
+            "allow_override": self.allow_override,
+            "override_grace_minutes": self.override_grace_minutes,
             "action": dict(self.action),
         }
 
@@ -126,10 +137,11 @@ class Rule:
         """Deserialize from a plain dict loaded from storage.
 
         `date_mode`/`dates`/`date_ranges`/`day_conditions`/`on_enabled`/
-        `off_enabled` use `.get()` with defaults rather than direct
-        indexing, since rules stored before these fields existed won't have
-        them - they behave exactly as before (RuleDateMode.ALWAYS, no
-        dates, no ranges, no day conditions, both on and off enabled).
+        `off_enabled`/`allow_override`/`override_grace_minutes` use `.get()`
+        with defaults rather than direct indexing, since rules stored
+        before these fields existed won't have them - they behave exactly
+        as before (RuleDateMode.ALWAYS, no dates, no ranges, no day
+        conditions, both on and off enabled, overrides allowed).
         """
         return cls(
             id=data["id"],
@@ -148,6 +160,8 @@ class Rule:
             off_time=TimeSpec.from_dict(data["off_time"]),
             on_enabled=bool(data.get("on_enabled", True)),
             off_enabled=bool(data.get("off_enabled", True)),
+            allow_override=bool(data.get("allow_override", True)),
+            override_grace_minutes=int(data.get("override_grace_minutes", 15)),
             action=dict(data["action"]),
         )
 

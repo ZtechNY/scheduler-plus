@@ -83,6 +83,8 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
         off_time: { provider: "fixed", params: { time: this._offTime } },
         on_enabled: true,
         off_enabled: true,
+        allow_override: true,
+        override_grace_minutes: 15,
         action: {},
       };
       const input: ScheduleInput = {

@@ -17,9 +17,13 @@ from collections.abc import AsyncGenerator
 from datetime import date, datetime, timedelta
 from typing import Any
 
+import math
+
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.const import ATTR_TEMPERATURE
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.scheduler_plus.const import (
     DayConditionType,
@@ -85,14 +89,81 @@ class FakeDeviceHandler(DeviceHandler):
         self.turn_off_calls: list[str] = []
 
     async def async_turn_on(
-        self, hass: HomeAssistant, entity_id: str, action: dict[str, Any]
+        self,
+        hass: HomeAssistant,
+        entity_id: str,
+        action: dict[str, Any],
+        context: Context | None = None,
     ) -> None:
         """Record the call instead of applying it."""
         self.turn_on_calls.append((entity_id, action))
 
-    async def async_turn_off(self, hass: HomeAssistant, entity_id: str) -> None:
+    async def async_turn_off(
+        self, hass: HomeAssistant, entity_id: str, context: Context | None = None
+    ) -> None:
         """Record the call instead of applying it."""
         self.turn_off_calls.append(entity_id)
+
+    def matches_action(
+        self, hass: HomeAssistant, entity_id: str, action: dict[str, Any]
+    ) -> bool:
+        """Not exercised by any test using this fake - always report a match."""
+        return True
+
+
+class FakeClimateDeviceHandler(DeviceHandler):
+    """A climate device handler that reflects calls into real hass.states.
+
+    Unlike FakeDeviceHandler (which only records calls), override
+    enforcement tests need hass.states.get(entity_id) to actually reflect
+    what was last applied, since matches_action reads real state - this
+    writes a real state for the entity on every call (carrying `context`
+    through, exactly like the real ClimateDeviceHandler), and delegates
+    matches_action to the same comparison logic.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with empty call logs."""
+        self.turn_on_calls: list[tuple[str, dict[str, Any]]] = []
+        self.turn_off_calls: list[str] = []
+
+    async def async_turn_on(
+        self,
+        hass: HomeAssistant,
+        entity_id: str,
+        action: dict[str, Any],
+        context: Context | None = None,
+    ) -> None:
+        """Record the call and reflect it into hass.states."""
+        self.turn_on_calls.append((entity_id, action))
+        attributes: dict[str, Any] = {}
+        if "target_temperature" in action:
+            attributes[ATTR_TEMPERATURE] = action["target_temperature"]
+        hass.states.async_set(entity_id, action["hvac_mode"], attributes, context=context)
+
+    async def async_turn_off(
+        self, hass: HomeAssistant, entity_id: str, context: Context | None = None
+    ) -> None:
+        """Record the call and reflect it into hass.states."""
+        self.turn_off_calls.append(entity_id)
+        hass.states.async_set(entity_id, "off", {}, context=context)
+
+    def matches_action(
+        self, hass: HomeAssistant, entity_id: str, action: dict[str, Any]
+    ) -> bool:
+        """Compare the entity's real (test) state against `action`, like ClimateDeviceHandler."""
+        state = hass.states.get(entity_id)
+        if state is None:
+            return True
+        if state.state != action["hvac_mode"]:
+            return False
+        if "target_temperature" in action:
+            current = state.attributes.get(ATTR_TEMPERATURE)
+            if current is None or not math.isclose(
+                current, action["target_temperature"], abs_tol=0.5
+            ):
+                return False
+        return True
 
 
 def _make_rule(
@@ -109,6 +180,9 @@ def _make_rule(
     enabled: bool = True,
     on_enabled: bool = True,
     off_enabled: bool = True,
+    allow_override: bool = True,
+    override_grace_minutes: int = 15,
+    action: dict[str, Any] | None = None,
 ) -> Rule:
     """Build a Rule, defaulting to a FIXED-time rule active every day."""
     return Rule(
@@ -124,6 +198,9 @@ def _make_rule(
         off_time=TimeSpec(provider=off_provider, params={"time": off_time}),
         on_enabled=on_enabled,
         off_enabled=off_enabled,
+        allow_override=allow_override,
+        override_grace_minutes=override_grace_minutes,
+        action=action if action is not None else {},
     )
 
 
@@ -167,10 +244,17 @@ def fake_switch_handler() -> FakeDeviceHandler:
 
 
 @pytest.fixture
+def fake_climate_handler() -> FakeClimateDeviceHandler:
+    """A FakeClimateDeviceHandler for override-enforcement tests, registered for DeviceType.CLIMATE."""
+    return FakeClimateDeviceHandler()
+
+
+@pytest.fixture
 async def engine(
     hass: HomeAssistant,
     fake_device_handler: FakeDeviceHandler,
     fake_switch_handler: FakeDeviceHandler,
+    fake_climate_handler: FakeClimateDeviceHandler,
 ) -> AsyncGenerator[SchedulerEngine, None]:
     """A SchedulerEngine wired to fake/HA-independent plugins.
 
@@ -196,6 +280,7 @@ async def engine(
         {
             DeviceType.LIGHT: fake_device_handler,
             DeviceType.SWITCH: fake_switch_handler,
+            DeviceType.CLIMATE: fake_climate_handler,
         }
     )
     day_conditions = DayConditionRegistry(
@@ -590,6 +675,241 @@ async def test_refresh_rule_off_only_skips_when_already_past(
 
     assert fake_device_handler.turn_off_calls == []
     assert rule.id not in engine._unsub_rules
+
+
+def _make_climate_rule(**kwargs: Any) -> Rule:
+    """_make_rule with a climate-shaped action, for override enforcement tests."""
+    kwargs.setdefault("action", {"hvac_mode": "heat", "target_temperature": 69})
+    return _make_rule(**kwargs)
+
+
+async def test_refresh_rule_catchup_arms_enforcement_when_override_disabled(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler
+) -> None:
+    """Catch-up arms override enforcement when allow_override=False and both enabled."""
+    rule = _make_climate_rule(on_time="06:00", off_time="21:00", allow_override=False)
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert "climate.test" in engine._active_enforcement
+
+
+async def test_refresh_rule_catchup_does_not_arm_when_override_allowed(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler
+) -> None:
+    """Catch-up does not arm enforcement when allow_override=True (the default)."""
+    rule = _make_climate_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert "climate.test" not in engine._active_enforcement
+
+
+async def test_refresh_rule_on_only_never_arms_enforcement(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler
+) -> None:
+    """An on-only rule never arms enforcement, even with allow_override=False.
+
+    Enforcement needs a defined on->off window; an on-only rule has none.
+    """
+    rule = _make_climate_rule(
+        on_time="06:00", off_time="21:00", off_enabled=False, allow_override=False
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert "climate.test" not in engine._active_enforcement
+
+
+async def test_override_enforcement_reapplies_after_grace_period(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """A genuine external mismatch reapplies the rule's action after the grace period."""
+    rule = _make_climate_rule(
+        on_time="06:00", off_time="21:00", allow_override=False, override_grace_minutes=1
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(fake_climate_handler.turn_on_calls) == 1  # the initial catch-up
+
+    # Someone changes the thermostat manually - a distinct, auto-generated
+    # context, simulating an external change rather than our own call.
+    hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 75})
+    await hass.async_block_till_done()
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
+    await hass.async_block_till_done()
+
+    assert len(fake_climate_handler.turn_on_calls) == 2
+    state = hass.states.get("climate.test")
+    assert state is not None
+    assert state.attributes[ATTR_TEMPERATURE] == 69
+
+
+async def test_override_enforcement_debounce_resets_on_further_change(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """A second override before the grace period elapses resets the countdown."""
+    rule = _make_climate_rule(
+        on_time="06:00", off_time="21:00", allow_override=False, override_grace_minutes=2
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+    start = dt_util.utcnow()
+
+    hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 75})
+    await hass.async_block_till_done()
+
+    # A second override before the first 2-minute countdown would elapse.
+    async_fire_time_changed(hass, start + timedelta(minutes=1))
+    await hass.async_block_till_done()
+    hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 80})
+    await hass.async_block_till_done()
+
+    # Just past the FIRST change's original deadline (t=2min) - if the
+    # countdown hadn't reset, this would already have reapplied.
+    async_fire_time_changed(hass, start + timedelta(minutes=2, seconds=30))
+    await hass.async_block_till_done()
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+    # Past the SECOND change's deadline (t=1min + 2min = t=3min).
+    async_fire_time_changed(hass, start + timedelta(minutes=3, seconds=30))
+    await hass.async_block_till_done()
+    assert len(fake_climate_handler.turn_on_calls) == 2
+
+
+async def test_override_enforcement_ignores_already_matching_change(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """A state change that already matches rule.action doesn't arm a reapply."""
+    rule = _make_climate_rule(
+        on_time="06:00", off_time="21:00", allow_override=False, override_grace_minutes=1
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+    # A benign ripple that happens to already match the rule's action.
+    hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 69})
+    await hass.async_block_till_done()
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
+    await hass.async_block_till_done()
+
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+
+async def test_override_enforcement_ignores_our_own_context(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """A state change carrying our own last-issued context isn't treated as an override."""
+    rule = _make_climate_rule(
+        on_time="06:00", off_time="21:00", allow_override=False, override_grace_minutes=1
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+    our_context = Context(id=engine._last_self_context["climate.test"])
+    # Doesn't match rule.action, but carries our own last context id, so it
+    # must be ignored, as if we caused it ourselves.
+    hass.states.async_set(
+        "climate.test", "heat", {ATTR_TEMPERATURE: 75}, context=our_context
+    )
+    await hass.async_block_till_done()
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
+    await hass.async_block_till_done()
+
+    assert len(fake_climate_handler.turn_on_calls) == 1
+
+
+async def test_override_enforcement_teardown_disarms_it(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """Invoking the teardown (as _schedule_turn_off's _fire does on off) disarms enforcement.
+
+    A later external change must then be ignored entirely - this is what
+    keeps enforcement from outliving a rule's on-window.
+    """
+    rule = _make_climate_rule(allow_override=False, override_grace_minutes=1)
+
+    teardown = engine._arm_override_enforcement(rule, "climate.test", fake_climate_handler)
+    assert "climate.test" in engine._active_enforcement
+
+    teardown()
+    assert "climate.test" not in engine._active_enforcement
+
+    hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 75})
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
+    await hass.async_block_till_done()
+
+    assert fake_climate_handler.turn_on_calls == []
+
+
+async def test_cancel_rule_tears_down_override_enforcement(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler
+) -> None:
+    """_cancel_rule tears down an already-armed enforcement, like any other pending callback."""
+    rule = _make_climate_rule(on_time="06:00", off_time="21:00", allow_override=False)
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert "climate.test" in engine._active_enforcement
+
+    engine._cancel_rule(rule.id)
+
+    assert "climate.test" not in engine._active_enforcement
+
+
+async def test_scheduled_turn_on_arms_enforcement_and_lands_in_unsub_rules(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """The scheduled (non-catch-up) on-path also arms enforcement correctly.
+
+    Its teardown must land in _unsub_rules[rule.id] (appended by key, after
+    _async_refresh_rule already returned) so _cancel_rule still tears it
+    down - regardless of exactly when _fire runs relative to the refresh
+    that scheduled it. Uses real current time throughout (unlike most of
+    this file's tests) since it needs the real scheduled callback to
+    actually fire, via async_fire_time_changed.
+    """
+    real_now = dt_util.now()
+    on_time = (real_now + timedelta(minutes=2)).strftime("%H:%M")
+    rule = _make_climate_rule(on_time=on_time, off_time="23:59", allow_override=False)
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+
+    await engine._async_refresh_rule(schedule, rule, real_now)
+    assert len(engine._unsub_rules[rule.id]) == 2  # on + off scheduled, nothing fired yet
+    assert fake_climate_handler.turn_on_calls == []
+
+    async_fire_time_changed(hass, real_now + timedelta(minutes=3))
+    await hass.async_block_till_done()
+
+    assert fake_climate_handler.turn_on_calls  # the scheduled on fired
+    assert "climate.test" in engine._active_enforcement
+    assert engine._active_enforcement["climate.test"] in engine._unsub_rules[rule.id]
+
+    engine._cancel_rule(rule.id)
+    assert "climate.test" not in engine._active_enforcement
 
 
 async def test_get_day_events_returns_occurrence_for_matching_rule(

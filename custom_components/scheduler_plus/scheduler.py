@@ -21,9 +21,12 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
+    EventStateChangedData,
+    async_call_later,
     async_track_point_in_time,
+    async_track_state_change_event,
     async_track_time_change,
 )
 from homeassistant.util import dt as dt_util
@@ -59,8 +62,10 @@ class SchedulerEngine:
     Owns no persistent state of its own: schedule/rule data always comes
     from the coordinator, which the engine treats as read-only and
     re-reads on every refresh. Only the set of currently pending
-    async_track_point_in_time callbacks is engine-local state, so a
-    refresh can safely cancel and replace it.
+    async_track_point_in_time callbacks - plus, for climate rules with
+    override enforcement active, a per-entity state-change subscription
+    and the context id of our own last service call to that entity - is
+    engine-local state, so a refresh can safely cancel and replace it.
     """
 
     def __init__(
@@ -87,6 +92,13 @@ class SchedulerEngine:
         self._unsub_rules: dict[str, list[CALLBACK_TYPE]] = {}
         self._unsub_midnight: CALLBACK_TYPE | None = None
         self._unsub_coordinator: CALLBACK_TYPE | None = None
+        # entity_id -> context id of our own most recent service call to it,
+        # so override enforcement can recognize "that state change was us".
+        self._last_self_context: dict[str, str] = {}
+        # entity_id -> teardown for that entity's currently-armed override
+        # enforcement (state-change subscription + any pending reapply
+        # timer), if any rule with allow_override=False is in its window.
+        self._active_enforcement: dict[str, CALLBACK_TYPE] = {}
 
     async def async_start(self) -> None:
         """Start the engine: scan now, then rescan at every local midnight.
@@ -115,6 +127,9 @@ class SchedulerEngine:
             for unsub in unsub_list:
                 unsub()
         self._unsub_rules.clear()
+        # Defensive: enforcement teardowns above already self-remove from
+        # this dict, so it should already be empty by this point.
+        self._active_enforcement.clear()
 
     async def async_get_next_event(
         self, schedule: Schedule
@@ -351,8 +366,8 @@ class SchedulerEngine:
                         # failure can't abort scheduling for other entities,
                         # rules, or schedules in the same refresh pass.
                         try:
-                            await device_handler.async_turn_on(
-                                self.hass, entity_id, rule.action
+                            await self._issue_turn_on(
+                                device_handler, entity_id, rule.action
                             )
                         except Exception:  # noqa: BLE001
                             _LOGGER.exception(
@@ -360,10 +375,22 @@ class SchedulerEngine:
                                 entity_id,
                                 rule.name,
                             )
+                        else:
+                            if both_enabled and not rule.allow_override:
+                                unsub_list.append(
+                                    self._arm_override_enforcement(
+                                        rule, entity_id, device_handler
+                                    )
+                                )
                     else:
                         unsub_list.append(
                             self._schedule_turn_on(
-                                device_handler, entity_id, rule.action, on_at
+                                rule,
+                                both_enabled,
+                                device_handler,
+                                entity_id,
+                                rule.action,
+                                on_at,
                             )
                         )
                 if rule.off_enabled:
@@ -458,29 +485,147 @@ class SchedulerEngine:
 
         return False
 
+    async def _issue_turn_on(
+        self, device_handler: DeviceHandler, entity_id: str, action: dict[str, Any]
+    ) -> None:
+        """Call async_turn_on with a fresh Context, remembered for override detection.
+
+        Every turn-on the engine itself performs goes through here (never
+        device_handler.async_turn_on directly), so _arm_override_enforcement
+        can always recognize a resulting state_changed event as "us" via
+        the context id, regardless of which code path issued it.
+        """
+        context = Context()
+        self._last_self_context[entity_id] = context.id
+        await device_handler.async_turn_on(self.hass, entity_id, action, context=context)
+
+    async def _issue_turn_off(
+        self, device_handler: DeviceHandler, entity_id: str
+    ) -> None:
+        """Call async_turn_off with a fresh Context - see _issue_turn_on."""
+        context = Context()
+        self._last_self_context[entity_id] = context.id
+        await device_handler.async_turn_off(self.hass, entity_id, context=context)
+
     def _schedule_turn_on(
         self,
+        rule: Rule,
+        both_enabled: bool,
         device_handler: DeviceHandler,
         entity_id: str,
         action: dict[str, Any],
         when: datetime,
     ) -> CALLBACK_TYPE:
-        """Schedule a single turn-on call at `when`."""
+        """Schedule a single turn-on call at `when`.
+
+        If the on-call succeeds and this rule has override enforcement
+        active (both_enabled and not rule.allow_override), arms it -
+        folded into _unsub_rules[rule.id] by key rather than by closure
+        reference, so it's torn down correctly by _cancel_rule regardless
+        of exactly when this fires relative to the refresh that scheduled
+        it.
+        """
 
         async def _fire(_now: datetime) -> None:
-            await device_handler.async_turn_on(self.hass, entity_id, action)
+            await self._issue_turn_on(device_handler, entity_id, action)
+            if both_enabled and not rule.allow_override:
+                teardown = self._arm_override_enforcement(
+                    rule, entity_id, device_handler
+                )
+                self._unsub_rules.setdefault(rule.id, []).append(teardown)
 
         return async_track_point_in_time(self.hass, _fire, when)
 
     def _schedule_turn_off(
         self, device_handler: DeviceHandler, entity_id: str, when: datetime
     ) -> CALLBACK_TYPE:
-        """Schedule a single turn-off call at `when`."""
+        """Schedule a single turn-off call at `when`.
+
+        Disarms any override enforcement for this entity once off actually
+        fires - essential, not optional: otherwise the state-change
+        listener would outlive the window, and a legitimate later change
+        (e.g. someone turning heat back on that evening) would be wrongly
+        treated as an override needing reversion to a stale setpoint.
+        """
 
         async def _fire(_now: datetime) -> None:
-            await device_handler.async_turn_off(self.hass, entity_id)
+            await self._issue_turn_off(device_handler, entity_id)
+            teardown = self._active_enforcement.get(entity_id)
+            if teardown is not None:
+                teardown()
 
         return async_track_point_in_time(self.hass, _fire, when)
+
+    def _arm_override_enforcement(
+        self, rule: Rule, entity_id: str, device_handler: DeviceHandler
+    ) -> CALLBACK_TYPE:
+        """Watch `entity_id` for manual overrides during `rule`'s on-window.
+
+        A genuine external change (not caused by our own last service
+        call, and not already matching rule.action) arms a debounced
+        reapply timer sized by rule.override_grace_minutes - reset on each
+        further external change. If the entity still doesn't match
+        rule.action when the timer elapses, it's reapplied.
+
+        Tears down any enforcement already active for this entity first,
+        so arming again (e.g. a second overlapping rule on the same
+        entity, or a re-triggered catch-up) never leaks the previous
+        subscription - "last rule to arm wins" for enforcement, matching
+        the engine's existing "last writer wins" semantics for the actual
+        device state in that scenario.
+
+        A restart/reload mid-grace-period loses the pending timer (this is
+        all in-memory, like everything else _unsub_rules tracks); if `now`
+        is still inside the window on the next refresh, the catch-up
+        branch re-fires and re-arms a fresh grace period rather than
+        resuming the old countdown - consistent with the engine's existing
+        restart behavior for on/off, just extended to enforcement.
+        """
+        if (existing := self._active_enforcement.get(entity_id)) is not None:
+            existing()
+
+        unsub_timer: CALLBACK_TYPE | None = None
+
+        def _cancel_pending_reapply() -> None:
+            nonlocal unsub_timer
+            if unsub_timer is not None:
+                unsub_timer()
+                unsub_timer = None
+
+        async def _reapply(_now: datetime) -> None:
+            nonlocal unsub_timer
+            unsub_timer = None
+            if device_handler.matches_action(self.hass, entity_id, rule.action):
+                return
+            await self._issue_turn_on(device_handler, entity_id, rule.action)
+
+        @callback
+        def _on_state_change(event: Event[EventStateChangedData]) -> None:
+            nonlocal unsub_timer
+            if event.context.id == self._last_self_context.get(entity_id):
+                return  # our own call, not a manual override
+            if device_handler.matches_action(self.hass, entity_id, rule.action):
+                return  # already matches - nothing to correct
+            _cancel_pending_reapply()
+            unsub_timer = async_call_later(
+                self.hass,
+                timedelta(minutes=rule.override_grace_minutes).total_seconds(),
+                _reapply,
+            )
+
+        unsub_state = async_track_state_change_event(
+            self.hass, entity_id, _on_state_change
+        )
+
+        @callback
+        def _teardown() -> None:
+            unsub_state()
+            _cancel_pending_reapply()
+            if self._active_enforcement.get(entity_id) is _teardown:
+                del self._active_enforcement[entity_id]
+
+        self._active_enforcement[entity_id] = _teardown
+        return _teardown
 
     def _cancel_rule(self, rule_id: str) -> None:
         """Cancel any callbacks previously scheduled for `rule_id`."""

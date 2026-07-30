@@ -196,6 +196,13 @@ export interface Rule {
   /** Whether the engine acts on each side - a rule can be on-only or off-only, but not neither. */
   on_enabled: boolean;
   off_enabled: boolean;
+  /**
+   * Climate-only override enforcement: when false, a manual change to the
+   * entity during the on-window is reverted after override_grace_minutes
+   * (debounced) if it still doesn't match the rule's action.
+   */
+  allow_override: boolean;
+  override_grace_minutes: number;
   action: Action;
 }
 

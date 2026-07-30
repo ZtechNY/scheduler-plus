@@ -88,6 +88,44 @@ def test_rule_from_dict_defaults_on_off_enabled_for_legacy_data() -> None:
     assert rule.off_enabled is True
 
 
+def test_rule_round_trip_override_enforcement() -> None:
+    """A rule with override enforcement disabled should survive a round trip."""
+    rule = Rule(
+        id="rule-1",
+        name="Client thermostat",
+        days=frozenset(Weekday),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "06:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "21:00"}),
+        allow_override=False,
+        override_grace_minutes=30,
+        action={"hvac_mode": "heat", "target_temperature": 69},
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+    assert restored.allow_override is False
+    assert restored.override_grace_minutes == 30
+
+
+def test_rule_from_dict_defaults_override_fields_for_legacy_data() -> None:
+    """A stored rule from before these fields existed loads as overrides allowed."""
+    legacy_data = {
+        "id": "rule-1",
+        "name": "Weekdays",
+        "enabled": True,
+        "days": ["mon"],
+        "on_time": {"provider": "fixed", "params": {"time": "06:00"}},
+        "off_time": {"provider": "fixed", "params": {"time": "21:00"}},
+        "action": {},
+    }
+
+    rule = Rule.from_dict(legacy_data)
+
+    assert rule.allow_override is True
+    assert rule.override_grace_minutes == 15
+
+
 def test_rule_round_trip_with_date_filter() -> None:
     """Rule's date_mode/dates should survive a to_dict/from_dict round trip."""
     rule = Rule(
