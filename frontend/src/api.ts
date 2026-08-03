@@ -246,3 +246,44 @@ export async function deleteTemplate(hass: HomeAssistant, templateId: string): P
   });
 }
 
+/**
+ * One detected overlap between a candidate schedule (being created or
+ * edited) and a rule in a DIFFERENT, existing schedule - see
+ * check_schedule_conflicts/ScheduleConflict in the backend. `entity_ids` is
+ * the full shared-entity list between the two schedules, not just one.
+ */
+export interface ScheduleConflict {
+  entity_ids: string[];
+  candidate_rule_id: string;
+  candidate_rule_name: string;
+  conflicting_schedule_id: string;
+  conflicting_schedule_name: string;
+  conflicting_rule_id: string;
+  conflicting_rule_name: string;
+  date: string;
+  candidate_on_at: string;
+  candidate_off_at: string;
+  conflicting_on_at: string;
+  conflicting_off_at: string;
+  fixable: boolean;
+}
+
+/**
+ * Previews overlap conflicts `input` would have with other schedules,
+ * without saving anything. `scheduleId` is null when previewing a
+ * brand-new schedule, or the real id when previewing an edit (so the
+ * schedule doesn't conflict with its own prior version).
+ */
+export async function checkScheduleConflicts(
+  hass: HomeAssistant,
+  scheduleId: string | null,
+  input: ScheduleInput,
+): Promise<ScheduleConflict[]> {
+  const result = await hass.callWS<{ conflicts: ScheduleConflict[] }>({
+    type: `${DOMAIN}/check_schedule_conflicts`,
+    ...(scheduleId ? { schedule_id: scheduleId } : {}),
+    ...input,
+  });
+  return result.conflicts;
+}
+

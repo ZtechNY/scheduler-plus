@@ -168,6 +168,8 @@ class FakeClimateDeviceHandler(DeviceHandler):
 
 def _make_rule(
     *,
+    id: str = "rule-1",  # noqa: A002 - matches the Rule field name, kept local to this helper
+    name: str = "Test rule",
     on_time: str = "06:00",
     off_time: str = "21:00",
     on_provider: TimeProviderType = TimeProviderType.FIXED,
@@ -186,8 +188,8 @@ def _make_rule(
 ) -> Rule:
     """Build a Rule, defaulting to a FIXED-time rule active every day."""
     return Rule(
-        id="rule-1",
-        name="Test rule",
+        id=id,
+        name=name,
         enabled=enabled,
         days=days,
         date_mode=date_mode,
@@ -207,6 +209,8 @@ def _make_rule(
 def _make_schedule(
     rule: Rule,
     *,
+    id: str = "sched-1",  # noqa: A002 - matches the Schedule field name, kept local to this helper
+    name: str = "Test schedule",
     entities: list[str] | None = None,
     device_type: DeviceType = DeviceType.LIGHT,
     active_date_mode: RuleDateMode = RuleDateMode.ALWAYS,
@@ -215,8 +219,8 @@ def _make_schedule(
 ) -> Schedule:
     """Build a single-rule Schedule targeting `entities` (default: one light)."""
     return Schedule(
-        id="sched-1",
-        name="Test schedule",
+        id=id,
+        name=name,
         device_type=device_type,
         entities=entities or ["light.test"],
         rules=[rule],
@@ -1330,3 +1334,430 @@ async def test_get_next_event_skips_seasonally_inactive_candidates(
     assert next_event is not None
     when, _ = next_event
     assert when.date() >= window_start
+
+
+# --- async_find_conflicts / _is_exclusion_fixable ---
+#
+# Unlike _async_resolve_occurrence (which takes an explicit reference_date),
+# async_find_conflicts computes "today" internally via dt_util.now() - so
+# every date used here is anchored to the real current time (a few days out
+# via INCLUDE mode, not the fixed historical _MONDAY constant used above),
+# to stay inside the date-enumeration window regardless of when the test
+# suite actually runs.
+
+
+def _iso(value: date) -> str:
+    return value.isoformat()
+
+
+async def test_find_conflicts_detects_overlapping_both_enabled_rules(
+    engine: SchedulerEngine,
+) -> None:
+    """Two both-enabled rules with overlapping windows on a shared entity conflict."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="09:00",
+        off_time="16:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="14:00",
+        off_time="18:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert len(conflicts) == 1
+    conflict = conflicts[0]
+    assert conflict.entity_ids == ("light.gym",)
+    assert conflict.candidate_rule_id == "candidate-rule"
+    assert conflict.conflicting_schedule_id == "other-sched"
+    assert conflict.conflicting_rule_id == "other-rule"
+    assert conflict.date == check_date
+
+
+async def test_find_conflicts_off_only_baseline_conflicts_with_stay_on_event(
+    engine: SchedulerEngine,
+) -> None:
+    """An off-only baseline rule's off moment landing inside a temp event's window conflicts.
+
+    The motivating scenario: a daily off-only rule (lights off at 4pm) and
+    a one-off event wanting lights on until 11pm - the off-only rule's
+    meaningless on_time must not corrupt the comparison (see
+    _effective_window).
+    """
+    check_date = dt_util.now().date() + timedelta(days=3)
+    baseline_rule = _make_rule(
+        id="baseline-rule",
+        on_time="06:00",  # stale/meaningless - only off_enabled matters
+        off_time="16:00",
+        on_enabled=False,
+        off_enabled=True,
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    baseline = _make_schedule(baseline_rule, id="baseline-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [baseline.to_dict()]}
+    )
+
+    event_rule = _make_rule(
+        id="event-rule",
+        on_time="09:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    event = _make_schedule(event_rule, id="event-sched", entities=["light.gym"])
+
+    conflicts = await engine.async_find_conflicts(event)
+
+    assert len(conflicts) == 1
+    assert conflicts[0].conflicting_rule_id == "baseline-rule"
+
+
+async def test_find_conflicts_on_only_rule_extends_through_rest_of_day(
+    engine: SchedulerEngine,
+) -> None:
+    """An on-only rule's effective window is approximated through the rest of that day."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    on_only_rule = _make_rule(
+        id="on-only-rule",
+        on_time="18:00",
+        off_time="06:00",  # stale/meaningless - only on_enabled matters
+        on_enabled=True,
+        off_enabled=False,
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    on_only = _make_schedule(on_only_rule, id="on-only-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [on_only.to_dict()]}
+    )
+
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="20:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+
+    conflicts = await engine.async_find_conflicts(other)
+
+    assert len(conflicts) == 1
+    assert conflicts[0].conflicting_rule_id == "on-only-rule"
+
+
+async def test_find_conflicts_no_overlap_returns_empty(engine: SchedulerEngine) -> None:
+    """Two rules with disjoint windows on a shared entity don't conflict."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="09:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="18:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_different_entities_no_conflict(
+    engine: SchedulerEngine,
+) -> None:
+    """Overlapping windows on DIFFERENT entities don't conflict."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.office"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_excludes_own_schedule_id(engine: SchedulerEngine) -> None:
+    """A schedule being edited never conflicts with its own prior stored version."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    rule = _make_rule(
+        id="rule-a",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    stored = _make_schedule(rule, id="sched-a", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [stored.to_dict()]}
+    )
+
+    candidate = _make_schedule(rule, id="sched-a", entities=["light.gym"])
+
+    conflicts = await engine.async_find_conflicts(candidate, exclude_schedule_id="sched-a")
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_skips_disabled_candidate(engine: SchedulerEngine) -> None:
+    """A disabled candidate schedule can't conflict - it won't run."""
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    candidate.enabled = False
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_skips_disabled_other_schedule(engine: SchedulerEngine) -> None:
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+    other.enabled = False
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_skips_seasonally_inactive_other_schedule(
+    engine: SchedulerEngine,
+) -> None:
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    # Active only far in the future - not on check_date.
+    far_future = check_date + timedelta(days=100)
+    other = _make_schedule(
+        other_rule,
+        id="other-sched",
+        entities=["light.gym"],
+        active_date_mode=RuleDateMode.INCLUDE,
+        active_date_ranges=frozenset({(_iso(far_future), _iso(far_future))}),
+    )
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_skips_overridden_other_schedule(
+    engine: SchedulerEngine,
+) -> None:
+    check_date = dt_util.now().date() + timedelta(days=3)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(check_date)}),
+    )
+    other = _make_schedule(
+        other_rule,
+        id="other-sched",
+        entities=["light.gym"],
+        override_until=_iso(check_date + timedelta(days=5)),
+    )
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert conflicts == []
+
+
+async def test_find_conflicts_dedupes_to_earliest_date(engine: SchedulerEngine) -> None:
+    """The same rule pair conflicting on multiple dates reports only the earliest."""
+    earlier = dt_util.now().date() + timedelta(days=2)
+    later = dt_util.now().date() + timedelta(days=5)
+    candidate_rule = _make_rule(
+        id="candidate-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(earlier), _iso(later)}),
+    )
+    candidate = _make_schedule(candidate_rule, id="candidate-sched", entities=["light.gym"])
+    other_rule = _make_rule(
+        id="other-rule",
+        on_time="06:00",
+        off_time="22:00",
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_iso(earlier), _iso(later)}),
+    )
+    other = _make_schedule(other_rule, id="other-sched", entities=["light.gym"])
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [other.to_dict()]}
+    )
+
+    conflicts = await engine.async_find_conflicts(candidate)
+
+    assert len(conflicts) == 1
+    assert conflicts[0].date == earlier
+
+
+def test_is_exclusion_fixable_always_with_no_dormant_fields() -> None:
+    rule = _make_rule(date_mode=RuleDateMode.ALWAYS)
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is True
+
+
+def test_is_exclusion_fixable_always_with_dormant_date_ranges() -> None:
+    """An ALWAYS rule with leftover date_ranges isn't cleanly fixable by flipping to EXCLUDE.
+
+    Flipping the mode would reactivate the dormant range alongside the new
+    exclusion date, excluding more than intended.
+    """
+    rule = _make_rule(
+        date_mode=RuleDateMode.ALWAYS,
+        date_ranges=frozenset({("2024-06-01", "2024-06-15")}),
+    )
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False
+
+
+def test_is_exclusion_fixable_exclude_always_fixable() -> None:
+    rule = _make_rule(date_mode=RuleDateMode.EXCLUDE)
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is True
+
+
+def test_is_exclusion_fixable_include_literal_date_only() -> None:
+    rule = _make_rule(date_mode=RuleDateMode.INCLUDE, dates=frozenset({_MONDAY.isoformat()}))
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is True
+
+
+def test_is_exclusion_fixable_include_date_also_in_range() -> None:
+    """Removing the date from `dates` alone wouldn't stop the rule matching via the range."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_MONDAY.isoformat()}),
+        date_ranges=frozenset({("2023-12-25", "2024-01-05")}),
+    )
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False
+
+
+def test_is_exclusion_fixable_include_not_a_literal_date() -> None:
+    """A date matched only via a range (never a literal `dates` entry) isn't fixable."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2023-12-25", "2024-01-05")}),
+    )
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False
+
+
+def test_is_exclusion_fixable_include_with_day_conditions() -> None:
+    """A day_conditions match can't be safely predicted/cleared, so it's never fixable."""
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        dates=frozenset({_MONDAY.isoformat()}),
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False

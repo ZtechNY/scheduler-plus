@@ -42,7 +42,7 @@ from .const import (
 )
 from .coordinator import SchedulerPlusCoordinator
 from .models import Rule, RuleDateMode, Schedule, ScheduleTemplate, TemplateScope, Weekday
-from .scheduler import SchedulerEngine
+from .scheduler import ScheduleConflict, SchedulerEngine
 from .storage import SchedulerPlusStoreData
 
 
@@ -418,6 +418,84 @@ async def websocket_update_schedule(
     connection.send_result(msg["id"], {"schedule": schedule.to_dict()})
 
 
+def _conflict_to_dict(conflict: ScheduleConflict) -> dict[str, Any]:
+    """Serialize a ScheduleConflict to the plain dict shape sent to the frontend."""
+    return {
+        "entity_ids": list(conflict.entity_ids),
+        "candidate_rule_id": conflict.candidate_rule_id,
+        "candidate_rule_name": conflict.candidate_rule_name,
+        "conflicting_schedule_id": conflict.conflicting_schedule_id,
+        "conflicting_schedule_name": conflict.conflicting_schedule_name,
+        "conflicting_rule_id": conflict.conflicting_rule_id,
+        "conflicting_rule_name": conflict.conflicting_rule_name,
+        "date": conflict.date.isoformat(),
+        "candidate_on_at": conflict.candidate_on_at.isoformat(),
+        "candidate_off_at": conflict.candidate_off_at.isoformat(),
+        "conflicting_on_at": conflict.conflicting_on_at.isoformat(),
+        "conflicting_off_at": conflict.conflicting_off_at.isoformat(),
+        "fixable": conflict.fixable,
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/check_schedule_conflicts",
+        vol.Optional("schedule_id"): str,
+        **_SCHEDULE_FIELDS,
+    }
+)
+@websocket_api.async_response
+async def websocket_check_schedule_conflicts(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Preview overlap conflicts a candidate schedule would have with other schedules.
+
+    Read-only - never persists anything, and create_schedule/update_schedule
+    are unmodified by this. The frontend calls this before create/update to
+    warn about entities that would be controlled by two schedules during an
+    overlapping window; the schedule is only actually saved once the
+    manager confirms (optionally after excluding a conflicting date on the
+    other schedule via a plain update_schedule call). Advisory only: any
+    caller that skips this and calls create/update directly bypasses the
+    check entirely.
+
+    `schedule_id` is omitted when previewing a brand-new schedule (not yet
+    saved, so it has no id to exclude from the scan) and set to the real id
+    when previewing an edit (so the schedule doesn't conflict with its own
+    prior version). The same entity-domain validation as create/update is
+    mirrored here so a candidate that would be rejected on save doesn't
+    first report back "0 conflicts" - a confusing sequence otherwise.
+    """
+    entry = _get_entry(hass)
+    if entry is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    if mismatched := _mismatched_entities(msg["device_type"], msg["entities"]):
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_INVALID_FORMAT,
+            f"Entities do not match device_type '{msg['device_type'].value}': "
+            f"{mismatched}",
+        )
+        return
+
+    # Real ids are always server-generated uuid4 strings, so "" can never
+    # collide with one - a safe placeholder for a not-yet-saved candidate.
+    candidate = _build_schedule(msg.get("schedule_id") or "", msg)
+    conflicts = await entry.runtime_data.engine.async_find_conflicts(
+        candidate, exclude_schedule_id=msg.get("schedule_id")
+    )
+
+    connection.send_result(
+        msg["id"], {"conflicts": [_conflict_to_dict(c) for c in conflicts]}
+    )
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/delete_schedule",
@@ -773,6 +851,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_list_schedules)
     websocket_api.async_register_command(hass, websocket_create_schedule)
     websocket_api.async_register_command(hass, websocket_update_schedule)
+    websocket_api.async_register_command(hass, websocket_check_schedule_conflicts)
     websocket_api.async_register_command(hass, websocket_delete_schedule)
     websocket_api.async_register_command(hass, websocket_get_preferences)
     websocket_api.async_register_command(hass, websocket_set_preferences)

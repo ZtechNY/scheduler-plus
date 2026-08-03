@@ -18,6 +18,7 @@ based on its actual domain.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -54,6 +55,47 @@ _WEEKDAY_BY_ISO_INDEX: tuple[Weekday, ...] = (
     Weekday.SATURDAY,
     Weekday.SUNDAY,
 )
+
+# How far ahead async_find_conflicts checks a recurring (ALWAYS/EXCLUDE) rule
+# for overlaps with other schedules - a bounded preview, not an unbounded
+# scan; see async_find_conflicts' own docstring for what this misses.
+_DEFAULT_CONFLICT_LOOKAHEAD_DAYS = 14
+
+# Cap on how many days of an INCLUDE rule's date_range get checked for
+# conflicts, so a long-running range (e.g. a 90-day summer window) doesn't
+# resolve an unbounded number of dates in one check.
+_MAX_INCLUDE_RANGE_CHECK_DAYS = 31
+
+
+@dataclass(slots=True, kw_only=True, frozen=True)
+class ScheduleConflict:
+    """One detected overlap between a candidate schedule's rule and another schedule's.
+
+    A transient computed result (never persisted - unlike models.py's
+    round-tripping domain shapes), returned by SchedulerEngine.async_find_
+    conflicts and serialized to a plain dict by the websocket layer.
+
+    `entity_ids` is the *schedule-level* entity intersection between the
+    two schedules (entities live on Schedule, not per-rule) - so a
+    conflict spanning three shared entities is one record listing all
+    three, not three separate records, and fixing it (see websocket.py's
+    check_schedule_conflicts docstring) resolves it for all of them at
+    once.
+    """
+
+    entity_ids: tuple[str, ...]
+    candidate_rule_id: str
+    candidate_rule_name: str
+    conflicting_schedule_id: str
+    conflicting_schedule_name: str
+    conflicting_rule_id: str
+    conflicting_rule_name: str
+    date: date
+    candidate_on_at: datetime
+    candidate_off_at: datetime
+    conflicting_on_at: datetime
+    conflicting_off_at: datetime
+    fixable: bool
 
 
 class SchedulerEngine:
@@ -217,6 +259,240 @@ class SchedulerEngine:
                     )
                 )
         return events
+
+    async def async_find_conflicts(
+        self,
+        candidate: Schedule,
+        *,
+        exclude_schedule_id: str | None = None,
+        lookahead_days: int = _DEFAULT_CONFLICT_LOOKAHEAD_DAYS,
+    ) -> list[ScheduleConflict]:
+        """Find overlaps between `candidate`'s rules and OTHER schedules' rules.
+
+        Read-only, like async_get_next_event/async_get_day_events - never
+        schedules or fires anything, and never persists `candidate` itself
+        (it may not even be saved yet - see websocket.py's
+        check_schedule_conflicts, which calls this before create/update to
+        preview conflicts). A conflict is a pair of rules (one from
+        `candidate`, one from a *different*, enabled schedule) that target
+        a shared entity and whose resolved on/off windows overlap on some
+        checked date - candidate rules are never compared against each
+        other (same-schedule conflicts are out of scope; the ask was
+        cross-schedule specifically).
+
+        Checked dates are bounded, not an unbounded future scan: INCLUDE-
+        mode rules are checked on their own literal dates/date_ranges
+        (ranges clamped to start no earlier than today and capped at
+        _MAX_INCLUDE_RANGE_CHECK_DAYS days), ALWAYS/EXCLUDE-mode rules over
+        the next `lookahead_days` days. This can miss a conflict that only
+        manifests in a different season for a sunrise/sunset/YidCal-timed
+        rule - an accepted scope limit for a preview, not a guarantee of
+        "no conflicts ever". A YidCal-timed rule in particular will resolve
+        to None for nearly every date beyond today regardless, since that
+        plugin only ever confirms its own *current* state (see
+        _candidate_dates' docstring) - not a limitation introduced here.
+        """
+        if not candidate.enabled:
+            return []
+
+        now = dt_util.now()
+        today = now.date()
+        others = [
+            other
+            for raw in self._coordinator.data["schedules"]
+            if (other := Schedule.from_dict(raw)).id != candidate.id
+            and other.id != exclude_schedule_id
+            and other.enabled
+        ]
+        candidate_entities = set(candidate.entities)
+        relevant_others = [
+            other for other in others if candidate_entities & set(other.entities)
+        ]
+        if not relevant_others:
+            return []
+
+        conflicts: list[ScheduleConflict] = []
+        for candidate_rule in candidate.rules:
+            if not candidate_rule.enabled:
+                continue
+            for check_date in self._conflict_check_dates(
+                candidate_rule, now, lookahead_days
+            ):
+                if not candidate.is_active_on(
+                    check_date
+                ) or candidate.is_overridden(check_date):
+                    continue
+                candidate_occurrence = await self._async_resolve_occurrence(
+                    candidate_rule, check_date
+                )
+                if candidate_occurrence is None:
+                    continue
+                candidate_start, candidate_end = self._effective_window(
+                    *candidate_occurrence,
+                    candidate_rule.on_enabled,
+                    candidate_rule.off_enabled,
+                )
+
+                for other in relevant_others:
+                    if not other.is_active_on(
+                        check_date
+                    ) or other.is_overridden(check_date):
+                        continue
+                    entity_ids = tuple(
+                        sorted(candidate_entities & set(other.entities))
+                    )
+                    for other_rule in other.rules:
+                        if not other_rule.enabled:
+                            continue
+                        other_occurrence = await self._async_resolve_occurrence(
+                            other_rule, check_date
+                        )
+                        if other_occurrence is None:
+                            continue
+                        other_start, other_end = self._effective_window(
+                            *other_occurrence,
+                            other_rule.on_enabled,
+                            other_rule.off_enabled,
+                        )
+                        if not (
+                            candidate_start < other_end
+                            and other_start < candidate_end
+                        ):
+                            continue
+                        conflicts.append(
+                            ScheduleConflict(
+                                entity_ids=entity_ids,
+                                candidate_rule_id=candidate_rule.id,
+                                candidate_rule_name=candidate_rule.name,
+                                conflicting_schedule_id=other.id,
+                                conflicting_schedule_name=other.name,
+                                conflicting_rule_id=other_rule.id,
+                                conflicting_rule_name=other_rule.name,
+                                date=check_date,
+                                candidate_on_at=candidate_occurrence[0],
+                                candidate_off_at=candidate_occurrence[1],
+                                conflicting_on_at=other_occurrence[0],
+                                conflicting_off_at=other_occurrence[1],
+                                fixable=self._is_exclusion_fixable(
+                                    other_rule, check_date
+                                ),
+                            )
+                        )
+
+        return self._dedupe_conflicts(conflicts)
+
+    @staticmethod
+    def _conflict_check_dates(
+        rule: Rule, now: datetime, lookahead_days: int
+    ) -> list[date]:
+        """Dates worth resolving `rule` against for async_find_conflicts.
+
+        INCLUDE-mode: every literal date in `dates`, plus every day of each
+        date_ranges entry, clamped to start no earlier than today (mirrors
+        _candidate_dates' own max(start, yesterday) clamp, but anchored to
+        today since a conflict preview only cares about the live remainder
+        of an in-progress range, not days already past) and capped at
+        _MAX_INCLUDE_RANGE_CHECK_DAYS per range.
+
+        ALWAYS/EXCLUDE-mode: the next `lookahead_days` days from today.
+        """
+        today = now.date()
+        if rule.date_mode is RuleDateMode.INCLUDE:
+            dates: set[date] = {
+                d for raw in rule.dates if (d := date.fromisoformat(raw)) >= today
+            }
+            for start_str, end_str in rule.date_ranges:
+                start = date.fromisoformat(start_str)
+                end = date.fromisoformat(end_str)
+                d = max(start, today)
+                count = 0
+                while d <= end and count < _MAX_INCLUDE_RANGE_CHECK_DAYS:
+                    dates.add(d)
+                    d += timedelta(days=1)
+                    count += 1
+            return sorted(dates)
+        return [(now + timedelta(days=offset)).date() for offset in range(lookahead_days)]
+
+    @staticmethod
+    def _effective_window(
+        on_at: datetime, off_at: datetime, on_enabled: bool, off_enabled: bool
+    ) -> tuple[datetime, datetime]:
+        """A comparable (start, end) interval for overlap testing.
+
+        `on_at`/`off_at` are always populated by _async_resolve_occurrence
+        regardless of on_enabled/off_enabled - the disabled side's raw time
+        is a meaningless leftover value, not a real boundary, so it can't
+        be compared directly.
+
+        Both enabled: the real window, unchanged.
+        On-only: approximated as extending through the rest of that
+        calendar day - the rule never turns the entity off, so its
+        influence is genuinely open-ended; this is a bounded, documented
+        approximation for a day-by-day preview, not an exact simulation
+        (it won't detect the rule's effect carrying into a later checked
+        day if that day's own on_at is later in the clock).
+        Off-only: a momentary action, modeled as a ~1-minute window right
+        at off_at, so the same overlap test naturally answers "does this
+        off command land inside another rule's on-window".
+        """
+        if on_enabled and off_enabled:
+            return on_at, off_at
+        if on_enabled:
+            midnight_after = on_at.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ) + timedelta(days=1)
+            return on_at, midnight_after
+        return off_at, off_at + timedelta(minutes=1)
+
+    @staticmethod
+    def _is_exclusion_fixable(rule: Rule, check_date: date) -> bool:
+        """Whether `rule` can cleanly gain a date exclusion for `check_date`.
+
+        ALWAYS: fixable only if there's no dormant date_ranges/day_conditions
+        left over to reactivate alongside the new EXCLUDE - flipping the
+        mode would otherwise silently exclude more than just this one date
+        (see rule-editor-dialog.ts's mode-switch handling, which now clears
+        these on transition to ALWAYS; this is a defensive backend check
+        independent of whether the frontend ever produced messy data).
+        EXCLUDE: always fixable - adding one more date is always safe.
+        INCLUDE: only fixable if check_date is a literal `dates` entry with
+        no *other* way the rule could still match that date (a date_ranges
+        entry or a day_condition) - _matches_date_filter ORs all three, so
+        removing it from `dates` alone wouldn't actually stop the rule from
+        firing that day otherwise.
+        """
+        if rule.date_mode is RuleDateMode.ALWAYS:
+            return not rule.date_ranges and not rule.day_conditions
+        if rule.date_mode is RuleDateMode.EXCLUDE:
+            return True
+        if rule.day_conditions:
+            return False
+        date_str = check_date.isoformat()
+        if date_str not in rule.dates:
+            return False
+        if any(start <= date_str <= end for start, end in rule.date_ranges):
+            return False
+        return True
+
+    @staticmethod
+    def _dedupe_conflicts(
+        conflicts: list[ScheduleConflict],
+    ) -> list[ScheduleConflict]:
+        """Keep only the earliest-dated conflict per (candidate_rule, other_rule) pair.
+
+        The same rule pair can conflict on multiple dates within the
+        lookahead window (a recurring-vs-recurring overlap checked over 14
+        days, say) - reporting every one of those would bury the single
+        underlying conflict under repeats of itself.
+        """
+        best: dict[tuple[str, str], ScheduleConflict] = {}
+        for conflict in conflicts:
+            key = (conflict.candidate_rule_id, conflict.conflicting_rule_id)
+            if key not in best or conflict.date < best[key].date:
+                best[key] = conflict
+        return sorted(
+            best.values(), key=lambda c: (c.date, c.conflicting_schedule_name)
+        )
 
     @staticmethod
     def _candidate_dates(rule: Rule, now: datetime) -> list[date]:

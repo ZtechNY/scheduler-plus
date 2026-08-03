@@ -2,8 +2,15 @@ import { mdiDelete, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
-import type { HomeAssistant, RuleInput, ScheduleInput, ScheduleTemplate } from "./api";
-import { createSchedule, updateSchedule } from "./api";
+import type {
+  HomeAssistant,
+  RuleInput,
+  ScheduleConflict,
+  ScheduleInput,
+  ScheduleTemplate,
+} from "./api";
+import { checkScheduleConflicts, createSchedule, updateSchedule } from "./api";
+import { describeConflict, excludeConflictDate } from "./conflict-utils";
 import "./entity-multi-picker";
 import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
@@ -108,6 +115,10 @@ export class SchedulerPlusScheduleEditor extends LitElement {
 
   @state() private _saving = false;
 
+  @state() private _checkingConflicts = false;
+
+  @state() private _conflicts: ScheduleConflict[] = [];
+
   @state() private _error?: string;
 
   @query("scheduler-plus-rule-editor")
@@ -127,6 +138,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._activeDateRanges = schedule?.active_date_ranges ? [...schedule.active_date_ranges] : [];
     this._newActiveRangeStart = "";
     this._newActiveRangeEnd = "";
+    this._conflicts = [];
     this._error = undefined;
     this._open = true;
   }
@@ -152,6 +164,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._activeDateRanges = schedule.active_date_ranges ? [...schedule.active_date_ranges] : [];
     this._newActiveRangeStart = "";
     this._newActiveRangeEnd = "";
+    this._conflicts = [];
     this._error = undefined;
     this._open = true;
   }
@@ -179,6 +192,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     this._activeDateRanges = [];
     this._newActiveRangeStart = "";
     this._newActiveRangeEnd = "";
+    this._conflicts = [];
     this._error = undefined;
     this._open = true;
   }
@@ -260,33 +274,26 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     );
   };
 
-  private _save = async (): Promise<void> => {
-    const name = this._name.trim();
-    if (!name) {
-      this._error = "Name is required.";
-      return;
-    }
-    if (this._entities.length === 0) {
-      this._error = "At least one entity is required.";
-      return;
-    }
+  private _buildInput(name: string): ScheduleInput {
+    return {
+      name,
+      device_type: this._deviceType,
+      entities: this._entities,
+      enabled: this._enabled,
+      rules: this._rules,
+      active_date_mode: this._activeDateMode,
+      active_date_ranges: this._activeDateRanges,
+      // Not editable from this dialog (see override-dialog.ts) - carried
+      // forward unchanged so editing a schedule's rules doesn't silently
+      // clear an active pause.
+      override_until: this._schedule?.override_until ?? null,
+    };
+  }
 
+  private async _persist(input: ScheduleInput): Promise<void> {
     this._saving = true;
     this._error = undefined;
     try {
-      const input: ScheduleInput = {
-        name,
-        device_type: this._deviceType,
-        entities: this._entities,
-        enabled: this._enabled,
-        rules: this._rules,
-        active_date_mode: this._activeDateMode,
-        active_date_ranges: this._activeDateRanges,
-        // Not editable from this dialog (see override-dialog.ts) - carried
-        // forward unchanged so editing a schedule's rules doesn't silently
-        // clear an active pause.
-        override_until: this._schedule?.override_until ?? null,
-      };
       if (this._schedule) {
         await updateSchedule(this.hass, this._schedule.id, input);
       } else {
@@ -298,6 +305,73 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
       this._saving = false;
+    }
+  }
+
+  /**
+   * Always re-checks for cross-schedule conflicts before saving - unlike
+   * _saveAnyway (an explicit, one-time bypass a manager clicks only after
+   * already seeing the warning), this button re-runs the check on every
+   * click, so an edit made after conflicts were shown can't silently save
+   * with a *different*, never-reviewed conflict.
+   */
+  private _save = async (): Promise<void> => {
+    const name = this._name.trim();
+    if (!name) {
+      this._error = "Name is required.";
+      return;
+    }
+    if (this._entities.length === 0) {
+      this._error = "At least one entity is required.";
+      return;
+    }
+
+    const input = this._buildInput(name);
+    this._checkingConflicts = true;
+    this._error = undefined;
+    try {
+      const conflicts = await checkScheduleConflicts(
+        this.hass,
+        this._schedule?.id ?? null,
+        input,
+      );
+      if (conflicts.length === 0) {
+        this._conflicts = [];
+        await this._persist(input);
+      } else {
+        this._conflicts = conflicts;
+      }
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this._checkingConflicts = false;
+    }
+  };
+
+  /** Explicit bypass, only offered once conflicts are already shown - see _save. */
+  private _saveAnyway = (): void => {
+    const name = this._name.trim();
+    void this._persist(this._buildInput(name));
+  };
+
+  private _excludeConflict = async (conflict: ScheduleConflict): Promise<void> => {
+    try {
+      await excludeConflictDate(this.hass, conflict);
+      // Fixing this rule/date also resolves any other listed conflict
+      // against the exact same conflicting rule and date, even if it was
+      // reported against a different one of this schedule's own rules.
+      this._conflicts = this._conflicts.filter(
+        (c) =>
+          !(
+            c.conflicting_rule_id === conflict.conflicting_rule_id &&
+            c.date === conflict.date
+          ),
+      );
+      if (this._conflicts.length === 0) {
+        await this._persist(this._buildInput(this._name.trim()));
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -391,25 +465,73 @@ export class SchedulerPlusScheduleEditor extends LitElement {
                 </ul>
               `}
 
+          ${this._conflicts.length > 0 ? this._renderConflictPanel() : nothing}
+
           <div class="dialog-actions">
-            <button type="button" class="btn" @click=${this._openSaveAsTemplate}>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving || this._checkingConflicts}
+              @click=${this._openSaveAsTemplate}
+            >
               Save as template
             </button>
             <span class="spacer"></span>
-            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving || this._checkingConflicts}
+              @click=${this._closeDialog}
+            >
+              Cancel
+            </button>
             <button
               type="button"
               class="btn btn-primary"
-              ?disabled=${this._saving}
+              ?disabled=${this._saving || this._checkingConflicts}
               @click=${this._save}
             >
-              Save
+              ${this._checkingConflicts ? "Checking…" : "Save"}
             </button>
           </div>
         </div>
       </ha-dialog>
       <scheduler-plus-rule-editor .hass=${this.hass}></scheduler-plus-rule-editor>
       <scheduler-plus-template-editor .hass=${this.hass}></scheduler-plus-template-editor>
+    `;
+  }
+
+  private _renderConflictPanel() {
+    return html`
+      <div class="conflict-panel">
+        <span class="conflict-title">
+          This overlaps ${this._conflicts.length === 1 ? "another schedule" : "other schedules"}
+        </span>
+        <ul class="conflicts">
+          ${this._conflicts.map(
+            (conflict) => html`
+              <li class="conflict-row">
+                <div class="conflict-info">
+                  <span>${describeConflict(conflict)}</span>
+                  <span class="hint">${conflict.entity_ids.join(", ")}</span>
+                </div>
+                ${conflict.fixable
+                  ? html`
+                      <button
+                        type="button"
+                        class="btn"
+                        @click=${() => this._excludeConflict(conflict)}
+                      >
+                        Exclude "${conflict.conflicting_schedule_name}" on ${conflict.date}
+                      </button>
+                    `
+                  : html`<span class="hint">Adjust manually - can't auto-fix this one.</span>`}
+              </li>
+            `,
+          )}
+        </ul>
+        <button type="button" class="btn" @click=${this._saveAnyway}>Save anyway</button>
+      </div>
     `;
   }
 
@@ -590,6 +712,42 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       padding: 12px;
       border: 1px solid var(--divider-color);
       border-radius: 6px;
+    }
+    .conflict-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--warning-color, #ffa600);
+      border-radius: 6px;
+    }
+    .conflict-title {
+      font-weight: 500;
+      color: var(--warning-color, #ffa600);
+    }
+    ul.conflicts {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .conflict-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .conflict-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .conflict-info {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9em;
     }
     .panel-label {
       font-size: 0.85em;

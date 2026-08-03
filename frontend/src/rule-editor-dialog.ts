@@ -287,6 +287,16 @@ export class SchedulerPlusRuleEditor extends LitElement {
       // requires at least one day - fill it in rather than nagging the
       // user about a field this mode doesn't use.
       this._days = [...WEEKDAYS];
+    } else if (mode === "always") {
+      // Dormant in "always" mode (only INCLUDE/EXCLUDE ever consult these),
+      // but left set they'd silently reactivate if the rule is later
+      // switched back to INCLUDE/EXCLUDE - clearing them here means
+      // "always" always means always, with nothing left over to surprise
+      // a later edit (including a schedule-conflict auto-fix that flips a
+      // rule to EXCLUDE and assumes no leftover date fields).
+      this._dates = [];
+      this._dateRanges = [];
+      this._dayConditions = [];
     }
   };
 

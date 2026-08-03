@@ -1,29 +1,29 @@
-var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C,H)=>{for(var M=H>1?void 0:H?f2(V,C):V,r=L.length-1,a;r>=0;r--)(a=L[r])&&(M=(H?a(V,C,M):a(M))||M);return H&&M&&O2(V,C,M),M};var D1="M10.63,14.1C12.23,10.58 16.38,9.03 19.9,10.63C23.42,12.23 24.97,16.38 23.37,19.9C22.24,22.4 19.75,24 17,24C14.3,24 11.83,22.44 10.67,20H1V18C1.06,16.86 1.84,15.93 3.34,15.18C4.84,14.43 6.72,14.04 9,14C9.57,14 10.11,14.05 10.63,14.1V14.1M9,4C10.12,4.03 11.06,4.42 11.81,5.17C12.56,5.92 12.93,6.86 12.93,8C12.93,9.14 12.56,10.08 11.81,10.83C11.06,11.58 10.12,11.95 9,11.95C7.88,11.95 6.94,11.58 6.19,10.83C5.44,10.08 5.07,9.14 5.07,8C5.07,6.86 5.44,5.92 6.19,5.17C6.94,4.42 7.88,4.03 9,4M17,22A5,5 0 0,0 22,17A5,5 0 0,0 17,12A5,5 0 0,0 12,17A5,5 0 0,0 17,22M16,14H17.5V16.82L19.94,18.23L19.19,19.53L16,17.69V14Z";var E1="M15,13H16.5V15.82L18.94,17.23L18.19,18.53L15,16.69V13M19,8H5V19H9.67C9.24,18.09 9,17.07 9,16A7,7 0 0,1 16,9C17.07,9 18.09,9.24 19,9.67V8M5,21C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H6V1H8V3H16V1H18V3H19A2,2 0 0,1 21,5V11.1C22.24,12.36 23,14.09 23,16A7,7 0 0,1 16,23C14.09,23 12.36,22.24 11.1,21H5M16,11.15A4.85,4.85 0 0,0 11.15,16C11.15,18.68 13.32,20.85 16,20.85A4.85,4.85 0 0,0 20.85,16C20.85,13.32 18.68,11.15 16,11.15Z";var $1="M19 19V8H5V19H19M16 1H18V3H19C20.11 3 21 3.9 21 5V19C21 20.11 20.11 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.89 3.89 3 5 3H6V1H8V3H16V1M11 9.5H13V12.5H16V14.5H13V17.5H11V14.5H8V12.5H11V9.5Z";var N1="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z";var w="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";var W1="M13,16V8H15V16H13M9,16V8H11V16H9M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z";var o1="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";var I1="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z";var U1="M3 21H11V13H3M5 15H9V19H5M3 11H11V3H3M5 5H9V9H5M13 3V11H21V3M19 9H15V5H19M18 16H21V18H18V21H16V18H13V16H16V13H18Z";var A1=globalThis,d1=A1.ShadowRoot&&(A1.ShadyCSS===void 0||A1.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,g1=Symbol(),G1=new WeakMap,J=class{constructor(V,C,H){if(this._$cssResult$=!0,H!==g1)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=V,this.t=C}get styleSheet(){let V=this.o,C=this.t;if(d1&&V===void 0){let H=C!==void 0&&C.length===1;H&&(V=G1.get(C)),V===void 0&&((this.o=V=new CSSStyleSheet).replaceSync(this.cssText),H&&G1.set(C,V))}return V}toString(){return this.cssText}},Q1=L=>new J(typeof L=="string"?L:L+"",void 0,g1),v=(L,...V)=>{let C=L.length===1?L[0]:V.reduce((H,M,r)=>H+(a=>{if(a._$cssResult$===!0)return a.cssText;if(typeof a=="number")return a;throw Error("Value passed to 'css' function must be a 'css' function result: "+a+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(M)+L[r+1],L[0]);return new J(C,L,g1)},z1=(L,V)=>{if(d1)L.adoptedStyleSheets=V.map(C=>C instanceof CSSStyleSheet?C:C.styleSheet);else for(let C of V){let H=document.createElement("style"),M=A1.litNonce;M!==void 0&&H.setAttribute("nonce",M),H.textContent=C.cssText,L.appendChild(H)}},O1=d1?L=>L:L=>L instanceof CSSStyleSheet?(V=>{let C="";for(let H of V.cssRules)C+=H.cssText;return Q1(C)})(L):L;var{is:y2,defineProperty:k2,getOwnPropertyDescriptor:b2,getOwnPropertyNames:w2,getOwnPropertySymbols:_2,getPrototypeOf:T2}=Object,p1=globalThis,K1=p1.trustedTypes,B2=K1?K1.emptyScript:"",P2=p1.reactiveElementPolyfillSupport,C1=(L,V)=>L,H1={toAttribute(L,V){switch(V){case Boolean:L=L?B2:null;break;case Object:case Array:L=L==null?L:JSON.stringify(L)}return L},fromAttribute(L,V){let C=L;switch(V){case Boolean:C=L!==null;break;case Number:C=L===null?null:Number(L);break;case Object:case Array:try{C=JSON.parse(L)}catch{C=null}}return C}},m1=(L,V)=>!y2(L,V),q1={attribute:!0,type:String,converter:H1,reflect:!1,useDefault:!1,hasChanged:m1};Symbol.metadata??=Symbol("metadata"),p1.litPropertyMetadata??=new WeakMap;var R=class extends HTMLElement{static addInitializer(V){this._$Ei(),(this.l??=[]).push(V)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(V,C=q1){if(C.state&&(C.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(V)&&((C=Object.create(C)).wrapped=!0),this.elementProperties.set(V,C),!C.noAccessor){let H=Symbol(),M=this.getPropertyDescriptor(V,H,C);M!==void 0&&k2(this.prototype,V,M)}}static getPropertyDescriptor(V,C,H){let{get:M,set:r}=b2(this.prototype,V)??{get(){return this[C]},set(a){this[C]=a}};return{get:M,set(a){let d=M?.call(this);r?.call(this,a),this.requestUpdate(V,d,H)},configurable:!0,enumerable:!0}}static getPropertyOptions(V){return this.elementProperties.get(V)??q1}static _$Ei(){if(this.hasOwnProperty(C1("elementProperties")))return;let V=T2(this);V.finalize(),V.l!==void 0&&(this.l=[...V.l]),this.elementProperties=new Map(V.elementProperties)}static finalize(){if(this.hasOwnProperty(C1("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(C1("properties"))){let C=this.properties,H=[...w2(C),..._2(C)];for(let M of H)this.createProperty(M,C[M])}let V=this[Symbol.metadata];if(V!==null){let C=litPropertyMetadata.get(V);if(C!==void 0)for(let[H,M]of C)this.elementProperties.set(H,M)}this._$Eh=new Map;for(let[C,H]of this.elementProperties){let M=this._$Eu(C,H);M!==void 0&&this._$Eh.set(M,C)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(V){let C=[];if(Array.isArray(V)){let H=new Set(V.flat(1/0).reverse());for(let M of H)C.unshift(O1(M))}else V!==void 0&&C.push(O1(V));return C}static _$Eu(V,C){let H=C.attribute;return H===!1?void 0:typeof H=="string"?H:typeof V=="string"?V.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(V=>this.enableUpdating=V),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(V=>V(this))}addController(V){(this._$EO??=new Set).add(V),this.renderRoot!==void 0&&this.isConnected&&V.hostConnected?.()}removeController(V){this._$EO?.delete(V)}_$E_(){let V=new Map,C=this.constructor.elementProperties;for(let H of C.keys())this.hasOwnProperty(H)&&(V.set(H,this[H]),delete this[H]);V.size>0&&(this._$Ep=V)}createRenderRoot(){let V=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return z1(V,this.constructor.elementStyles),V}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(V=>V.hostConnected?.())}enableUpdating(V){}disconnectedCallback(){this._$EO?.forEach(V=>V.hostDisconnected?.())}attributeChangedCallback(V,C,H){this._$AK(V,H)}_$ET(V,C){let H=this.constructor.elementProperties.get(V),M=this.constructor._$Eu(V,H);if(M!==void 0&&H.reflect===!0){let r=(H.converter?.toAttribute!==void 0?H.converter:H1).toAttribute(C,H.type);this._$Em=V,r==null?this.removeAttribute(M):this.setAttribute(M,r),this._$Em=null}}_$AK(V,C){let H=this.constructor,M=H._$Eh.get(V);if(M!==void 0&&this._$Em!==M){let r=H.getPropertyOptions(M),a=typeof r.converter=="function"?{fromAttribute:r.converter}:r.converter?.fromAttribute!==void 0?r.converter:H1;this._$Em=M;let d=a.fromAttribute(C,r.type);this[M]=d??this._$Ej?.get(M)??d,this._$Em=null}}requestUpdate(V,C,H,M=!1,r){if(V!==void 0){let a=this.constructor;if(M===!1&&(r=this[V]),H??=a.getPropertyOptions(V),!((H.hasChanged??m1)(r,C)||H.useDefault&&H.reflect&&r===this._$Ej?.get(V)&&!this.hasAttribute(a._$Eu(V,H))))return;this.C(V,C,H)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(V,C,{useDefault:H,reflect:M,wrapped:r},a){H&&!(this._$Ej??=new Map).has(V)&&(this._$Ej.set(V,a??C??this[V]),r!==!0||a!==void 0)||(this._$AL.has(V)||(this.hasUpdated||H||(C=void 0),this._$AL.set(V,C)),M===!0&&this._$Em!==V&&(this._$Eq??=new Set).add(V))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(C){Promise.reject(C)}let V=this.scheduleUpdate();return V!=null&&await V,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(let[M,r]of this._$Ep)this[M]=r;this._$Ep=void 0}let H=this.constructor.elementProperties;if(H.size>0)for(let[M,r]of H){let{wrapped:a}=r,d=this[M];a!==!0||this._$AL.has(M)||d===void 0||this.C(M,void 0,r,d)}}let V=!1,C=this._$AL;try{V=this.shouldUpdate(C),V?(this.willUpdate(C),this._$EO?.forEach(H=>H.hostUpdate?.()),this.update(C)):this._$EM()}catch(H){throw V=!1,this._$EM(),H}V&&this._$AE(C)}willUpdate(V){}_$AE(V){this._$EO?.forEach(C=>C.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(V)),this.updated(V)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(V){return!0}update(V){this._$Eq&&=this._$Eq.forEach(C=>this._$ET(C,this[C])),this._$EM()}updated(V){}firstUpdated(V){}};R.elementStyles=[],R.shadowRootOptions={mode:"open"},R[C1("elementProperties")]=new Map,R[C1("finalized")]=new Map,P2?.({ReactiveElement:R}),(p1.reactiveElementVersions??=[]).push("2.1.2");var T1=globalThis,j1=L=>L,n1=T1.trustedTypes,Y1=n1?n1.createPolicy("lit-html",{createHTML:L=>L}):void 0,L2="$lit$",D=`lit$${Math.random().toFixed(9).slice(2)}$`,M2="?"+D,R2=`<${M2}>`,N=document,L1=()=>N.createComment(""),M1=L=>L===null||typeof L!="object"&&typeof L!="function",B1=Array.isArray,F2=L=>B1(L)||typeof L?.[Symbol.iterator]=="function",f1=`[ 	
-\f\r]`,V1=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,X1=/-->/g,J1=/>/g,E=RegExp(`>|${f1}(?:([^\\s"'>=/]+)(${f1}*=${f1}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`,"g"),C2=/'/g,H2=/"/g,e2=/^(?:script|style|textarea|title)$/i,P1=L=>(V,...C)=>({_$litType$:L,strings:V,values:C}),t=P1(1),r5=P1(2),t5=P1(3),W=Symbol.for("lit-noChange"),A=Symbol.for("lit-nothing"),V2=new WeakMap,$=N.createTreeWalker(N,129);function r2(L,V){if(!B1(L)||!L.hasOwnProperty("raw"))throw Error("invalid template strings array");return Y1!==void 0?Y1.createHTML(V):V}var D2=(L,V)=>{let C=L.length-1,H=[],M,r=V===2?"<svg>":V===3?"<math>":"",a=V1;for(let d=0;d<C;d++){let o=L[d],s,u,l=-1,P=0;for(;P<o.length&&(a.lastIndex=P,u=a.exec(o),u!==null);)P=a.lastIndex,a===V1?u[1]==="!--"?a=X1:u[1]!==void 0?a=J1:u[2]!==void 0?(e2.test(u[2])&&(M=RegExp("</"+u[2],"g")),a=E):u[3]!==void 0&&(a=E):a===E?u[0]===">"?(a=M??V1,l=-1):u[1]===void 0?l=-2:(l=a.lastIndex-u[2].length,s=u[1],a=u[3]===void 0?E:u[3]==='"'?H2:C2):a===H2||a===C2?a=E:a===X1||a===J1?a=V1:(a=E,M=void 0);let F=a===E&&L[d+1].startsWith("/>")?" ":"";r+=a===V1?o+R2:l>=0?(H.push(s),o.slice(0,l)+L2+o.slice(l)+D+F):o+D+(l===-2?d:F)}return[r2(L,r+(L[C]||"<?>")+(V===2?"</svg>":V===3?"</math>":"")),H]},e1=class L{constructor({strings:V,_$litType$:C},H){let M;this.parts=[];let r=0,a=0,d=V.length-1,o=this.parts,[s,u]=D2(V,C);if(this.el=L.createElement(s,H),$.currentNode=this.el.content,C===2||C===3){let l=this.el.content.firstChild;l.replaceWith(...l.childNodes)}for(;(M=$.nextNode())!==null&&o.length<d;){if(M.nodeType===1){if(M.hasAttributes())for(let l of M.getAttributeNames())if(l.endsWith(L2)){let P=u[a++],F=M.getAttribute(l).split(D),a1=/([.?@])?(.*)/.exec(P);o.push({type:1,index:r,name:a1[2],strings:F,ctor:a1[1]==="."?k1:a1[1]==="?"?b1:a1[1]==="@"?w1:q}),M.removeAttribute(l)}else l.startsWith(D)&&(o.push({type:6,index:r}),M.removeAttribute(l));if(e2.test(M.tagName)){let l=M.textContent.split(D),P=l.length-1;if(P>0){M.textContent=n1?n1.emptyScript:"";for(let F=0;F<P;F++)M.append(l[F],L1()),$.nextNode(),o.push({type:2,index:++r});M.append(l[P],L1())}}}else if(M.nodeType===8)if(M.data===M2)o.push({type:2,index:r});else{let l=-1;for(;(l=M.data.indexOf(D,l+1))!==-1;)o.push({type:7,index:r}),l+=D.length-1}r++}}static createElement(V,C){let H=N.createElement("template");return H.innerHTML=V,H}};function K(L,V,C=L,H){if(V===W)return V;let M=H!==void 0?C._$Co?.[H]:C._$Cl,r=M1(V)?void 0:V._$litDirective$;return M?.constructor!==r&&(M?._$AO?.(!1),r===void 0?M=void 0:(M=new r(L),M._$AT(L,C,H)),H!==void 0?(C._$Co??=[])[H]=M:C._$Cl=M),M!==void 0&&(V=K(L,M._$AS(L,V.values),M,H)),V}var y1=class{constructor(V,C){this._$AV=[],this._$AN=void 0,this._$AD=V,this._$AM=C}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(V){let{el:{content:C},parts:H}=this._$AD,M=(V?.creationScope??N).importNode(C,!0);$.currentNode=M;let r=$.nextNode(),a=0,d=0,o=H[0];for(;o!==void 0;){if(a===o.index){let s;o.type===2?s=new r1(r,r.nextSibling,this,V):o.type===1?s=new o.ctor(r,o.name,o.strings,this,V):o.type===6&&(s=new _1(r,this,V)),this._$AV.push(s),o=H[++d]}a!==o?.index&&(r=$.nextNode(),a++)}return $.currentNode=N,M}p(V){let C=0;for(let H of this._$AV)H!==void 0&&(H.strings!==void 0?(H._$AI(V,H,C),C+=H.strings.length-2):H._$AI(V[C])),C++}},r1=class L{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(V,C,H,M){this.type=2,this._$AH=A,this._$AN=void 0,this._$AA=V,this._$AB=C,this._$AM=H,this.options=M,this._$Cv=M?.isConnected??!0}get parentNode(){let V=this._$AA.parentNode,C=this._$AM;return C!==void 0&&V?.nodeType===11&&(V=C.parentNode),V}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(V,C=this){V=K(this,V,C),M1(V)?V===A||V==null||V===""?(this._$AH!==A&&this._$AR(),this._$AH=A):V!==this._$AH&&V!==W&&this._(V):V._$litType$!==void 0?this.$(V):V.nodeType!==void 0?this.T(V):F2(V)?this.k(V):this._(V)}O(V){return this._$AA.parentNode.insertBefore(V,this._$AB)}T(V){this._$AH!==V&&(this._$AR(),this._$AH=this.O(V))}_(V){this._$AH!==A&&M1(this._$AH)?this._$AA.nextSibling.data=V:this.T(N.createTextNode(V)),this._$AH=V}$(V){let{values:C,_$litType$:H}=V,M=typeof H=="number"?this._$AC(V):(H.el===void 0&&(H.el=e1.createElement(r2(H.h,H.h[0]),this.options)),H);if(this._$AH?._$AD===M)this._$AH.p(C);else{let r=new y1(M,this),a=r.u(this.options);r.p(C),this.T(a),this._$AH=r}}_$AC(V){let C=V2.get(V.strings);return C===void 0&&V2.set(V.strings,C=new e1(V)),C}k(V){B1(this._$AH)||(this._$AH=[],this._$AR());let C=this._$AH,H,M=0;for(let r of V)M===C.length?C.push(H=new L(this.O(L1()),this.O(L1()),this,this.options)):H=C[M],H._$AI(r),M++;M<C.length&&(this._$AR(H&&H._$AB.nextSibling,M),C.length=M)}_$AR(V=this._$AA.nextSibling,C){for(this._$AP?.(!1,!0,C);V!==this._$AB;){let H=j1(V).nextSibling;j1(V).remove(),V=H}}setConnected(V){this._$AM===void 0&&(this._$Cv=V,this._$AP?.(V))}},q=class{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(V,C,H,M,r){this.type=1,this._$AH=A,this._$AN=void 0,this.element=V,this.name=C,this._$AM=M,this.options=r,H.length>2||H[0]!==""||H[1]!==""?(this._$AH=Array(H.length-1).fill(new String),this.strings=H):this._$AH=A}_$AI(V,C=this,H,M){let r=this.strings,a=!1;if(r===void 0)V=K(this,V,C,0),a=!M1(V)||V!==this._$AH&&V!==W,a&&(this._$AH=V);else{let d=V,o,s;for(V=r[0],o=0;o<r.length-1;o++)s=K(this,d[H+o],C,o),s===W&&(s=this._$AH[o]),a||=!M1(s)||s!==this._$AH[o],s===A?V=A:V!==A&&(V+=(s??"")+r[o+1]),this._$AH[o]=s}a&&!M&&this.j(V)}j(V){V===A?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,V??"")}},k1=class extends q{constructor(){super(...arguments),this.type=3}j(V){this.element[this.name]=V===A?void 0:V}},b1=class extends q{constructor(){super(...arguments),this.type=4}j(V){this.element.toggleAttribute(this.name,!!V&&V!==A)}},w1=class extends q{constructor(V,C,H,M,r){super(V,C,H,M,r),this.type=5}_$AI(V,C=this){if((V=K(this,V,C,0)??A)===W)return;let H=this._$AH,M=V===A&&H!==A||V.capture!==H.capture||V.once!==H.once||V.passive!==H.passive,r=V!==A&&(H===A||M);M&&this.element.removeEventListener(this.name,this,H),r&&this.element.addEventListener(this.name,this,V),this._$AH=V}handleEvent(V){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,V):this._$AH.handleEvent(V)}},_1=class{constructor(V,C,H){this.element=V,this.type=6,this._$AN=void 0,this._$AM=C,this.options=H}get _$AU(){return this._$AM._$AU}_$AI(V){K(this,V)}};var E2=T1.litHtmlPolyfillSupport;E2?.(e1,r1),(T1.litHtmlVersions??=[]).push("3.3.3");var t2=(L,V,C)=>{let H=C?.renderBefore??V,M=H._$litPart$;if(M===void 0){let r=C?.renderBefore??null;H._$litPart$=M=new r1(V.insertBefore(L1(),r),r,void 0,C??{})}return M._$AI(L),M};var R1=globalThis,n=class extends R{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){let V=super.createRenderRoot();return this.renderOptions.renderBefore??=V.firstChild,V}update(V){let C=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(V),this._$Do=t2(C,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return W}};n._$litElement$=!0,n.finalized=!0,R1.litElementHydrateSupport?.({LitElement:n});var $2=R1.litElementPolyfillSupport;$2?.({LitElement:n});(R1.litElementVersions??=[]).push("4.2.2");var x=L=>(V,C)=>{C!==void 0?C.addInitializer(()=>{customElements.define(L,V)}):customElements.define(L,V)};var N2={attribute:!0,type:String,converter:H1,reflect:!1,hasChanged:m1},W2=(L=N2,V,C)=>{let{kind:H,metadata:M}=C,r=globalThis.litPropertyMetadata.get(M);if(r===void 0&&globalThis.litPropertyMetadata.set(M,r=new Map),H==="setter"&&((L=Object.create(L)).wrapped=!0),r.set(C.name,L),H==="accessor"){let{name:a}=C;return{set(d){let o=V.get.call(this);V.set.call(this,d),this.requestUpdate(a,o,L,!0,d)},init(d){return d!==void 0&&this.C(a,void 0,L,d),d}}}if(H==="setter"){let{name:a}=C;return function(d){let o=this[a];V.call(this,d),this.requestUpdate(a,o,L,!0,d)}}throw Error("Unsupported decorator location: "+H)};function m(L){return(V,C)=>typeof C=="object"?W2(L,V,C):((H,M,r)=>{let a=M.hasOwnProperty(r);return M.constructor.createProperty(r,H),a?Object.getOwnPropertyDescriptor(M,r):void 0})(L,V,C)}function i(L){return m({...L,state:!0,attribute:!1})}var I=(L,V,C)=>(C.configurable=!0,C.enumerable=!0,Reflect.decorate&&typeof V!="object"&&Object.defineProperty(L,V,C),C);function O(L,V){return(C,H,M)=>{let r=a=>a.renderRoot?.querySelector(L)??null;if(V){let{get:a,set:d}=typeof H=="object"?C:M??(()=>{let o=Symbol();return{get(){return this[o]},set(s){this[o]=s}}})();return I(C,H,{get(){let o=a.call(this);return o===void 0&&(o=r(this),(o!==null||this.hasUpdated)&&d.call(this,o)),o}})}return I(C,H,{get(){return r(this)}})}}var y="scheduler_plus";function t1(L){return{name:L.name,device_type:L.device_type,entities:L.entities,enabled:L.enabled,rules:L.rules,active_date_mode:L.active_date_mode,active_date_ranges:L.active_date_ranges,override_until:L.override_until}}async function i2(L){return(await L.callWS({type:`${y}/list_schedules`})).schedules}async function l1(L,V){return(await L.callWS({type:`${y}/create_schedule`,...V})).schedule}async function U(L,V,C){return(await L.callWS({type:`${y}/update_schedule`,schedule_id:V,...C})).schedule}async function a2(L,V){await L.callWS({type:`${y}/delete_schedule`,schedule_id:V})}async function v1(L){return L.callWS({type:`${y}/get_preferences`})}async function o2(L,V){return L.callWS({type:`${y}/set_preferences`,...V})}async function A2(L,V,C){return(await L.callWS({type:`${y}/get_day_schedule`,date:V,...C?{device_type:C}:{}})).events}async function d2(L,V,C){return(await L.callWS({type:`${y}/get_week_schedule`,start_date:V,...C?{device_type:C}:{}})).days}async function x1(L){return(await L.callWS({type:`${y}/list_templates`})).templates}async function p2(L,V){return(await L.callWS({type:`${y}/create_template`,...V})).template}async function s1(L,V){await L.callWS({type:`${y}/delete_template`,template_id:V})}var m2=["light_switch","climate"],j={light:"Light",climate:"Climate",switch:"Switch",light_switch:"Lights & Switches"},Z1={light:["light"],climate:["climate"],switch:["switch"],light_switch:["light","switch"]},n2=["light","climate","switch"],l2=["heat","cool","heat_cool","auto","dry","fan_only"],u1={heat:"Heat",cool:"Cool",heat_cool:"Heat/Cool",auto:"Auto",dry:"Dry",fan_only:"Fan only"};var G={fixed:"Fixed time",sunrise:"Sunrise",sunset:"Sunset",yidcal:"YidCal"},v2=["candle_lighting","motzei_shabbos"],c1={candle_lighting:"\u05D4\u05D3\u05DC\u05E7\u05D5\u05EA \u05D4\u05E0\u05D9\u05E8\u05D5\u05EA",motzei_shabbos:'\u05DE\u05D5\u05E6\u05E9"\u05E7'},f=["mon","tue","wed","thu","fri","sat","sun"],Q={mon:"Monday",tue:"Tuesday",wed:"Wednesday",thu:"Thursday",fri:"Friday",sat:"Saturday",sun:"Sunday"},S1=["always","include","exclude"],x2={always:"Always",include:"Only on these dates",exclude:"Except these dates"},s2=["shabbos","yom_tov","erev_shabbos","erev_yom_tov"],i1={shabbos:"Shabbos",yom_tov:"Yom Tov",erev_shabbos:"Erev Shabbos",erev_yom_tov:"Erev Yom Tov"};var _=class extends n{constructor(){super(...arguments);this._open=!1;this._templates=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._useTemplate=C=>{this._open=!1,this.dispatchEvent(new CustomEvent("scheduler-plus-use-template",{detail:{template:C}}))};this._deleteTemplateRow=async C=>{if(window.confirm(`Delete template "${C.name}"?`))try{await s1(this.hass,C.id),await this._load()}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(){this._error=void 0,this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await x1(this.hass);this._templates=C.filter(H=>H.scope==="schedule")}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?t`
+var k2=Object.defineProperty;var _2=Object.getOwnPropertyDescriptor;var e=(L,V,C,H)=>{for(var M=H>1?void 0:H?_2(V,C):V,t=L.length-1,a;t>=0;t--)(a=L[t])&&(M=(H?a(V,C,M):a(M))||M);return H&&M&&k2(V,C,M),M};var W1="M10.63,14.1C12.23,10.58 16.38,9.03 19.9,10.63C23.42,12.23 24.97,16.38 23.37,19.9C22.24,22.4 19.75,24 17,24C14.3,24 11.83,22.44 10.67,20H1V18C1.06,16.86 1.84,15.93 3.34,15.18C4.84,14.43 6.72,14.04 9,14C9.57,14 10.11,14.05 10.63,14.1V14.1M9,4C10.12,4.03 11.06,4.42 11.81,5.17C12.56,5.92 12.93,6.86 12.93,8C12.93,9.14 12.56,10.08 11.81,10.83C11.06,11.58 10.12,11.95 9,11.95C7.88,11.95 6.94,11.58 6.19,10.83C5.44,10.08 5.07,9.14 5.07,8C5.07,6.86 5.44,5.92 6.19,5.17C6.94,4.42 7.88,4.03 9,4M17,22A5,5 0 0,0 22,17A5,5 0 0,0 17,12A5,5 0 0,0 12,17A5,5 0 0,0 17,22M16,14H17.5V16.82L19.94,18.23L19.19,19.53L16,17.69V14Z";var I1="M15,13H16.5V15.82L18.94,17.23L18.19,18.53L15,16.69V13M19,8H5V19H9.67C9.24,18.09 9,17.07 9,16A7,7 0 0,1 16,9C17.07,9 18.09,9.24 19,9.67V8M5,21C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H6V1H8V3H16V1H18V3H19A2,2 0 0,1 21,5V11.1C22.24,12.36 23,14.09 23,16A7,7 0 0,1 16,23C14.09,23 12.36,22.24 11.1,21H5M16,11.15A4.85,4.85 0 0,0 11.15,16C11.15,18.68 13.32,20.85 16,20.85A4.85,4.85 0 0,0 20.85,16C20.85,13.32 18.68,11.15 16,11.15Z";var U1="M19 19V8H5V19H19M16 1H18V3H19C20.11 3 21 3.9 21 5V19C21 20.11 20.11 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.89 3.89 3 5 3H6V1H8V3H16V1M11 9.5H13V12.5H16V14.5H13V17.5H11V14.5H8V12.5H11V9.5Z";var G1="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z";var _="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z";var Q1="M13,16V8H15V16H13M9,16V8H11V16H9M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z";var o1="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z";var z1="M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M10,16.5L16,12L10,7.5V16.5Z";var K1="M3 21H11V13H3M5 15H9V19H5M3 11H11V3H3M5 5H9V9H5M13 3V11H21V3M19 9H15V5H19M18 16H21V18H18V21H16V18H13V16H16V13H18Z";var A1=globalThis,d1=A1.ShadowRoot&&(A1.ShadyCSS===void 0||A1.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,b1=Symbol(),q1=new WeakMap,C1=class{constructor(V,C,H){if(this._$cssResult$=!0,H!==b1)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=V,this.t=C}get styleSheet(){let V=this.o,C=this.t;if(d1&&V===void 0){let H=C!==void 0&&C.length===1;H&&(V=q1.get(C)),V===void 0&&((this.o=V=new CSSStyleSheet).replaceSync(this.cssText),H&&q1.set(C,V))}return V}toString(){return this.cssText}},j1=L=>new C1(typeof L=="string"?L:L+"",void 0,b1),v=(L,...V)=>{let C=L.length===1?L[0]:V.reduce((H,M,t)=>H+(a=>{if(a._$cssResult$===!0)return a.cssText;if(typeof a=="number")return a;throw Error("Value passed to 'css' function must be a 'css' function result: "+a+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(M)+L[t+1],L[0]);return new C1(C,L,b1)},Y1=(L,V)=>{if(d1)L.adoptedStyleSheets=V.map(C=>C instanceof CSSStyleSheet?C:C.styleSheet);else for(let C of V){let H=document.createElement("style"),M=A1.litNonce;M!==void 0&&H.setAttribute("nonce",M),H.textContent=C.cssText,L.appendChild(H)}},k1=d1?L=>L:L=>L instanceof CSSStyleSheet?(V=>{let C="";for(let H of V.cssRules)C+=H.cssText;return j1(C)})(L):L;var{is:w2,defineProperty:T2,getOwnPropertyDescriptor:B2,getOwnPropertyNames:P2,getOwnPropertySymbols:R2,getPrototypeOf:F2}=Object,p1=globalThis,X1=p1.trustedTypes,D2=X1?X1.emptyScript:"",E2=p1.reactiveElementPolyfillSupport,H1=(L,V)=>L,V1={toAttribute(L,V){switch(V){case Boolean:L=L?D2:null;break;case Object:case Array:L=L==null?L:JSON.stringify(L)}return L},fromAttribute(L,V){let C=L;switch(V){case Boolean:C=L!==null;break;case Number:C=L===null?null:Number(L);break;case Object:case Array:try{C=JSON.parse(L)}catch{C=null}}return C}},n1=(L,V)=>!w2(L,V),J1={attribute:!0,type:String,converter:V1,reflect:!1,useDefault:!1,hasChanged:n1};Symbol.metadata??=Symbol("metadata"),p1.litPropertyMetadata??=new WeakMap;var R=class extends HTMLElement{static addInitializer(V){this._$Ei(),(this.l??=[]).push(V)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(V,C=J1){if(C.state&&(C.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(V)&&((C=Object.create(C)).wrapped=!0),this.elementProperties.set(V,C),!C.noAccessor){let H=Symbol(),M=this.getPropertyDescriptor(V,H,C);M!==void 0&&T2(this.prototype,V,M)}}static getPropertyDescriptor(V,C,H){let{get:M,set:t}=B2(this.prototype,V)??{get(){return this[C]},set(a){this[C]=a}};return{get:M,set(a){let d=M?.call(this);t?.call(this,a),this.requestUpdate(V,d,H)},configurable:!0,enumerable:!0}}static getPropertyOptions(V){return this.elementProperties.get(V)??J1}static _$Ei(){if(this.hasOwnProperty(H1("elementProperties")))return;let V=F2(this);V.finalize(),V.l!==void 0&&(this.l=[...V.l]),this.elementProperties=new Map(V.elementProperties)}static finalize(){if(this.hasOwnProperty(H1("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(H1("properties"))){let C=this.properties,H=[...P2(C),...R2(C)];for(let M of H)this.createProperty(M,C[M])}let V=this[Symbol.metadata];if(V!==null){let C=litPropertyMetadata.get(V);if(C!==void 0)for(let[H,M]of C)this.elementProperties.set(H,M)}this._$Eh=new Map;for(let[C,H]of this.elementProperties){let M=this._$Eu(C,H);M!==void 0&&this._$Eh.set(M,C)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(V){let C=[];if(Array.isArray(V)){let H=new Set(V.flat(1/0).reverse());for(let M of H)C.unshift(k1(M))}else V!==void 0&&C.push(k1(V));return C}static _$Eu(V,C){let H=C.attribute;return H===!1?void 0:typeof H=="string"?H:typeof V=="string"?V.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(V=>this.enableUpdating=V),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(V=>V(this))}addController(V){(this._$EO??=new Set).add(V),this.renderRoot!==void 0&&this.isConnected&&V.hostConnected?.()}removeController(V){this._$EO?.delete(V)}_$E_(){let V=new Map,C=this.constructor.elementProperties;for(let H of C.keys())this.hasOwnProperty(H)&&(V.set(H,this[H]),delete this[H]);V.size>0&&(this._$Ep=V)}createRenderRoot(){let V=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return Y1(V,this.constructor.elementStyles),V}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(V=>V.hostConnected?.())}enableUpdating(V){}disconnectedCallback(){this._$EO?.forEach(V=>V.hostDisconnected?.())}attributeChangedCallback(V,C,H){this._$AK(V,H)}_$ET(V,C){let H=this.constructor.elementProperties.get(V),M=this.constructor._$Eu(V,H);if(M!==void 0&&H.reflect===!0){let t=(H.converter?.toAttribute!==void 0?H.converter:V1).toAttribute(C,H.type);this._$Em=V,t==null?this.removeAttribute(M):this.setAttribute(M,t),this._$Em=null}}_$AK(V,C){let H=this.constructor,M=H._$Eh.get(V);if(M!==void 0&&this._$Em!==M){let t=H.getPropertyOptions(M),a=typeof t.converter=="function"?{fromAttribute:t.converter}:t.converter?.fromAttribute!==void 0?t.converter:V1;this._$Em=M;let d=a.fromAttribute(C,t.type);this[M]=d??this._$Ej?.get(M)??d,this._$Em=null}}requestUpdate(V,C,H,M=!1,t){if(V!==void 0){let a=this.constructor;if(M===!1&&(t=this[V]),H??=a.getPropertyOptions(V),!((H.hasChanged??n1)(t,C)||H.useDefault&&H.reflect&&t===this._$Ej?.get(V)&&!this.hasAttribute(a._$Eu(V,H))))return;this.C(V,C,H)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(V,C,{useDefault:H,reflect:M,wrapped:t},a){H&&!(this._$Ej??=new Map).has(V)&&(this._$Ej.set(V,a??C??this[V]),t!==!0||a!==void 0)||(this._$AL.has(V)||(this.hasUpdated||H||(C=void 0),this._$AL.set(V,C)),M===!0&&this._$Em!==V&&(this._$Eq??=new Set).add(V))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(C){Promise.reject(C)}let V=this.scheduleUpdate();return V!=null&&await V,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(let[M,t]of this._$Ep)this[M]=t;this._$Ep=void 0}let H=this.constructor.elementProperties;if(H.size>0)for(let[M,t]of H){let{wrapped:a}=t,d=this[M];a!==!0||this._$AL.has(M)||d===void 0||this.C(M,void 0,t,d)}}let V=!1,C=this._$AL;try{V=this.shouldUpdate(C),V?(this.willUpdate(C),this._$EO?.forEach(H=>H.hostUpdate?.()),this.update(C)):this._$EM()}catch(H){throw V=!1,this._$EM(),H}V&&this._$AE(C)}willUpdate(V){}_$AE(V){this._$EO?.forEach(C=>C.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(V)),this.updated(V)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(V){return!0}update(V){this._$Eq&&=this._$Eq.forEach(C=>this._$ET(C,this[C])),this._$EM()}updated(V){}firstUpdated(V){}};R.elementStyles=[],R.shadowRootOptions={mode:"open"},R[H1("elementProperties")]=new Map,R[H1("finalized")]=new Map,E2?.({ReactiveElement:R}),(p1.reactiveElementVersions??=[]).push("2.1.2");var F1=globalThis,C2=L=>L,m1=F1.trustedTypes,H2=m1?m1.createPolicy("lit-html",{createHTML:L=>L}):void 0,t2="$lit$",E=`lit$${Math.random().toFixed(9).slice(2)}$`,i2="?"+E,$2=`<${i2}>`,W=document,M1=()=>W.createComment(""),e1=L=>L===null||typeof L!="object"&&typeof L!="function",D1=Array.isArray,N2=L=>D1(L)||typeof L?.[Symbol.iterator]=="function",_1=`[ 	
+\f\r]`,L1=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,V2=/-->/g,L2=/>/g,$=RegExp(`>|${_1}(?:([^\\s"'>=/]+)(${_1}*=${_1}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`,"g"),M2=/'/g,e2=/"/g,a2=/^(?:script|style|textarea|title)$/i,E1=L=>(V,...C)=>({_$litType$:L,strings:V,values:C}),r=E1(1),A5=E1(2),d5=E1(3),I=Symbol.for("lit-noChange"),o=Symbol.for("lit-nothing"),r2=new WeakMap,N=W.createTreeWalker(W,129);function o2(L,V){if(!D1(L)||!L.hasOwnProperty("raw"))throw Error("invalid template strings array");return H2!==void 0?H2.createHTML(V):V}var W2=(L,V)=>{let C=L.length-1,H=[],M,t=V===2?"<svg>":V===3?"<math>":"",a=L1;for(let d=0;d<C;d++){let A=L[d],Z,u,l=-1,P=0;for(;P<A.length&&(a.lastIndex=P,u=a.exec(A),u!==null);)P=a.lastIndex,a===L1?u[1]==="!--"?a=V2:u[1]!==void 0?a=L2:u[2]!==void 0?(a2.test(u[2])&&(M=RegExp("</"+u[2],"g")),a=$):u[3]!==void 0&&(a=$):a===$?u[0]===">"?(a=M??L1,l=-1):u[1]===void 0?l=-2:(l=a.lastIndex-u[2].length,Z=u[1],a=u[3]===void 0?$:u[3]==='"'?e2:M2):a===e2||a===M2?a=$:a===V2||a===L2?a=L1:(a=$,M=void 0);let D=a===$&&L[d+1].startsWith("/>")?" ":"";t+=a===L1?A+$2:l>=0?(H.push(Z),A.slice(0,l)+t2+A.slice(l)+E+D):A+E+(l===-2?d:D)}return[o2(L,t+(L[C]||"<?>")+(V===2?"</svg>":V===3?"</math>":"")),H]},r1=class L{constructor({strings:V,_$litType$:C},H){let M;this.parts=[];let t=0,a=0,d=V.length-1,A=this.parts,[Z,u]=W2(V,C);if(this.el=L.createElement(Z,H),N.currentNode=this.el.content,C===2||C===3){let l=this.el.content.firstChild;l.replaceWith(...l.childNodes)}for(;(M=N.nextNode())!==null&&A.length<d;){if(M.nodeType===1){if(M.hasAttributes())for(let l of M.getAttributeNames())if(l.endsWith(t2)){let P=u[a++],D=M.getAttribute(l).split(E),a1=/([.?@])?(.*)/.exec(P);A.push({type:1,index:t,name:a1[2],strings:D,ctor:a1[1]==="."?T1:a1[1]==="?"?B1:a1[1]==="@"?P1:j}),M.removeAttribute(l)}else l.startsWith(E)&&(A.push({type:6,index:t}),M.removeAttribute(l));if(a2.test(M.tagName)){let l=M.textContent.split(E),P=l.length-1;if(P>0){M.textContent=m1?m1.emptyScript:"";for(let D=0;D<P;D++)M.append(l[D],M1()),N.nextNode(),A.push({type:2,index:++t});M.append(l[P],M1())}}}else if(M.nodeType===8)if(M.data===i2)A.push({type:2,index:t});else{let l=-1;for(;(l=M.data.indexOf(E,l+1))!==-1;)A.push({type:7,index:t}),l+=E.length-1}t++}}static createElement(V,C){let H=W.createElement("template");return H.innerHTML=V,H}};function q(L,V,C=L,H){if(V===I)return V;let M=H!==void 0?C._$Co?.[H]:C._$Cl,t=e1(V)?void 0:V._$litDirective$;return M?.constructor!==t&&(M?._$AO?.(!1),t===void 0?M=void 0:(M=new t(L),M._$AT(L,C,H)),H!==void 0?(C._$Co??=[])[H]=M:C._$Cl=M),M!==void 0&&(V=q(L,M._$AS(L,V.values),M,H)),V}var w1=class{constructor(V,C){this._$AV=[],this._$AN=void 0,this._$AD=V,this._$AM=C}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(V){let{el:{content:C},parts:H}=this._$AD,M=(V?.creationScope??W).importNode(C,!0);N.currentNode=M;let t=N.nextNode(),a=0,d=0,A=H[0];for(;A!==void 0;){if(a===A.index){let Z;A.type===2?Z=new t1(t,t.nextSibling,this,V):A.type===1?Z=new A.ctor(t,A.name,A.strings,this,V):A.type===6&&(Z=new R1(t,this,V)),this._$AV.push(Z),A=H[++d]}a!==A?.index&&(t=N.nextNode(),a++)}return N.currentNode=W,M}p(V){let C=0;for(let H of this._$AV)H!==void 0&&(H.strings!==void 0?(H._$AI(V,H,C),C+=H.strings.length-2):H._$AI(V[C])),C++}},t1=class L{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(V,C,H,M){this.type=2,this._$AH=o,this._$AN=void 0,this._$AA=V,this._$AB=C,this._$AM=H,this.options=M,this._$Cv=M?.isConnected??!0}get parentNode(){let V=this._$AA.parentNode,C=this._$AM;return C!==void 0&&V?.nodeType===11&&(V=C.parentNode),V}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(V,C=this){V=q(this,V,C),e1(V)?V===o||V==null||V===""?(this._$AH!==o&&this._$AR(),this._$AH=o):V!==this._$AH&&V!==I&&this._(V):V._$litType$!==void 0?this.$(V):V.nodeType!==void 0?this.T(V):N2(V)?this.k(V):this._(V)}O(V){return this._$AA.parentNode.insertBefore(V,this._$AB)}T(V){this._$AH!==V&&(this._$AR(),this._$AH=this.O(V))}_(V){this._$AH!==o&&e1(this._$AH)?this._$AA.nextSibling.data=V:this.T(W.createTextNode(V)),this._$AH=V}$(V){let{values:C,_$litType$:H}=V,M=typeof H=="number"?this._$AC(V):(H.el===void 0&&(H.el=r1.createElement(o2(H.h,H.h[0]),this.options)),H);if(this._$AH?._$AD===M)this._$AH.p(C);else{let t=new w1(M,this),a=t.u(this.options);t.p(C),this.T(a),this._$AH=t}}_$AC(V){let C=r2.get(V.strings);return C===void 0&&r2.set(V.strings,C=new r1(V)),C}k(V){D1(this._$AH)||(this._$AH=[],this._$AR());let C=this._$AH,H,M=0;for(let t of V)M===C.length?C.push(H=new L(this.O(M1()),this.O(M1()),this,this.options)):H=C[M],H._$AI(t),M++;M<C.length&&(this._$AR(H&&H._$AB.nextSibling,M),C.length=M)}_$AR(V=this._$AA.nextSibling,C){for(this._$AP?.(!1,!0,C);V!==this._$AB;){let H=C2(V).nextSibling;C2(V).remove(),V=H}}setConnected(V){this._$AM===void 0&&(this._$Cv=V,this._$AP?.(V))}},j=class{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(V,C,H,M,t){this.type=1,this._$AH=o,this._$AN=void 0,this.element=V,this.name=C,this._$AM=M,this.options=t,H.length>2||H[0]!==""||H[1]!==""?(this._$AH=Array(H.length-1).fill(new String),this.strings=H):this._$AH=o}_$AI(V,C=this,H,M){let t=this.strings,a=!1;if(t===void 0)V=q(this,V,C,0),a=!e1(V)||V!==this._$AH&&V!==I,a&&(this._$AH=V);else{let d=V,A,Z;for(V=t[0],A=0;A<t.length-1;A++)Z=q(this,d[H+A],C,A),Z===I&&(Z=this._$AH[A]),a||=!e1(Z)||Z!==this._$AH[A],Z===o?V=o:V!==o&&(V+=(Z??"")+t[A+1]),this._$AH[A]=Z}a&&!M&&this.j(V)}j(V){V===o?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,V??"")}},T1=class extends j{constructor(){super(...arguments),this.type=3}j(V){this.element[this.name]=V===o?void 0:V}},B1=class extends j{constructor(){super(...arguments),this.type=4}j(V){this.element.toggleAttribute(this.name,!!V&&V!==o)}},P1=class extends j{constructor(V,C,H,M,t){super(V,C,H,M,t),this.type=5}_$AI(V,C=this){if((V=q(this,V,C,0)??o)===I)return;let H=this._$AH,M=V===o&&H!==o||V.capture!==H.capture||V.once!==H.once||V.passive!==H.passive,t=V!==o&&(H===o||M);M&&this.element.removeEventListener(this.name,this,H),t&&this.element.addEventListener(this.name,this,V),this._$AH=V}handleEvent(V){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,V):this._$AH.handleEvent(V)}},R1=class{constructor(V,C,H){this.element=V,this.type=6,this._$AN=void 0,this._$AM=C,this.options=H}get _$AU(){return this._$AM._$AU}_$AI(V){q(this,V)}};var I2=F1.litHtmlPolyfillSupport;I2?.(r1,t1),(F1.litHtmlVersions??=[]).push("3.3.3");var A2=(L,V,C)=>{let H=C?.renderBefore??V,M=H._$litPart$;if(M===void 0){let t=C?.renderBefore??null;H._$litPart$=M=new t1(V.insertBefore(M1(),t),t,void 0,C??{})}return M._$AI(L),M};var $1=globalThis,m=class extends R{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){let V=super.createRenderRoot();return this.renderOptions.renderBefore??=V.firstChild,V}update(V){let C=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(V),this._$Do=A2(C,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return I}};m._$litElement$=!0,m.finalized=!0,$1.litElementHydrateSupport?.({LitElement:m});var U2=$1.litElementPolyfillSupport;U2?.({LitElement:m});($1.litElementVersions??=[]).push("4.2.2");var x=L=>(V,C)=>{C!==void 0?C.addInitializer(()=>{customElements.define(L,V)}):customElements.define(L,V)};var G2={attribute:!0,type:String,converter:V1,reflect:!1,hasChanged:n1},Q2=(L=G2,V,C)=>{let{kind:H,metadata:M}=C,t=globalThis.litPropertyMetadata.get(M);if(t===void 0&&globalThis.litPropertyMetadata.set(M,t=new Map),H==="setter"&&((L=Object.create(L)).wrapped=!0),t.set(C.name,L),H==="accessor"){let{name:a}=C;return{set(d){let A=V.get.call(this);V.set.call(this,d),this.requestUpdate(a,A,L,!0,d)},init(d){return d!==void 0&&this.C(a,void 0,L,d),d}}}if(H==="setter"){let{name:a}=C;return function(d){let A=this[a];V.call(this,d),this.requestUpdate(a,A,L,!0,d)}}throw Error("Unsupported decorator location: "+H)};function n(L){return(V,C)=>typeof C=="object"?Q2(L,V,C):((H,M,t)=>{let a=M.hasOwnProperty(t);return M.constructor.createProperty(t,H),a?Object.getOwnPropertyDescriptor(M,t):void 0})(L,V,C)}function i(L){return n({...L,state:!0,attribute:!1})}var U=(L,V,C)=>(C.configurable=!0,C.enumerable=!0,Reflect.decorate&&typeof V!="object"&&Object.defineProperty(L,V,C),C);function f(L,V){return(C,H,M)=>{let t=a=>a.renderRoot?.querySelector(L)??null;if(V){let{get:a,set:d}=typeof H=="object"?C:M??(()=>{let A=Symbol();return{get(){return this[A]},set(Z){this[A]=Z}}})();return U(C,H,{get(){let A=a.call(this);return A===void 0&&(A=t(this),(A!==null||this.hasUpdated)&&d.call(this,A)),A}})}return U(C,H,{get(){return t(this)}})}}var y="scheduler_plus";function G(L){return{name:L.name,device_type:L.device_type,entities:L.entities,enabled:L.enabled,rules:L.rules,active_date_mode:L.active_date_mode,active_date_ranges:L.active_date_ranges,override_until:L.override_until}}async function l1(L){return(await L.callWS({type:`${y}/list_schedules`})).schedules}async function v1(L,V){return(await L.callWS({type:`${y}/create_schedule`,...V})).schedule}async function F(L,V,C){return(await L.callWS({type:`${y}/update_schedule`,schedule_id:V,...C})).schedule}async function d2(L,V){await L.callWS({type:`${y}/delete_schedule`,schedule_id:V})}async function x1(L){return L.callWS({type:`${y}/get_preferences`})}async function p2(L,V){return L.callWS({type:`${y}/set_preferences`,...V})}async function n2(L,V,C){return(await L.callWS({type:`${y}/get_day_schedule`,date:V,...C?{device_type:C}:{}})).events}async function m2(L,V,C){return(await L.callWS({type:`${y}/get_week_schedule`,start_date:V,...C?{device_type:C}:{}})).days}async function s1(L){return(await L.callWS({type:`${y}/list_templates`})).templates}async function l2(L,V){return(await L.callWS({type:`${y}/create_template`,...V})).template}async function Z1(L,V){await L.callWS({type:`${y}/delete_template`,template_id:V})}async function u1(L,V,C){return(await L.callWS({type:`${y}/check_schedule_conflicts`,...V?{schedule_id:V}:{},...C})).conflicts}var v2=["light_switch","climate"],Y={light:"Light",climate:"Climate",switch:"Switch",light_switch:"Lights & Switches"},c1={light:["light"],climate:["climate"],switch:["switch"],light_switch:["light","switch"]},x2=["light","climate","switch"],s2=["heat","cool","heat_cool","auto","dry","fan_only"],S1={heat:"Heat",cool:"Cool",heat_cool:"Heat/Cool",auto:"Auto",dry:"Dry",fan_only:"Fan only"};var Q={fixed:"Fixed time",sunrise:"Sunrise",sunset:"Sunset",yidcal:"YidCal"},Z2=["candle_lighting","motzei_shabbos"],h1={candle_lighting:"\u05D4\u05D3\u05DC\u05E7\u05D5\u05EA \u05D4\u05E0\u05D9\u05E8\u05D5\u05EA",motzei_shabbos:'\u05DE\u05D5\u05E6\u05E9"\u05E7'},O=["mon","tue","wed","thu","fri","sat","sun"],z={mon:"Monday",tue:"Tuesday",wed:"Wednesday",thu:"Thursday",fri:"Friday",sat:"Saturday",sun:"Sunday"},g1=["always","include","exclude"],u2={always:"Always",include:"Only on these dates",exclude:"Except these dates"},c2=["shabbos","yom_tov","erev_shabbos","erev_yom_tov"],i1={shabbos:"Shabbos",yom_tov:"Yom Tov",erev_shabbos:"Erev Shabbos",erev_yom_tov:"Erev Yom Tov"};var w=class extends m{constructor(){super(...arguments);this._open=!1;this._templates=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._useTemplate=C=>{this._open=!1,this.dispatchEvent(new CustomEvent("scheduler-plus-use-template",{detail:{template:C}}))};this._deleteTemplateRow=async C=>{if(window.confirm(`Delete template "${C.name}"?`))try{await Z1(this.hass,C.id),await this._load()}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(){this._error=void 0,this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await s1(this.hass);this._templates=C.filter(H=>H.scope==="schedule")}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">From template</div>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
           ${this._renderContent()}
           <div class="dialog-actions">
             <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
           </div>
         </div>
       </ha-dialog>
-    `:A}_renderContent(){return this._loading?t`<div class="placeholder">Loading templates…</div>`:this._templates.length===0?t`
+    `:o}_renderContent(){return this._loading?r`<div class="placeholder">Loading templates…</div>`:this._templates.length===0?r`
         <div class="placeholder">
           No schedule templates saved yet. Save one from an existing
           schedule's editor ("Save as template").
         </div>
-      `:t`
+      `:r`
       <ul class="templates">
-        ${this._templates.map(C=>t`
+        ${this._templates.map(C=>r`
             <li class="template">
               <div class="template-info">
                 <span class="template-name">${C.name}</span>
                 <span class="template-meta">
-                  ${j[C.device_type]} ·
+                  ${Y[C.device_type]} ·
                   ${C.rules.length}
                   ${C.rules.length===1?"rule":"rules"}
                 </span>
@@ -33,7 +33,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                   Use
                 </button>
                 <ha-icon-button
-                  .path=${w}
+                  .path=${_}
                   label="Delete template"
                   @click=${()=>this._deleteTemplateRow(C)}
                 ></ha-icon-button>
@@ -41,7 +41,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             </li>
           `)}
       </ul>
-    `}};_.styles=v`
+    `}};w.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -115,21 +115,21 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn:hover {
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
     }
-  `,e([m({attribute:!1})],_.prototype,"hass",2),e([i()],_.prototype,"_open",2),e([i()],_.prototype,"_templates",2),e([i()],_.prototype,"_loading",2),e([i()],_.prototype,"_error",2),_=e([x("scheduler-plus-apply-template-dialog")],_);var k=class extends n{constructor(){super(...arguments);this.value=[];this.domains=[];this._search="";this._pending=new Set;this._addSelected=()=>{this._pending.size!==0&&(this._fireChange([...this.value,...this._pending]),this._pending=new Set,this._search="")}}_entityName(C){let H=this.hass.states[C]?.attributes.friendly_name;return typeof H=="string"?H:C}get _candidates(){let C=this._search.trim().toLowerCase();return Object.keys(this.hass.states).filter(H=>this.domains.some(M=>H.startsWith(`${M}.`))).filter(H=>!this.value.includes(H)).filter(H=>!this.includeEntities||this.includeEntities.includes(H)).filter(H=>!C||H.toLowerCase().includes(C)||this._entityName(H).toLowerCase().includes(C)).sort((H,M)=>this._entityName(H).localeCompare(this._entityName(M)))}_fireChange(C){this.value=C,this.dispatchEvent(new CustomEvent("value-changed",{detail:{value:C}}))}_removeEntity(C){this._fireChange(this.value.filter(H=>H!==C))}_toggleCandidate(C){let H=new Set(this._pending);H.has(C)?H.delete(C):H.add(C),this._pending=H}render(){let C=this._pending.size>0?`Add ${this._pending.size} device${this._pending.size===1?"":"s"}`:"Add selected";return t`
-      ${this.value.length>0?t`
+  `,e([n({attribute:!1})],w.prototype,"hass",2),e([i()],w.prototype,"_open",2),e([i()],w.prototype,"_templates",2),e([i()],w.prototype,"_loading",2),e([i()],w.prototype,"_error",2),w=e([x("scheduler-plus-apply-template-dialog")],w);var b=class extends m{constructor(){super(...arguments);this.value=[];this.domains=[];this._search="";this._pending=new Set;this._addSelected=()=>{this._pending.size!==0&&(this._fireChange([...this.value,...this._pending]),this._pending=new Set,this._search="")}}_entityName(C){let H=this.hass.states[C]?.attributes.friendly_name;return typeof H=="string"?H:C}get _candidates(){let C=this._search.trim().toLowerCase();return Object.keys(this.hass.states).filter(H=>this.domains.some(M=>H.startsWith(`${M}.`))).filter(H=>!this.value.includes(H)).filter(H=>!this.includeEntities||this.includeEntities.includes(H)).filter(H=>!C||H.toLowerCase().includes(C)||this._entityName(H).toLowerCase().includes(C)).sort((H,M)=>this._entityName(H).localeCompare(this._entityName(M)))}_fireChange(C){this.value=C,this.dispatchEvent(new CustomEvent("value-changed",{detail:{value:C}}))}_removeEntity(C){this._fireChange(this.value.filter(H=>H!==C))}_toggleCandidate(C){let H=new Set(this._pending);H.has(C)?H.delete(C):H.add(C),this._pending=H}render(){let C=this._pending.size>0?`Add ${this._pending.size} device${this._pending.size===1?"":"s"}`:"Add selected";return r`
+      ${this.value.length>0?r`
             <ul class="selected">
-              ${this.value.map(H=>t`
+              ${this.value.map(H=>r`
                   <li>
                     <span>${this._entityName(H)}</span>
                     <ha-icon-button
-                      .path=${w}
+                      .path=${_}
                       label="Remove"
                       @click=${()=>this._removeEntity(H)}
                     ></ha-icon-button>
                   </li>
                 `)}
             </ul>
-          `:A}
+          `:o}
 
       <input
         type="text"
@@ -139,7 +139,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         @input=${H=>{this._search=H.target.value}}
       />
       <div class="candidates">
-        ${this._candidates.length===0?t`<div class="empty">No matching devices.</div>`:this._candidates.map(H=>t`
+        ${this._candidates.length===0?r`<div class="empty">No matching devices.</div>`:this._candidates.map(H=>r`
                 <label class="candidate">
                   <input
                     type="checkbox"
@@ -158,7 +158,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       >
         ${C}
       </button>
-    `}};k.styles=v`
+    `}};b.styles=v`
     :host {
       display: flex;
       flex-direction: column;
@@ -253,7 +253,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       background: var(--card-background-color);
       color: var(--primary-text-color);
     }
-  `,e([m({attribute:!1})],k.prototype,"hass",2),e([m({attribute:!1})],k.prototype,"value",2),e([m({attribute:!1})],k.prototype,"domains",2),e([m({attribute:!1})],k.prototype,"includeEntities",2),e([i()],k.prototype,"_search",2),e([i()],k.prototype,"_pending",2),k=e([x("scheduler-plus-entity-multi-picker")],k);var z=class extends n{constructor(){super(...arguments);this._handleTitleChange=C=>{let H=C.target.value;this._fireConfigChanged({...this._config,title:H||void 0})}}setConfig(C){this._config=C}_fireConfigChanged(C){this._config=C,this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:C}}))}render(){return this._config?t`
+  `,e([n({attribute:!1})],b.prototype,"hass",2),e([n({attribute:!1})],b.prototype,"value",2),e([n({attribute:!1})],b.prototype,"domains",2),e([n({attribute:!1})],b.prototype,"includeEntities",2),e([i()],b.prototype,"_search",2),e([i()],b.prototype,"_pending",2),b=e([x("scheduler-plus-entity-multi-picker")],b);var K=class extends m{constructor(){super(...arguments);this._handleTitleChange=C=>{let H=C.target.value;this._fireConfigChanged({...this._config,title:H||void 0})}}setConfig(C){this._config=C}_fireConfigChanged(C){this._config=C,this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:C}}))}render(){return this._config?r`
       <div class="editor">
         <label class="field-label" for="card-title">Title</label>
         <input
@@ -274,11 +274,11 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         <scheduler-plus-entity-multi-picker
           .hass=${this.hass}
           .value=${this._config.entities??[]}
-          .domains=${n2}
+          .domains=${x2}
           @value-changed=${C=>{this._fireConfigChanged({...this._config,entities:C.detail.value})}}
         ></scheduler-plus-entity-multi-picker>
       </div>
-    `:t``}};z.styles=v`
+    `:r``}};K.styles=v`
     .editor {
       display: flex;
       flex-direction: column;
@@ -301,7 +301,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       border-radius: 4px;
       padding: 8px;
     }
-  `,e([m({attribute:!1})],z.prototype,"hass",2),e([i()],z.prototype,"_config",2),z=e([x("scheduler-plus-card-editor")],z);function Z2(){let L=new Date,V=L.getFullYear(),C=String(L.getMonth()+1).padStart(2,"0"),H=String(L.getDate()).padStart(2,"0");return`${V}-${C}-${H}`}function Y(L){return new Date(L).toLocaleTimeString(void 0,{hour:"numeric",minute:"2-digit"})}function I2(L,V){if(L==="light"){let C=[];return typeof V.brightness=="number"&&C.push(`Brightness ${Math.round(V.brightness/255*100)}%`),typeof V.transition=="number"&&V.transition>0&&C.push(`fade ${V.transition}s`),C.length>0?C.join(" \xB7 "):void 0}if(L==="climate"){let C=[];if(typeof V.hvac_mode=="string"){let H=u1;C.push(H[V.hvac_mode]??V.hvac_mode)}return typeof V.target_temperature=="number"&&C.push(`${V.target_temperature}\xB0`),C.length>0?C.join(" \xB7 "):void 0}}var c2=["devices","climate"],S2={devices:"Lights & Switches",climate:"Climate"};function u2(L){return L==="climate"?"climate":"devices"}var U2=["all",...c2],G2={all:"All",...S2},S=class extends n{constructor(){super(...arguments);this._open=!1;this._viewMode="day";this._date=Z2();this._reportFilter="all";this._events=[];this._weekDays=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._handleViewModeChange=C=>{this._viewMode=C,this._load()};this._handleDateChange=C=>{this._date=C.target.value,this._load()};this._handleReportFilterChange=C=>{this._reportFilter=C.target.value,this._load()}}showDialog(){this._viewMode="day",this._date=Z2(),this._reportFilter="all",this._open=!0,this._load()}_entityName(C){let H=this.hass.states[C]?.attributes.friendly_name;return typeof H=="string"?H:C}_matchesFilters(C){if(this._reportFilter!=="all"&&u2(C.device_type)!==this._reportFilter)return!1;let H=this.entityFilter;return!(H&&H.length>0&&!C.entities.some(M=>H.includes(M)))}async _load(){this._loading=!0,this._error=void 0;try{if(this._viewMode==="day"){let C=await A2(this.hass,this._date);this._events=C.filter(H=>this._matchesFilters(H))}else{let C=await d2(this.hass,this._date);this._weekDays=C.map(H=>({date:H.date,events:H.events.filter(M=>this._matchesFilters(M))}))}}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?t`
+  `,e([n({attribute:!1})],K.prototype,"hass",2),e([i()],K.prototype,"_config",2),K=e([x("scheduler-plus-card-editor")],K);function S2(){let L=new Date,V=L.getFullYear(),C=String(L.getMonth()+1).padStart(2,"0"),H=String(L.getDate()).padStart(2,"0");return`${V}-${C}-${H}`}function X(L){return new Date(L).toLocaleTimeString(void 0,{hour:"numeric",minute:"2-digit"})}function z2(L,V){if(L==="light"){let C=[];return typeof V.brightness=="number"&&C.push(`Brightness ${Math.round(V.brightness/255*100)}%`),typeof V.transition=="number"&&V.transition>0&&C.push(`fade ${V.transition}s`),C.length>0?C.join(" \xB7 "):void 0}if(L==="climate"){let C=[];if(typeof V.hvac_mode=="string"){let H=S1;C.push(H[V.hvac_mode]??V.hvac_mode)}return typeof V.target_temperature=="number"&&C.push(`${V.target_temperature}\xB0`),C.length>0?C.join(" \xB7 "):void 0}}var g2=["devices","climate"],f2={devices:"Lights & Switches",climate:"Climate"};function h2(L){return L==="climate"?"climate":"devices"}var K2=["all",...g2],q2={all:"All",...f2},h=class extends m{constructor(){super(...arguments);this._open=!1;this._viewMode="day";this._date=S2();this._reportFilter="all";this._events=[];this._weekDays=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._handleViewModeChange=C=>{this._viewMode=C,this._load()};this._handleDateChange=C=>{this._date=C.target.value,this._load()};this._handleReportFilterChange=C=>{this._reportFilter=C.target.value,this._load()}}showDialog(){this._viewMode="day",this._date=S2(),this._reportFilter="all",this._open=!0,this._load()}_entityName(C){let H=this.hass.states[C]?.attributes.friendly_name;return typeof H=="string"?H:C}_matchesFilters(C){if(this._reportFilter!=="all"&&h2(C.device_type)!==this._reportFilter)return!1;let H=this.entityFilter;return!(H&&H.length>0&&!C.entities.some(M=>H.includes(M)))}async _load(){this._loading=!0,this._error=void 0;try{if(this._viewMode==="day"){let C=await n2(this.hass,this._date);this._events=C.filter(H=>this._matchesFilters(H))}else{let C=await m2(this.hass,this._date);this._weekDays=C.map(H=>({date:H.date,events:H.events.filter(M=>this._matchesFilters(M))}))}}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form ${this._viewMode==="week"?"form-wide":""}">
           <div class="dialog-title">Day view</div>
@@ -344,7 +344,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                 .value=${this._reportFilter}
                 @change=${this._handleReportFilterChange}
               >
-                ${U2.map(C=>t`<option value=${C}>${G2[C]}</option>`)}
+                ${K2.map(C=>r`<option value=${C}>${q2[C]}</option>`)}
               </select>
             </div>
           </div>
@@ -358,46 +358,46 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           </div>
         </div>
       </ha-dialog>
-    `:A}_renderContent(){if(this._loading)return t`<div class="placeholder">Loading…</div>`;if(this._error)return t`<div class="placeholder error">${this._error}</div>`;if(this._events.length===0)return t`<div class="placeholder">No activity scheduled for this day.</div>`;let C=c2.map(H=>({group:H,events:this._events.filter(M=>u2(M.device_type)===H).sort((M,r)=>(M.on_at??M.off_at??"").localeCompare(r.on_at??r.off_at??""))})).filter(H=>H.events.length>0);return t`
-      ${C.map(H=>t`
+    `:o}_renderContent(){if(this._loading)return r`<div class="placeholder">Loading…</div>`;if(this._error)return r`<div class="placeholder error">${this._error}</div>`;if(this._events.length===0)return r`<div class="placeholder">No activity scheduled for this day.</div>`;let C=g2.map(H=>({group:H,events:this._events.filter(M=>h2(M.device_type)===H).sort((M,t)=>(M.on_at??M.off_at??"").localeCompare(t.on_at??t.off_at??""))})).filter(H=>H.events.length>0);return r`
+      ${C.map(H=>r`
           <div class="group">
-            <h3 class="group-title">${S2[H.group]}</h3>
+            <h3 class="group-title">${f2[H.group]}</h3>
             <ul class="events">
               ${H.events.map(M=>this._renderEvent(M))}
             </ul>
           </div>
         `)}
-    `}_renderWeekContent(){return this._loading?t`<div class="placeholder">Loading…</div>`:this._error?t`<div class="placeholder error">${this._error}</div>`:t`
+    `}_renderWeekContent(){return this._loading?r`<div class="placeholder">Loading…</div>`:this._error?r`<div class="placeholder error">${this._error}</div>`:r`
       <div class="week-grid-scroll">
         <div class="week-grid">${this._weekDays.map(C=>this._renderWeekDay(C))}</div>
       </div>
-    `}_renderWeekDay(C){let H=new Date(`${C.date}T00:00:00`).toLocaleDateString(void 0,{weekday:"short",month:"short",day:"numeric"}),M=[...C.events].sort((r,a)=>(r.on_at??r.off_at??"").localeCompare(a.on_at??a.off_at??""));return t`
+    `}_renderWeekDay(C){let H=new Date(`${C.date}T00:00:00`).toLocaleDateString(void 0,{weekday:"short",month:"short",day:"numeric"}),M=[...C.events].sort((t,a)=>(t.on_at??t.off_at??"").localeCompare(a.on_at??a.off_at??""));return r`
       <div class="week-day">
         <div class="week-day-header">${H}</div>
-        ${M.length===0?t`<span class="hint">Nothing scheduled</span>`:t`
+        ${M.length===0?r`<span class="hint">Nothing scheduled</span>`:r`
               <ul class="week-events">
-                ${M.map(r=>this._renderWeekEvent(r))}
+                ${M.map(t=>this._renderWeekEvent(t))}
               </ul>
             `}
       </div>
-    `}_renderWeekEvent(C){let H=C.on_at!==null?Y(C.on_at):C.off_at!==null?Y(C.off_at):"";return t`
+    `}_renderWeekEvent(C){let H=C.on_at!==null?X(C.on_at):C.off_at!==null?X(C.off_at):"";return r`
       <li class="week-event" title="${C.schedule_name} · ${C.rule_name}">
         <span class="week-event-time">${H}</span>
         <span class="week-event-name">${C.schedule_name}</span>
       </li>
-    `}_renderEvent(C){let H=C.on_at!==null&&C.off_at!==null&&C.off_at.slice(0,10)!==C.on_at.slice(0,10),M=I2(C.device_type,C.action);return t`
+    `}_renderEvent(C){let H=C.on_at!==null&&C.off_at!==null&&C.off_at.slice(0,10)!==C.on_at.slice(0,10),M=z2(C.device_type,C.action);return r`
       <li class="event">
         <span class="event-time">
-          ${C.on_at!==null&&C.off_at!==null?t`${Y(C.on_at)} → ${Y(C.off_at)}`:C.on_at!==null?t`On at ${Y(C.on_at)}`:t`Off at ${Y(C.off_at)}`}
-          ${H?t`<span class="hint">(next day)</span>`:A}
+          ${C.on_at!==null&&C.off_at!==null?r`${X(C.on_at)} → ${X(C.off_at)}`:C.on_at!==null?r`On at ${X(C.on_at)}`:r`Off at ${X(C.off_at)}`}
+          ${H?r`<span class="hint">(next day)</span>`:o}
         </span>
         <span class="event-name">${C.schedule_name} · ${C.rule_name}</span>
-        ${M?t`<span class="event-action">${M}</span>`:A}
+        ${M?r`<span class="event-action">${M}</span>`:o}
         <span class="event-entities">
-          ${C.entities.map(r=>this._entityName(r)).join(", ")}
+          ${C.entities.map(t=>this._entityName(t)).join(", ")}
         </span>
       </li>
-    `}};S.styles=v`
+    `}};h.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -582,7 +582,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn:hover {
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
     }
-  `,e([m({attribute:!1})],S.prototype,"hass",2),e([m({attribute:!1})],S.prototype,"entityFilter",2),e([i()],S.prototype,"_open",2),e([i()],S.prototype,"_viewMode",2),e([i()],S.prototype,"_date",2),e([i()],S.prototype,"_reportFilter",2),e([i()],S.prototype,"_events",2),e([i()],S.prototype,"_weekDays",2),e([i()],S.prototype,"_loading",2),e([i()],S.prototype,"_error",2),S=e([x("scheduler-plus-day-view")],S);var b=class extends n{constructor(){super(...arguments);this._open=!1;this._until="";this._saving=!1;this._closeDialog=()=>{this._open=!1};this._save=async()=>{if(this._schedule){if(!this._until){this._error="Pick a date to pause through.";return}this._saving=!0,this._error=void 0;try{await U(this.hass,this._schedule.id,{...t1(this._schedule),override_until:this._until}),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._saving=!1}}}}showDialog(C){this._schedule=C,this._until=C.override_until??"",this._error=void 0,this._open=!0}render(){return!this._open||!this._schedule?A:t`
+  `,e([n({attribute:!1})],h.prototype,"hass",2),e([n({attribute:!1})],h.prototype,"entityFilter",2),e([i()],h.prototype,"_open",2),e([i()],h.prototype,"_viewMode",2),e([i()],h.prototype,"_date",2),e([i()],h.prototype,"_reportFilter",2),e([i()],h.prototype,"_events",2),e([i()],h.prototype,"_weekDays",2),e([i()],h.prototype,"_loading",2),e([i()],h.prototype,"_error",2),h=e([x("scheduler-plus-day-view")],h);var k=class extends m{constructor(){super(...arguments);this._open=!1;this._until="";this._saving=!1;this._closeDialog=()=>{this._open=!1};this._save=async()=>{if(this._schedule){if(!this._until){this._error="Pick a date to pause through.";return}this._saving=!0,this._error=void 0;try{await F(this.hass,this._schedule.id,{...G(this._schedule),override_until:this._until}),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._saving=!1}}}}showDialog(C){this._schedule=C,this._until=C.override_until??"",this._error=void 0,this._open=!0}render(){return!this._open||!this._schedule?o:r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">Pause "${this._schedule.name}"</div>
@@ -591,7 +591,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             resumes automatically the next day - nothing to remember to turn
             back on.
           </span>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
           <label class="field-label" for="override-until">Paused through</label>
           <input
@@ -615,7 +615,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           </div>
         </div>
       </ha-dialog>
-    `}};b.styles=v`
+    `}};k.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -680,7 +680,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn-primary:hover {
       filter: brightness(0.95);
     }
-  `,e([m({attribute:!1})],b.prototype,"hass",2),e([i()],b.prototype,"_open",2),e([i()],b.prototype,"_schedule",2),e([i()],b.prototype,"_until",2),e([i()],b.prototype,"_saving",2),e([i()],b.prototype,"_error",2),b=e([x("scheduler-plus-override-dialog")],b);var g=class extends n{constructor(){super(...arguments);this._open=!1;this._weekdayDays=[];this._weekendDays=[];this._workingHoursStart="09:00";this._workingHoursEnd="17:00";this._loading=!1;this._saving=!1;this._closeDialog=()=>{this._open=!1};this._toggleWeekdayDay=C=>{this._weekdayDays=this._weekdayDays.includes(C)?this._weekdayDays.filter(H=>H!==C):[...this._weekdayDays,C],this._weekendDays=this._weekendDays.filter(H=>H!==C)};this._toggleWeekendDay=C=>{this._weekendDays=this._weekendDays.includes(C)?this._weekendDays.filter(H=>H!==C):[...this._weekendDays,C],this._weekdayDays=this._weekdayDays.filter(H=>H!==C)};this._save=async()=>{if(this._weekdayDays.length===0){this._error="At least one weekday day is required.";return}if(this._weekendDays.length===0){this._error="At least one weekend day is required.";return}this._saving=!0,this._error=void 0;try{let C={weekday_days:this._weekdayDays,weekend_days:this._weekendDays,working_hours_start:this._workingHoursStart,working_hours_end:this._workingHoursEnd};await o2(this.hass,C),this._open=!1}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._saving=!1}}}showDialog(){this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await v1(this.hass);this._weekdayDays=[...C.weekday_days],this._weekendDays=[...C.weekend_days],this._workingHoursStart=C.working_hours_start.slice(0,5),this._workingHoursEnd=C.working_hours_end.slice(0,5)}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?t`
+  `,e([n({attribute:!1})],k.prototype,"hass",2),e([i()],k.prototype,"_open",2),e([i()],k.prototype,"_schedule",2),e([i()],k.prototype,"_until",2),e([i()],k.prototype,"_saving",2),e([i()],k.prototype,"_error",2),k=e([x("scheduler-plus-override-dialog")],k);var g=class extends m{constructor(){super(...arguments);this._open=!1;this._weekdayDays=[];this._weekendDays=[];this._workingHoursStart="09:00";this._workingHoursEnd="17:00";this._loading=!1;this._saving=!1;this._closeDialog=()=>{this._open=!1};this._toggleWeekdayDay=C=>{this._weekdayDays=this._weekdayDays.includes(C)?this._weekdayDays.filter(H=>H!==C):[...this._weekdayDays,C],this._weekendDays=this._weekendDays.filter(H=>H!==C)};this._toggleWeekendDay=C=>{this._weekendDays=this._weekendDays.includes(C)?this._weekendDays.filter(H=>H!==C):[...this._weekendDays,C],this._weekdayDays=this._weekdayDays.filter(H=>H!==C)};this._save=async()=>{if(this._weekdayDays.length===0){this._error="At least one weekday day is required.";return}if(this._weekendDays.length===0){this._error="At least one weekend day is required.";return}this._saving=!0,this._error=void 0;try{let C={weekday_days:this._weekdayDays,weekend_days:this._weekendDays,working_hours_start:this._workingHoursStart,working_hours_end:this._workingHoursEnd};await p2(this.hass,C),this._open=!1}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._saving=!1}}}showDialog(){this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await x1(this.hass);this._weekdayDays=[...C.weekday_days],this._weekendDays=[...C.weekend_days],this._workingHoursStart=C.working_hours_start.slice(0,5),this._workingHoursEnd=C.working_hours_end.slice(0,5)}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">My preferences</div>
@@ -689,31 +689,31 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             editor's quick-fill presets. Only affects your account - not
             shared with other users.
           </span>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
-          ${this._loading?t`<div class="placeholder">Loading…</div>`:t`
+          ${this._loading?r`<div class="placeholder">Loading…</div>`:r`
                 <label class="field-label">Weekday days</label>
                 <div class="days">
-                  ${f.map(C=>t`
+                  ${O.map(C=>r`
                       <button
                         type="button"
                         class="day-chip ${this._weekdayDays.includes(C)?"active":""}"
                         @click=${()=>this._toggleWeekdayDay(C)}
                       >
-                        ${Q[C].slice(0,3)}
+                        ${z[C].slice(0,3)}
                       </button>
                     `)}
                 </div>
 
                 <label class="field-label">Weekend days</label>
                 <div class="days">
-                  ${f.map(C=>t`
+                  ${O.map(C=>r`
                       <button
                         type="button"
                         class="day-chip ${this._weekendDays.includes(C)?"active":""}"
                         @click=${()=>this._toggleWeekendDay(C)}
                       >
-                        ${Q[C].slice(0,3)}
+                        ${z[C].slice(0,3)}
                       </button>
                     `)}
                 </div>
@@ -759,7 +759,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           </div>
         </div>
       </ha-dialog>
-    `:A}};g.styles=v`
+    `:o}};g.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -858,7 +858,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn-primary:hover {
       filter: brightness(0.95);
     }
-  `,e([m({attribute:!1})],g.prototype,"hass",2),e([i()],g.prototype,"_open",2),e([i()],g.prototype,"_weekdayDays",2),e([i()],g.prototype,"_weekendDays",2),e([i()],g.prototype,"_workingHoursStart",2),e([i()],g.prototype,"_workingHoursEnd",2),e([i()],g.prototype,"_loading",2),e([i()],g.prototype,"_saving",2),e([i()],g.prototype,"_error",2),g=e([x("scheduler-plus-preferences")],g);function h2(){let L=new Date;return`${L.getFullYear()}-${String(L.getMonth()+1).padStart(2,"0")}-${String(L.getDate()).padStart(2,"0")}`}var h=class extends n{constructor(){super(...arguments);this._open=!1;this._entities=[];this._name="";this._date=h2();this._onTime="18:00";this._offTime="22:00";this._saving=!1;this._closeDialog=()=>{this._open=!1};this._save=async()=>{if(this._entities.length===0){this._error="At least one entity is required.";return}this._saving=!0,this._error=void 0;try{let C={name:"Quick event",enabled:!0,days:[...f],date_mode:"include",dates:[this._date],date_ranges:[],day_conditions:[],on_time:{provider:"fixed",params:{time:this._onTime}},off_time:{provider:"fixed",params:{time:this._offTime}},on_enabled:!0,off_enabled:!0,allow_override:!0,override_grace_minutes:15,action:{}},H={name:this._name.trim()||`Event \u2013 ${this._date}`,device_type:"light_switch",entities:this._entities,enabled:!0,rules:[C]};await l1(this.hass,H),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._saving=!1}}}showDialog(){this._entities=[],this._date=h2(),this._name="",this._onTime="18:00",this._offTime="22:00",this._error=void 0,this._open=!0}render(){return this._open?t`
+  `,e([n({attribute:!1})],g.prototype,"hass",2),e([i()],g.prototype,"_open",2),e([i()],g.prototype,"_weekdayDays",2),e([i()],g.prototype,"_weekendDays",2),e([i()],g.prototype,"_workingHoursStart",2),e([i()],g.prototype,"_workingHoursEnd",2),e([i()],g.prototype,"_loading",2),e([i()],g.prototype,"_saving",2),e([i()],g.prototype,"_error",2),g=e([x("scheduler-plus-preferences")],g);function O2(L){return new Date(L).toLocaleTimeString(void 0,{hour:"numeric",minute:"2-digit"})}function j2(L){return new Date(`${L}T00:00:00`).toLocaleDateString(void 0,{month:"short",day:"numeric"})}function f1(L){return`Overlaps "${L.conflicting_schedule_name}" -> "${L.conflicting_rule_name}" on ${j2(L.date)}, ${O2(L.conflicting_on_at)} - ${O2(L.conflicting_off_at)}`}async function O1(L,V){let H=(await l1(L)).find(a=>a.id===V.conflicting_schedule_id);if(!H)throw new Error(`"${V.conflicting_schedule_name}" no longer exists.`);let M=!1,t=H.rules.map(a=>a.id!==V.conflicting_rule_id?a:(M=!0,a.date_mode==="include"?{...a,dates:a.dates.filter(d=>d!==V.date)}:{...a,date_mode:"exclude",dates:a.dates.includes(V.date)?a.dates:[...a.dates,V.date]}));if(!M)throw new Error(`"${V.conflicting_rule_name}" no longer exists.`);await F(L,H.id,{...G(H),rules:t})}function y2(){let L=new Date;return`${L.getFullYear()}-${String(L.getMonth()+1).padStart(2,"0")}-${String(L.getDate()).padStart(2,"0")}`}var c=class extends m{constructor(){super(...arguments);this._open=!1;this._entities=[];this._name="";this._date=y2();this._onTime="18:00";this._offTime="22:00";this._saving=!1;this._checkingConflicts=!1;this._conflicts=[];this._closeDialog=()=>{this._open=!1};this._save=async()=>{if(this._entities.length===0){this._error="At least one entity is required.";return}let C=this._buildInput();this._checkingConflicts=!0,this._error=void 0;try{let H=await u1(this.hass,null,C);H.length===0?(this._conflicts=[],await this._persist(C)):this._conflicts=H}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._checkingConflicts=!1}};this._createAnyway=()=>{this._persist(this._buildInput())};this._excludeConflict=async C=>{try{await O1(this.hass,C),this._conflicts=this._conflicts.filter(H=>!(H.conflicting_rule_id===C.conflicting_rule_id&&H.date===C.date)),this._conflicts.length===0&&await this._persist(this._buildInput())}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(){this._entities=[],this._date=y2(),this._name="",this._onTime="18:00",this._offTime="22:00",this._conflicts=[],this._error=void 0,this._open=!0}_buildInput(){let C={name:"Quick event",enabled:!0,days:[...O],date_mode:"include",dates:[this._date],date_ranges:[],day_conditions:[],on_time:{provider:"fixed",params:{time:this._onTime}},off_time:{provider:"fixed",params:{time:this._offTime}},on_enabled:!0,off_enabled:!0,allow_override:!0,override_grace_minutes:15,action:{}};return{name:this._name.trim()||`Event \u2013 ${this._date}`,device_type:"light_switch",entities:this._entities,enabled:!0,rules:[C]}}async _persist(C){this._saving=!0,this._error=void 0;try{await v1(this.hass,C),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._saving=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">Quick event</div>
@@ -866,7 +866,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             A one-off on/off for a single date - lights and switches only.
             For climate or a recurring schedule, use Add schedule instead.
           </span>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
           <label class="field-label" for="event-name">Name</label>
           <input
@@ -882,7 +882,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           <scheduler-plus-entity-multi-picker
             .hass=${this.hass}
             .value=${this._entities}
-            .domains=${Z1.light_switch}
+            .domains=${c1.light_switch}
             .includeEntities=${this.entityFilter}
             @value-changed=${C=>{this._entities=C.detail.value}}
           ></scheduler-plus-entity-multi-picker>
@@ -919,20 +919,55 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             </div>
           </div>
 
+          ${this._conflicts.length>0?this._renderConflictPanel():o}
+
           <div class="dialog-actions">
-            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving||this._checkingConflicts}
+              @click=${this._closeDialog}
+            >
+              Cancel
+            </button>
             <button
               type="button"
               class="btn btn-primary"
-              ?disabled=${this._saving}
+              ?disabled=${this._saving||this._checkingConflicts}
               @click=${this._save}
             >
-              Create
+              ${this._checkingConflicts?"Checking\u2026":"Create"}
             </button>
           </div>
         </div>
       </ha-dialog>
-    `:A}};h.styles=v`
+    `:o}_renderConflictPanel(){return r`
+      <div class="conflict-panel">
+        <span class="conflict-title">
+          This overlaps ${this._conflicts.length===1?"another schedule":"other schedules"}
+        </span>
+        <ul class="conflicts">
+          ${this._conflicts.map(C=>r`
+              <li class="conflict-row">
+                <div class="conflict-info">
+                  <span>${f1(C)}</span>
+                  <span class="hint">${C.entity_ids.join(", ")}</span>
+                </div>
+                ${C.fixable?r`
+                      <button
+                        type="button"
+                        class="btn"
+                        @click=${()=>this._excludeConflict(C)}
+                      >
+                        Exclude "${C.conflicting_schedule_name}" on ${C.date}
+                      </button>
+                    `:r`<span class="hint">Adjust manually - can't auto-fix this one.</span>`}
+              </li>
+            `)}
+        </ul>
+        <button type="button" class="btn" @click=${this._createAnyway}>Create anyway</button>
+      </div>
+    `}};c.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -974,6 +1009,42 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       flex-direction: column;
       gap: 4px;
     }
+    .conflict-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--warning-color, #ffa600);
+      border-radius: 6px;
+    }
+    .conflict-title {
+      font-weight: 500;
+      color: var(--warning-color, #ffa600);
+    }
+    ul.conflicts {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .conflict-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .conflict-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .conflict-info {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9em;
+    }
     .dialog-actions {
       display: flex;
       justify-content: flex-end;
@@ -1007,25 +1078,25 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn-primary:hover {
       filter: brightness(0.95);
     }
-  `,e([m({attribute:!1})],h.prototype,"hass",2),e([m({attribute:!1})],h.prototype,"entityFilter",2),e([i()],h.prototype,"_open",2),e([i()],h.prototype,"_entities",2),e([i()],h.prototype,"_name",2),e([i()],h.prototype,"_date",2),e([i()],h.prototype,"_onTime",2),e([i()],h.prototype,"_offTime",2),e([i()],h.prototype,"_saving",2),e([i()],h.prototype,"_error",2),h=e([x("scheduler-plus-quick-event-dialog")],h);var T=class extends n{constructor(){super(...arguments);this._open=!1;this._templates=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._pick=C=>{let H=C.rules[0];H&&(this._onPick?.(H),this._open=!1)};this._deleteTemplateRow=async C=>{if(window.confirm(`Delete template "${C.name}"?`))try{await s1(this.hass,C.id),await this._load()}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(C,H){this._deviceType=C,this._onPick=H,this._error=void 0,this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await x1(this.hass);this._templates=C.filter(H=>H.scope==="rule"&&H.device_type===this._deviceType)}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?t`
+  `,e([n({attribute:!1})],c.prototype,"hass",2),e([n({attribute:!1})],c.prototype,"entityFilter",2),e([i()],c.prototype,"_open",2),e([i()],c.prototype,"_entities",2),e([i()],c.prototype,"_name",2),e([i()],c.prototype,"_date",2),e([i()],c.prototype,"_onTime",2),e([i()],c.prototype,"_offTime",2),e([i()],c.prototype,"_saving",2),e([i()],c.prototype,"_checkingConflicts",2),e([i()],c.prototype,"_conflicts",2),e([i()],c.prototype,"_error",2),c=e([x("scheduler-plus-quick-event-dialog")],c);var T=class extends m{constructor(){super(...arguments);this._open=!1;this._templates=[];this._loading=!1;this._closeDialog=()=>{this._open=!1};this._pick=C=>{let H=C.rules[0];H&&(this._onPick?.(H),this._open=!1)};this._deleteTemplateRow=async C=>{if(window.confirm(`Delete template "${C.name}"?`))try{await Z1(this.hass,C.id),await this._load()}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(C,H){this._deviceType=C,this._onPick=H,this._error=void 0,this._open=!0,this._load()}async _load(){this._loading=!0,this._error=void 0;try{let C=await s1(this.hass);this._templates=C.filter(H=>H.scope==="rule"&&H.device_type===this._deviceType)}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">Start from template</div>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
           ${this._renderContent()}
           <div class="dialog-actions">
             <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
           </div>
         </div>
       </ha-dialog>
-    `:A}_renderContent(){return this._loading?t`<div class="placeholder">Loading templates…</div>`:this._templates.length===0?t`
+    `:o}_renderContent(){return this._loading?r`<div class="placeholder">Loading templates…</div>`:this._templates.length===0?r`
         <div class="placeholder">
           No rule templates saved yet for this device type. Save one from a
           rule's editor with "Save as template".
         </div>
-      `:t`
+      `:r`
       <ul class="templates">
-        ${this._templates.map(C=>t`
+        ${this._templates.map(C=>r`
             <li class="template">
               <span class="template-name">${C.name}</span>
               <div class="row-actions">
@@ -1033,7 +1104,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                   Use
                 </button>
                 <ha-icon-button
-                  .path=${w}
+                  .path=${_}
                   label="Delete template"
                   @click=${()=>this._deleteTemplateRow(C)}
                 ></ha-icon-button>
@@ -1107,7 +1178,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn:hover {
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
     }
-  `,e([m({attribute:!1})],T.prototype,"hass",2),e([i()],T.prototype,"_open",2),e([i()],T.prototype,"_templates",2),e([i()],T.prototype,"_loading",2),e([i()],T.prototype,"_error",2),T=e([x("scheduler-plus-rule-template-picker")],T);var B=class extends n{constructor(){super(...arguments);this._open=!1;this._name="";this._saving=!1;this._rules=[];this._scope="schedule";this._closeDialog=()=>{this._open=!1};this._save=async()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._rules.length===0){this._error="Add at least one rule before saving as a template.";return}if(this._deviceType){this._saving=!0,this._error=void 0;try{await p2(this.hass,{name:C,device_type:this._deviceType,rules:this._rules,scope:this._scope}),this._open=!1}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._saving=!1}}}}showDialog(C,H,M){this._deviceType=C,this._rules=H,this._scope=M,this._name="",this._error=void 0,this._open=!0}render(){return this._open?t`
+  `,e([n({attribute:!1})],T.prototype,"hass",2),e([i()],T.prototype,"_open",2),e([i()],T.prototype,"_templates",2),e([i()],T.prototype,"_loading",2),e([i()],T.prototype,"_error",2),T=e([x("scheduler-plus-rule-template-picker")],T);var B=class extends m{constructor(){super(...arguments);this._open=!1;this._name="";this._saving=!1;this._rules=[];this._scope="schedule";this._closeDialog=()=>{this._open=!1};this._save=async()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._rules.length===0){this._error="Add at least one rule before saving as a template.";return}if(this._deviceType){this._saving=!0,this._error=void 0;try{await l2(this.hass,{name:C,device_type:this._deviceType,rules:this._rules,scope:this._scope}),this._open=!1}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._saving=!1}}}}showDialog(C,H,M){this._deviceType=C,this._rules=H,this._scope=M,this._name="",this._error=void 0,this._open=!0}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">
@@ -1116,7 +1187,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           <span class="hint">
             ${this._scope==="rule"?'Saves this one rule as a reusable template - no specific entities - so it can be added to another schedule later via "Start from template".':`Saves this schedule's device type and rules as a reusable template - no specific entities - so another schedule can be built from the same setup later via "From template".`}
           </span>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
           <label class="field-label" for="template-name">Template name</label>
           <input
@@ -1141,7 +1212,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           </div>
         </div>
       </ha-dialog>
-    `:A}};B.styles=v`
+    `:o}};B.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -1206,11 +1277,11 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .btn-primary:hover {
       filter: brightness(0.95);
     }
-  `,e([m({attribute:!1})],B.prototype,"hass",2),e([i()],B.prototype,"_open",2),e([i()],B.prototype,"_name",2),e([i()],B.prototype,"_saving",2),e([i()],B.prototype,"_error",2),B=e([x("scheduler-plus-template-editor")],B);var Q2={weekday_days:["mon","tue","wed","thu","fri"],weekend_days:["sat","sun"],working_hours_start:"09:00",working_hours_end:"17:00",enable_brightness:!0,enable_fade_in:!0},F1=[{key:"fixed",label:G.fixed,makeSpec:()=>({provider:"fixed",params:{time:"06:00"}}),matches:L=>L.provider==="fixed"},{key:"sunrise",label:G.sunrise,makeSpec:()=>({provider:"sunrise",params:{offset_minutes:0}}),matches:L=>L.provider==="sunrise"},{key:"sunset",label:G.sunset,makeSpec:()=>({provider:"sunset",params:{offset_minutes:0}}),matches:L=>L.provider==="sunset"},...v2.map(L=>({key:`yidcal:${L}`,label:c1[L],makeSpec:()=>({provider:"yidcal",params:{zman:L,offset_minutes:0}}),matches:V=>V.provider==="yidcal"&&V.params.zman===L}))];function X(L){let V=new Date(`${L}T00:00:00`);return Number.isNaN(V.getTime())?L:V.toLocaleDateString(void 0,{month:"short",day:"numeric",year:"numeric"})}var p=class extends n{constructor(){super(...arguments);this._open=!1;this._preferences=Q2;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._dateMode="always";this._dates=[];this._newDate="";this._dateRanges=[];this._newRangeStart="";this._newRangeEnd="";this._dayConditions=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._onEnabled=!0;this._offEnabled=!0;this._setBrightness=!1;this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._allowOverride=!0;this._overrideGraceMinutes=15;this._applyRuleTemplate=C=>{this._hydrateFromRule(C)};this._openTemplatePicker=()=>{this._templatePicker?.showDialog(this._deviceType,this._applyRuleTemplate)};this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(H=>H!==C):[...this._days,C]};this._applyDayPreset=C=>{this._days=[...C]};this._applyAfterHoursPreset=()=>{this._days=[...f],this._onTime={provider:"fixed",params:{time:this._preferences.working_hours_end.slice(0,5)}},this._offTime={provider:"fixed",params:{time:this._preferences.working_hours_start.slice(0,5)}}};this._handleDateModeChange=C=>{let H=C.target.value;this._dateMode=H,H==="include"&&(this._days=[...f])};this._addDate=()=>{!this._newDate||this._dates.includes(this._newDate)||(this._dates=[...this._dates,this._newDate].sort(),this._newDate="")};this._removeDate=C=>{this._dates=this._dates.filter(H=>H!==C)};this._addDateRange=()=>{!this._newRangeStart||!this._newRangeEnd||this._newRangeStart>this._newRangeEnd||(this._dateRanges=[...this._dateRanges,[this._newRangeStart,this._newRangeEnd]],this._newRangeStart="",this._newRangeEnd="")};this._removeDateRange=C=>{this._dateRanges=this._dateRanges.filter(H=>H[0]!==C[0]||H[1]!==C[1])};this._toggleDayCondition=C=>{this._dayConditions=this._dayConditions.includes(C)?this._dayConditions.filter(H=>H!==C):[...this._dayConditions,C]};this._save=()=>{let C=this._validate();if(C){this._error=C;return}this._onSave?.(this._buildRuleInput()),this._open=!1};this._openSaveAsTemplate=()=>{let C=this._validate();if(C){this._error=C;return}this._templateEditor?.showDialog(this._deviceType,[this._buildRuleInput()],"rule")}}showDialog(C){let{deviceType:H,rule:M,onSave:r}=C;this._deviceType=H,this._rule=M,this._onSave=r,this._loadPreferences(),this._hydrateFromRule(M),this._error=void 0,this._open=!0}_hydrateFromRule(C){if(this._name=C?.name??"",this._enabled=C?.enabled??!0,this._days=C?[...C.days]:[],this._dateMode=C?.date_mode??"always",this._dates=C?[...C.dates]:[],this._newDate="",this._dateRanges=C?C.date_ranges.map(([H,M])=>[H,M]):[],this._newRangeStart="",this._newRangeEnd="",this._dayConditions=C?[...C.day_conditions]:[],this._onTime=C?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=C?.off_time??{provider:"fixed",params:{time:"21:00"}},this._onEnabled=C?.on_enabled??!0,this._offEnabled=C?.off_enabled??!0,this._allowOverride=C?.allow_override??!0,this._overrideGraceMinutes=C?.override_grace_minutes??15,this._deviceType==="light"||this._deviceType==="light_switch"){this._setBrightness=C?.action.brightness!==void 0;let H=C?.action.brightness??255;this._brightnessPct=Math.round(H/255*100),this._useTransition=C?.action.transition!==void 0,this._transitionSeconds=C?.action.transition??0}else this._deviceType==="climate"&&(this._hvacMode=C?.action.hvac_mode??"heat",this._useTargetTemperature=C?.action.target_temperature!==void 0,this._targetTemperature=C?.action.target_temperature??70)}async _loadPreferences(){try{this._preferences=await v1(this.hass)}catch{}}_summarizeDateFilter(){let C=[...this._dates.map(H=>X(H)),...this._dateRanges.map(([H,M])=>`${X(H)}\u2013${X(M)}`),...this._dayConditions.map(H=>i1[H])];return this._dateMode==="include"?C.length===0?"Nothing selected yet - as configured, this rule will never run.":`Runs only when it's ${C.join(", ")} - the Days above are ignored.`:C.length===0?"Nothing excluded yet - this behaves the same as \u201CAlways\u201D.":`Runs on the Days above as usual, except when it's ${C.join(", ")}.`}_validate(){return this._name.trim()?this._dateMode!=="include"&&this._days.length===0?"At least one day is required.":this._dateMode!=="always"&&this._dates.length===0&&this._dateRanges.length===0&&this._dayConditions.length===0?"At least one date, date range, or special condition is required.":!this._onEnabled&&!this._offEnabled?"At least one of On time or Off time must be enabled.":null:"Name is required."}_buildRuleInput(){let C={};return this._deviceType==="light"||this._deviceType==="light_switch"?C={...this._setBrightness?{brightness:Math.round(this._brightnessPct/100*255)}:{},...this._useTransition?{transition:this._transitionSeconds}:{}}:this._deviceType==="climate"&&(C={hvac_mode:this._hvacMode,...this._useTargetTemperature?{target_temperature:this._targetTemperature}:{}}),{id:this._rule?.id,name:this._name.trim(),enabled:this._enabled,days:this._days,date_mode:this._dateMode,dates:this._dates,date_ranges:this._dateRanges,day_conditions:this._dayConditions,on_time:this._onTime,off_time:this._offTime,on_enabled:this._onEnabled,off_enabled:this._offEnabled,allow_override:this._allowOverride,override_grace_minutes:this._overrideGraceMinutes,action:C}}render(){return this._open?t`
+  `,e([n({attribute:!1})],B.prototype,"hass",2),e([i()],B.prototype,"_open",2),e([i()],B.prototype,"_name",2),e([i()],B.prototype,"_saving",2),e([i()],B.prototype,"_error",2),B=e([x("scheduler-plus-template-editor")],B);var Y2={weekday_days:["mon","tue","wed","thu","fri"],weekend_days:["sat","sun"],working_hours_start:"09:00",working_hours_end:"17:00",enable_brightness:!0,enable_fade_in:!0},N1=[{key:"fixed",label:Q.fixed,makeSpec:()=>({provider:"fixed",params:{time:"06:00"}}),matches:L=>L.provider==="fixed"},{key:"sunrise",label:Q.sunrise,makeSpec:()=>({provider:"sunrise",params:{offset_minutes:0}}),matches:L=>L.provider==="sunrise"},{key:"sunset",label:Q.sunset,makeSpec:()=>({provider:"sunset",params:{offset_minutes:0}}),matches:L=>L.provider==="sunset"},...Z2.map(L=>({key:`yidcal:${L}`,label:h1[L],makeSpec:()=>({provider:"yidcal",params:{zman:L,offset_minutes:0}}),matches:V=>V.provider==="yidcal"&&V.params.zman===L}))];function J(L){let V=new Date(`${L}T00:00:00`);return Number.isNaN(V.getTime())?L:V.toLocaleDateString(void 0,{month:"short",day:"numeric",year:"numeric"})}var p=class extends m{constructor(){super(...arguments);this._open=!1;this._preferences=Y2;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._dateMode="always";this._dates=[];this._newDate="";this._dateRanges=[];this._newRangeStart="";this._newRangeEnd="";this._dayConditions=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._onEnabled=!0;this._offEnabled=!0;this._setBrightness=!1;this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._allowOverride=!0;this._overrideGraceMinutes=15;this._applyRuleTemplate=C=>{this._hydrateFromRule(C)};this._openTemplatePicker=()=>{this._templatePicker?.showDialog(this._deviceType,this._applyRuleTemplate)};this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(H=>H!==C):[...this._days,C]};this._applyDayPreset=C=>{this._days=[...C]};this._applyAfterHoursPreset=()=>{this._days=[...O],this._onTime={provider:"fixed",params:{time:this._preferences.working_hours_end.slice(0,5)}},this._offTime={provider:"fixed",params:{time:this._preferences.working_hours_start.slice(0,5)}}};this._handleDateModeChange=C=>{let H=C.target.value;this._dateMode=H,H==="include"?this._days=[...O]:H==="always"&&(this._dates=[],this._dateRanges=[],this._dayConditions=[])};this._addDate=()=>{!this._newDate||this._dates.includes(this._newDate)||(this._dates=[...this._dates,this._newDate].sort(),this._newDate="")};this._removeDate=C=>{this._dates=this._dates.filter(H=>H!==C)};this._addDateRange=()=>{!this._newRangeStart||!this._newRangeEnd||this._newRangeStart>this._newRangeEnd||(this._dateRanges=[...this._dateRanges,[this._newRangeStart,this._newRangeEnd]],this._newRangeStart="",this._newRangeEnd="")};this._removeDateRange=C=>{this._dateRanges=this._dateRanges.filter(H=>H[0]!==C[0]||H[1]!==C[1])};this._toggleDayCondition=C=>{this._dayConditions=this._dayConditions.includes(C)?this._dayConditions.filter(H=>H!==C):[...this._dayConditions,C]};this._save=()=>{let C=this._validate();if(C){this._error=C;return}this._onSave?.(this._buildRuleInput()),this._open=!1};this._openSaveAsTemplate=()=>{let C=this._validate();if(C){this._error=C;return}this._templateEditor?.showDialog(this._deviceType,[this._buildRuleInput()],"rule")}}showDialog(C){let{deviceType:H,rule:M,onSave:t}=C;this._deviceType=H,this._rule=M,this._onSave=t,this._loadPreferences(),this._hydrateFromRule(M),this._error=void 0,this._open=!0}_hydrateFromRule(C){if(this._name=C?.name??"",this._enabled=C?.enabled??!0,this._days=C?[...C.days]:[],this._dateMode=C?.date_mode??"always",this._dates=C?[...C.dates]:[],this._newDate="",this._dateRanges=C?C.date_ranges.map(([H,M])=>[H,M]):[],this._newRangeStart="",this._newRangeEnd="",this._dayConditions=C?[...C.day_conditions]:[],this._onTime=C?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=C?.off_time??{provider:"fixed",params:{time:"21:00"}},this._onEnabled=C?.on_enabled??!0,this._offEnabled=C?.off_enabled??!0,this._allowOverride=C?.allow_override??!0,this._overrideGraceMinutes=C?.override_grace_minutes??15,this._deviceType==="light"||this._deviceType==="light_switch"){this._setBrightness=C?.action.brightness!==void 0;let H=C?.action.brightness??255;this._brightnessPct=Math.round(H/255*100),this._useTransition=C?.action.transition!==void 0,this._transitionSeconds=C?.action.transition??0}else this._deviceType==="climate"&&(this._hvacMode=C?.action.hvac_mode??"heat",this._useTargetTemperature=C?.action.target_temperature!==void 0,this._targetTemperature=C?.action.target_temperature??70)}async _loadPreferences(){try{this._preferences=await x1(this.hass)}catch{}}_summarizeDateFilter(){let C=[...this._dates.map(H=>J(H)),...this._dateRanges.map(([H,M])=>`${J(H)}\u2013${J(M)}`),...this._dayConditions.map(H=>i1[H])];return this._dateMode==="include"?C.length===0?"Nothing selected yet - as configured, this rule will never run.":`Runs only when it's ${C.join(", ")} - the Days above are ignored.`:C.length===0?"Nothing excluded yet - this behaves the same as \u201CAlways\u201D.":`Runs on the Days above as usual, except when it's ${C.join(", ")}.`}_validate(){return this._name.trim()?this._dateMode!=="include"&&this._days.length===0?"At least one day is required.":this._dateMode!=="always"&&this._dates.length===0&&this._dateRanges.length===0&&this._dayConditions.length===0?"At least one date, date range, or special condition is required.":!this._onEnabled&&!this._offEnabled?"At least one of On time or Off time must be enabled.":null:"Name is required."}_buildRuleInput(){let C={};return this._deviceType==="light"||this._deviceType==="light_switch"?C={...this._setBrightness?{brightness:Math.round(this._brightnessPct/100*255)}:{},...this._useTransition?{transition:this._transitionSeconds}:{}}:this._deviceType==="climate"&&(C={hvac_mode:this._hvacMode,...this._useTargetTemperature?{target_temperature:this._targetTemperature}:{}}),{id:this._rule?.id,name:this._name.trim(),enabled:this._enabled,days:this._days,date_mode:this._dateMode,dates:this._dates,date_ranges:this._dateRanges,day_conditions:this._dayConditions,on_time:this._onTime,off_time:this._offTime,on_enabled:this._onEnabled,off_enabled:this._offEnabled,allow_override:this._allowOverride,override_grace_minutes:this._overrideGraceMinutes,action:C}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">${this._rule?"Edit rule":"Add rule"}</div>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
           <button type="button" class="btn" @click=${this._openTemplatePicker}>
             Start from template
@@ -1239,7 +1310,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
 
             <label class="field-label">Days</label>
             <div class="day-presets">
-              <button type="button" class="btn" @click=${()=>this._applyDayPreset(f)}>
+              <button type="button" class="btn" @click=${()=>this._applyDayPreset(O)}>
                 Every day
               </button>
               <button
@@ -1261,18 +1332,18 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               </button>
             </div>
             <div class="days">
-              ${f.map(C=>t`
+              ${O.map(C=>r`
                   <button
                     type="button"
                     class="day-chip ${this._days.includes(C)?"active":""}"
                     ?disabled=${this._dateMode==="include"}
                     @click=${()=>this._toggleDay(C)}
                   >
-                    ${Q[C].slice(0,3)}
+                    ${z[C].slice(0,3)}
                   </button>
                 `)}
             </div>
-            ${this._dateMode==="include"?t`<span class="hint">Ignored - this rule uses a date filter instead.</span>`:A}
+            ${this._dateMode==="include"?r`<span class="hint">Ignored - this rule uses a date filter instead.</span>`:o}
 
             <label class="field-label" for="date-mode">Date filter</label>
             <select
@@ -1281,18 +1352,18 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               .value=${this._dateMode}
               @change=${this._handleDateModeChange}
             >
-              ${S1.map(C=>t`<option value=${C}>${x2[C]}</option>`)}
+              ${g1.map(C=>r`<option value=${C}>${u2[C]}</option>`)}
             </select>
 
-            ${this._dateMode!=="always"?t`
+            ${this._dateMode!=="always"?r`
                   <div class="filter-panel">
                     <p class="filter-summary">${this._summarizeDateFilter()}</p>
 
                     <label class="panel-label">Specific dates</label>
                     <div class="dates">
-                      ${this._dates.map(C=>t`
+                      ${this._dates.map(C=>r`
                           <div class="date-row">
-                            <span>${X(C)}</span>
+                            <span>${J(C)}</span>
                             <button
                               type="button"
                               class="btn"
@@ -1317,9 +1388,9 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
 
                     <label class="panel-label">Date range</label>
                     <div class="dates">
-                      ${this._dateRanges.map(C=>t`
+                      ${this._dateRanges.map(C=>r`
                           <div class="date-row">
-                            <span>${X(C[0])} – ${X(C[1])}</span>
+                            <span>${J(C[0])} – ${J(C[1])}</span>
                             <button
                               type="button"
                               class="btn"
@@ -1351,7 +1422,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
 
                     <label class="panel-label">Special conditions (YidCal)</label>
                     <div class="days">
-                      ${s2.map(C=>t`
+                      ${c2.map(C=>r`
                           <button
                             type="button"
                             class="day-chip ${this._dayConditions.includes(C)?"active":""}"
@@ -1368,7 +1439,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                       still applies correctly once that day arrives.
                     </span>
                   </div>
-                `:A}
+                `:o}
           </section>
 
           <section class="section">
@@ -1398,46 +1469,46 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       <scheduler-plus-rule-template-picker
         .hass=${this.hass}
       ></scheduler-plus-rule-template-picker>
-    `:A}_renderTimeFields(C,H,M,r,a){let d=F1.find(o=>o.matches(H))?.key??"fixed";return t`
+    `:o}_renderTimeFields(C,H,M,t,a){let d=N1.find(A=>A.matches(H))?.key??"fixed";return r`
       <div class="time-field">
         <ha-formfield label=${C}>
           <ha-switch
-            .checked=${r}
-            @change=${o=>{a(o.target.checked)}}
+            .checked=${t}
+            @change=${A=>{a(A.target.checked)}}
           ></ha-switch>
         </ha-formfield>
-        ${r?t`
+        ${t?r`
               <div class="time-row">
                 <select
                   class="native-select"
                   .value=${d}
-                  @change=${o=>{let s=o.target.value,u=F1.find(l=>l.key===s);u&&M(u.makeSpec())}}
+                  @change=${A=>{let Z=A.target.value,u=N1.find(l=>l.key===Z);u&&M(u.makeSpec())}}
                 >
-                  ${F1.map(o=>t`<option value=${o.key}>${o.label}</option>`)}
+                  ${N1.map(A=>r`<option value=${A.key}>${A.label}</option>`)}
                 </select>
-                ${H.provider==="fixed"?t`
+                ${H.provider==="fixed"?r`
                       <input
                         type="time"
                         class="native-input"
                         .value=${H.params.time??""}
-                        @input=${o=>M({...H,params:{time:o.target.value}})}
+                        @input=${A=>M({...H,params:{time:A.target.value}})}
                       />
-                    `:t`
+                    `:r`
                       <input
                         type="number"
                         class="native-input offset"
                         .value=${String(H.params.offset_minutes??0)}
-                        @input=${o=>M({...H,params:{...H.params,offset_minutes:Number(o.target.value)||0}})}
+                        @input=${A=>M({...H,params:{...H.params,offset_minutes:Number(A.target.value)||0}})}
                       />
                       <span class="hint">minutes</span>
                     `}
               </div>
-            `:A}
+            `:o}
       </div>
-    `}_renderActionFields(){return this._deviceType==="light"||this._deviceType==="light_switch"?this._renderLightAction():this._deviceType==="climate"?this._renderClimateAction():t`
+    `}_renderActionFields(){return this._deviceType==="light"||this._deviceType==="light_switch"?this._renderLightAction():this._deviceType==="climate"?this._renderClimateAction():r`
       <span class="hint">Switches just turn on and off - nothing else to configure.</span>
-    `}_renderLightAction(){return t`
-      ${this._preferences.enable_brightness?t`
+    `}_renderLightAction(){return r`
+      ${this._preferences.enable_brightness?r`
             <ha-formfield label="Set brightness">
               <ha-switch
                 .checked=${this._setBrightness}
@@ -1448,7 +1519,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               Off by default - the light just turns on at whatever brightness it
               was last set to.
             </span>
-            ${this._setBrightness?t`
+            ${this._setBrightness?r`
                   <label class="field-label">Brightness (${this._brightnessPct}%)</label>
                   <input
                     type="range"
@@ -1458,9 +1529,9 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                     .value=${String(this._brightnessPct)}
                     @input=${C=>{this._brightnessPct=Number(C.target.value)}}
                   />
-                `:A}
-          `:A}
-      ${this._preferences.enable_fade_in?t`
+                `:o}
+          `:o}
+      ${this._preferences.enable_fade_in?r`
             <ha-formfield label="Fade in gradually">
               <ha-switch
                 .checked=${this._useTransition}
@@ -1471,7 +1542,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               Instead of snapping on instantly, the light ramps up to its target
               level over the given number of seconds.
             </span>
-            ${this._useTransition?t`
+            ${this._useTransition?r`
                   <label class="field-label" for="fade-duration">Fade duration (seconds)</label>
                   <input
                     id="fade-duration"
@@ -1480,9 +1551,9 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
                     .value=${String(this._transitionSeconds)}
                     @input=${C=>{this._transitionSeconds=Number(C.target.value)||0}}
                   />
-                `:A}
-          `:A}
-    `}_renderClimateAction(){return t`
+                `:o}
+          `:o}
+    `}_renderClimateAction(){return r`
       <label class="field-label" for="hvac-mode">HVAC mode</label>
       <select
         id="hvac-mode"
@@ -1490,7 +1561,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         .value=${this._hvacMode}
         @change=${C=>{this._hvacMode=C.target.value}}
       >
-        ${l2.map(C=>t`<option value=${C}>${u1[C]}</option>`)}
+        ${s2.map(C=>r`<option value=${C}>${S1[C]}</option>`)}
       </select>
 
       <ha-formfield label="Set target temperature">
@@ -1499,7 +1570,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           @change=${C=>{this._useTargetTemperature=C.target.checked}}
         ></ha-switch>
       </ha-formfield>
-      ${this._useTargetTemperature?t`
+      ${this._useTargetTemperature?r`
             <label class="field-label" for="target-temperature">Target temperature</label>
             <input
               id="target-temperature"
@@ -1508,7 +1579,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               .value=${String(this._targetTemperature)}
               @input=${C=>{this._targetTemperature=Number(C.target.value)||0}}
             />
-          `:A}
+          `:o}
 
       <ha-formfield label="Allow override">
         <ha-switch
@@ -1519,7 +1590,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       <span class="hint">
         ${this._allowOverride?"Manual changes made directly on the thermostat stick until the next scheduled event.":`If someone changes this away from the rule's setting, Scheduler+ waits ${this._overrideGraceMinutes} minutes and then reapplies it if it still doesn't match.`}
       </span>
-      ${this._allowOverride?A:t`
+      ${this._allowOverride?o:r`
             <label class="field-label" for="override-grace-minutes">
               Grace period (minutes)
             </label>
@@ -1723,13 +1794,13 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       font-size: 0.85em;
       color: var(--secondary-text-color);
     }
-  `,e([m({attribute:!1})],p.prototype,"hass",2),e([i()],p.prototype,"_open",2),e([i()],p.prototype,"_preferences",2),e([i()],p.prototype,"_deviceType",2),e([i()],p.prototype,"_name",2),e([i()],p.prototype,"_enabled",2),e([i()],p.prototype,"_days",2),e([i()],p.prototype,"_dateMode",2),e([i()],p.prototype,"_dates",2),e([i()],p.prototype,"_newDate",2),e([i()],p.prototype,"_dateRanges",2),e([i()],p.prototype,"_newRangeStart",2),e([i()],p.prototype,"_newRangeEnd",2),e([i()],p.prototype,"_dayConditions",2),e([i()],p.prototype,"_onTime",2),e([i()],p.prototype,"_offTime",2),e([i()],p.prototype,"_onEnabled",2),e([i()],p.prototype,"_offEnabled",2),e([i()],p.prototype,"_setBrightness",2),e([i()],p.prototype,"_brightnessPct",2),e([i()],p.prototype,"_useTransition",2),e([i()],p.prototype,"_transitionSeconds",2),e([i()],p.prototype,"_hvacMode",2),e([i()],p.prototype,"_useTargetTemperature",2),e([i()],p.prototype,"_targetTemperature",2),e([i()],p.prototype,"_allowOverride",2),e([i()],p.prototype,"_overrideGraceMinutes",2),e([i()],p.prototype,"_error",2),e([O("scheduler-plus-template-editor")],p.prototype,"_templateEditor",2),e([O("scheduler-plus-rule-template-picker")],p.prototype,"_templatePicker",2),p=e([x("scheduler-plus-rule-editor")],p);function z2(L){let[V,C]=L.split(":"),H=Number(V),M=Number(C),r=H>=12?"PM":"AM";return`${H%12===0?12:H%12}:${M.toString().padStart(2,"0")} ${r}`}function h1(L){if(L.provider==="fixed")return z2(L.params.time??"00:00");let V=L.provider==="yidcal"?c1[L.params.zman]??G.yidcal:G[L.provider],C=L.params.offset_minutes??0;return C===0?V:`${V} ${C>0?"+":""}${C}`}function K2(L){return L.on_enabled&&L.off_enabled?`${h1(L.on_time)} \u2192 ${h1(L.off_time)}`:L.on_enabled?`${h1(L.on_time)} only`:`until ${h1(L.off_time)}`}var Z=class extends n{constructor(){super(...arguments);this._open=!1;this._name="";this._deviceType="light_switch";this._enabled=!0;this._entities=[];this._rules=[];this._activeDateMode="always";this._activeDateRanges=[];this._newActiveRangeStart="";this._newActiveRangeEnd="";this._saving=!1;this._closeDialog=()=>{this._open=!1};this._handleDeviceTypeChange=C=>{this._deviceType=C.target.value,this._entities=[],this._rules=[]};this._handleActiveDateModeChange=C=>{this._activeDateMode=C.target.value};this._addActiveDateRange=()=>{let C=this._newActiveRangeStart,H=this._newActiveRangeEnd;!C||!H||C>H||(this._activeDateRanges.some(([M,r])=>M===C&&r===H)||(this._activeDateRanges=[...this._activeDateRanges,[C,H]]),this._newActiveRangeStart="",this._newActiveRangeEnd="")};this._removeActiveDateRange=C=>{this._activeDateRanges=this._activeDateRanges.filter((H,M)=>M!==C)};this._openSaveAsTemplate=()=>{this._templateEditor?.showDialog(this._deviceType,this._rules,"schedule")};this._openAddRuleDialog=()=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,onSave:C=>{this._rules=[...this._rules,C]}})};this._openEditRuleDialog=C=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,rule:this._rules[C],onSave:H=>{this._rules=this._rules.map((M,r)=>r===C?H:M)}})};this._removeRule=C=>{let H=this._rules[C];!H||!window.confirm(`Delete rule "${H.name}"?`)||(this._rules=this._rules.filter((M,r)=>r!==C))};this._toggleRuleEnabled=C=>{this._rules=this._rules.map((H,M)=>M===C?{...H,enabled:!H.enabled}:H)};this._save=async()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._entities.length===0){this._error="At least one entity is required.";return}this._saving=!0,this._error=void 0;try{let H={name:C,device_type:this._deviceType,entities:this._entities,enabled:this._enabled,rules:this._rules,active_date_mode:this._activeDateMode,active_date_ranges:this._activeDateRanges,override_until:this._schedule?.override_until??null};this._schedule?await U(this.hass,this._schedule.id,H):await l1(this.hass,H),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._saving=!1}}}showDialog(C){this._schedule=C,this._name=C?.name??"",this._deviceType=C?.device_type??"light_switch",this._enabled=C?.enabled??!0,this._entities=C?[...C.entities]:[],this._rules=C?C.rules.map(H=>({...H})):[],this._activeDateMode=C?.active_date_mode??"always",this._activeDateRanges=C?.active_date_ranges?[...C.active_date_ranges]:[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._error=void 0,this._open=!0}showDialogDuplicate(C){this._schedule=void 0,this._name=`Copy of ${C.name}`,this._deviceType=C.device_type,this._enabled=C.enabled,this._entities=[...C.entities],this._rules=C.rules.map(H=>{let{id:M,...r}=H;return{...r}}),this._activeDateMode=C.active_date_mode??"always",this._activeDateRanges=C.active_date_ranges?[...C.active_date_ranges]:[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._error=void 0,this._open=!0}showDialogFromTemplate(C){this._schedule=void 0,this._name=C.name,this._deviceType=C.device_type,this._enabled=!0,this._entities=[],this._rules=C.rules.map(H=>{let{id:M,...r}=H;return{...r}}),this._activeDateMode="always",this._activeDateRanges=[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._error=void 0,this._open=!0}render(){return this._open?t`
+  `,e([n({attribute:!1})],p.prototype,"hass",2),e([i()],p.prototype,"_open",2),e([i()],p.prototype,"_preferences",2),e([i()],p.prototype,"_deviceType",2),e([i()],p.prototype,"_name",2),e([i()],p.prototype,"_enabled",2),e([i()],p.prototype,"_days",2),e([i()],p.prototype,"_dateMode",2),e([i()],p.prototype,"_dates",2),e([i()],p.prototype,"_newDate",2),e([i()],p.prototype,"_dateRanges",2),e([i()],p.prototype,"_newRangeStart",2),e([i()],p.prototype,"_newRangeEnd",2),e([i()],p.prototype,"_dayConditions",2),e([i()],p.prototype,"_onTime",2),e([i()],p.prototype,"_offTime",2),e([i()],p.prototype,"_onEnabled",2),e([i()],p.prototype,"_offEnabled",2),e([i()],p.prototype,"_setBrightness",2),e([i()],p.prototype,"_brightnessPct",2),e([i()],p.prototype,"_useTransition",2),e([i()],p.prototype,"_transitionSeconds",2),e([i()],p.prototype,"_hvacMode",2),e([i()],p.prototype,"_useTargetTemperature",2),e([i()],p.prototype,"_targetTemperature",2),e([i()],p.prototype,"_allowOverride",2),e([i()],p.prototype,"_overrideGraceMinutes",2),e([i()],p.prototype,"_error",2),e([f("scheduler-plus-template-editor")],p.prototype,"_templateEditor",2),e([f("scheduler-plus-rule-template-picker")],p.prototype,"_templatePicker",2),p=e([x("scheduler-plus-rule-editor")],p);function X2(L){let[V,C]=L.split(":"),H=Number(V),M=Number(C),t=H>=12?"PM":"AM";return`${H%12===0?12:H%12}:${M.toString().padStart(2,"0")} ${t}`}function y1(L){if(L.provider==="fixed")return X2(L.params.time??"00:00");let V=L.provider==="yidcal"?h1[L.params.zman]??Q.yidcal:Q[L.provider],C=L.params.offset_minutes??0;return C===0?V:`${V} ${C>0?"+":""}${C}`}function J2(L){return L.on_enabled&&L.off_enabled?`${y1(L.on_time)} \u2192 ${y1(L.off_time)}`:L.on_enabled?`${y1(L.on_time)} only`:`until ${y1(L.off_time)}`}var s=class extends m{constructor(){super(...arguments);this._open=!1;this._name="";this._deviceType="light_switch";this._enabled=!0;this._entities=[];this._rules=[];this._activeDateMode="always";this._activeDateRanges=[];this._newActiveRangeStart="";this._newActiveRangeEnd="";this._saving=!1;this._checkingConflicts=!1;this._conflicts=[];this._closeDialog=()=>{this._open=!1};this._handleDeviceTypeChange=C=>{this._deviceType=C.target.value,this._entities=[],this._rules=[]};this._handleActiveDateModeChange=C=>{this._activeDateMode=C.target.value};this._addActiveDateRange=()=>{let C=this._newActiveRangeStart,H=this._newActiveRangeEnd;!C||!H||C>H||(this._activeDateRanges.some(([M,t])=>M===C&&t===H)||(this._activeDateRanges=[...this._activeDateRanges,[C,H]]),this._newActiveRangeStart="",this._newActiveRangeEnd="")};this._removeActiveDateRange=C=>{this._activeDateRanges=this._activeDateRanges.filter((H,M)=>M!==C)};this._openSaveAsTemplate=()=>{this._templateEditor?.showDialog(this._deviceType,this._rules,"schedule")};this._openAddRuleDialog=()=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,onSave:C=>{this._rules=[...this._rules,C]}})};this._openEditRuleDialog=C=>{this._ruleEditor?.showDialog({deviceType:this._deviceType,rule:this._rules[C],onSave:H=>{this._rules=this._rules.map((M,t)=>t===C?H:M)}})};this._removeRule=C=>{let H=this._rules[C];!H||!window.confirm(`Delete rule "${H.name}"?`)||(this._rules=this._rules.filter((M,t)=>t!==C))};this._toggleRuleEnabled=C=>{this._rules=this._rules.map((H,M)=>M===C?{...H,enabled:!H.enabled}:H)};this._save=async()=>{let C=this._name.trim();if(!C){this._error="Name is required.";return}if(this._entities.length===0){this._error="At least one entity is required.";return}let H=this._buildInput(C);this._checkingConflicts=!0,this._error=void 0;try{let M=await u1(this.hass,this._schedule?.id??null,H);M.length===0?(this._conflicts=[],await this._persist(H)):this._conflicts=M}catch(M){this._error=M instanceof Error?M.message:String(M)}finally{this._checkingConflicts=!1}};this._saveAnyway=()=>{let C=this._name.trim();this._persist(this._buildInput(C))};this._excludeConflict=async C=>{try{await O1(this.hass,C),this._conflicts=this._conflicts.filter(H=>!(H.conflicting_rule_id===C.conflicting_rule_id&&H.date===C.date)),this._conflicts.length===0&&await this._persist(this._buildInput(this._name.trim()))}catch(H){window.alert(H instanceof Error?H.message:String(H))}}}showDialog(C){this._schedule=C,this._name=C?.name??"",this._deviceType=C?.device_type??"light_switch",this._enabled=C?.enabled??!0,this._entities=C?[...C.entities]:[],this._rules=C?C.rules.map(H=>({...H})):[],this._activeDateMode=C?.active_date_mode??"always",this._activeDateRanges=C?.active_date_ranges?[...C.active_date_ranges]:[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._conflicts=[],this._error=void 0,this._open=!0}showDialogDuplicate(C){this._schedule=void 0,this._name=`Copy of ${C.name}`,this._deviceType=C.device_type,this._enabled=C.enabled,this._entities=[...C.entities],this._rules=C.rules.map(H=>{let{id:M,...t}=H;return{...t}}),this._activeDateMode=C.active_date_mode??"always",this._activeDateRanges=C.active_date_ranges?[...C.active_date_ranges]:[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._conflicts=[],this._error=void 0,this._open=!0}showDialogFromTemplate(C){this._schedule=void 0,this._name=C.name,this._deviceType=C.device_type,this._enabled=!0,this._entities=[],this._rules=C.rules.map(H=>{let{id:M,...t}=H;return{...t}}),this._activeDateMode="always",this._activeDateRanges=[],this._newActiveRangeStart="",this._newActiveRangeEnd="",this._conflicts=[],this._error=void 0,this._open=!0}_buildInput(C){return{name:C,device_type:this._deviceType,entities:this._entities,enabled:this._enabled,rules:this._rules,active_date_mode:this._activeDateMode,active_date_ranges:this._activeDateRanges,override_until:this._schedule?.override_until??null}}async _persist(C){this._saving=!0,this._error=void 0;try{this._schedule?await F(this.hass,this._schedule.id,C):await v1(this.hass,C),this._open=!1,this.dispatchEvent(new CustomEvent("schedule-plus-saved"))}catch(H){this._error=H instanceof Error?H.message:String(H)}finally{this._saving=!1}}render(){return this._open?r`
       <ha-dialog open @closed=${this._closeDialog}>
         <div class="form">
           <div class="dialog-title">
             ${this._schedule?"Edit schedule":"Add schedule"}
           </div>
-          ${this._error?t`<div class="error">${this._error}</div>`:A}
+          ${this._error?r`<div class="error">${this._error}</div>`:o}
 
           <label class="field-label" for="schedule-name">Name</label>
           <input
@@ -1748,7 +1819,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             ?disabled=${this._schedule!==void 0}
             @change=${this._handleDeviceTypeChange}
           >
-            ${m2.map(C=>t`<option value=${C}>${j[C]}</option>`)}
+            ${v2.map(C=>r`<option value=${C}>${Y[C]}</option>`)}
           </select>
 
           <ha-formfield label="Enabled">
@@ -1765,17 +1836,17 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             .value=${this._activeDateMode}
             @change=${this._handleActiveDateModeChange}
           >
-            ${S1.map(C=>t`<option value=${C}>
+            ${g1.map(C=>r`<option value=${C}>
                   ${C==="always"?"Always active":C==="include"?"Only during these date ranges":"Except during these date ranges"}
                 </option>`)}
           </select>
-          ${this._activeDateMode!=="always"?this._renderActivePeriodPanel():A}
+          ${this._activeDateMode!=="always"?this._renderActivePeriodPanel():o}
 
           <label class="field-label">Entities</label>
           <scheduler-plus-entity-multi-picker
             .hass=${this.hass}
             .value=${this._entities}
-            .domains=${Z1[this._deviceType]}
+            .domains=${c1[this._deviceType]}
             .includeEntities=${this.entityFilter}
             @value-changed=${C=>{this._entities=C.detail.value}}
           ></scheduler-plus-entity-multi-picker>
@@ -1786,37 +1857,77 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
               Add rule
             </button>
           </div>
-          ${this._rules.length===0?t`<div class="placeholder">No rules yet.</div>`:t`
+          ${this._rules.length===0?r`<div class="placeholder">No rules yet.</div>`:r`
                 <ul class="rules">
                   ${this._rules.map((C,H)=>this._renderRule(C,H))}
                 </ul>
               `}
 
+          ${this._conflicts.length>0?this._renderConflictPanel():o}
+
           <div class="dialog-actions">
-            <button type="button" class="btn" @click=${this._openSaveAsTemplate}>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving||this._checkingConflicts}
+              @click=${this._openSaveAsTemplate}
+            >
               Save as template
             </button>
             <span class="spacer"></span>
-            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving||this._checkingConflicts}
+              @click=${this._closeDialog}
+            >
+              Cancel
+            </button>
             <button
               type="button"
               class="btn btn-primary"
-              ?disabled=${this._saving}
+              ?disabled=${this._saving||this._checkingConflicts}
               @click=${this._save}
             >
-              Save
+              ${this._checkingConflicts?"Checking\u2026":"Save"}
             </button>
           </div>
         </div>
       </ha-dialog>
       <scheduler-plus-rule-editor .hass=${this.hass}></scheduler-plus-rule-editor>
       <scheduler-plus-template-editor .hass=${this.hass}></scheduler-plus-template-editor>
-    `:A}_renderActivePeriodPanel(){return t`
+    `:o}_renderConflictPanel(){return r`
+      <div class="conflict-panel">
+        <span class="conflict-title">
+          This overlaps ${this._conflicts.length===1?"another schedule":"other schedules"}
+        </span>
+        <ul class="conflicts">
+          ${this._conflicts.map(C=>r`
+              <li class="conflict-row">
+                <div class="conflict-info">
+                  <span>${f1(C)}</span>
+                  <span class="hint">${C.entity_ids.join(", ")}</span>
+                </div>
+                ${C.fixable?r`
+                      <button
+                        type="button"
+                        class="btn"
+                        @click=${()=>this._excludeConflict(C)}
+                      >
+                        Exclude "${C.conflicting_schedule_name}" on ${C.date}
+                      </button>
+                    `:r`<span class="hint">Adjust manually - can't auto-fix this one.</span>`}
+              </li>
+            `)}
+        </ul>
+        <button type="button" class="btn" @click=${this._saveAnyway}>Save anyway</button>
+      </div>
+    `}_renderActivePeriodPanel(){return r`
       <div class="filter-panel">
         <span class="panel-label">Date ranges</span>
-        ${this._activeDateRanges.length===0?t`<span class="hint">None added yet.</span>`:t`
+        ${this._activeDateRanges.length===0?r`<span class="hint">None added yet.</span>`:r`
               <ul class="dates">
-                ${this._activeDateRanges.map(([C,H],M)=>t`
+                ${this._activeDateRanges.map(([C,H],M)=>r`
                     <li class="date-row">
                       <span>${C} → ${H}</span>
                       <button
@@ -1849,7 +1960,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           </button>
         </div>
       </div>
-    `}_renderRule(C,H){let M=[...C.days].sort((d,o)=>f.indexOf(d)-f.indexOf(o)).map(d=>Q[d].slice(0,3)).join(", "),r=[...C.dates.length>0?[`${C.dates.length} date${C.dates.length===1?"":"s"}`]:[],...C.date_ranges.length>0?[`${C.date_ranges.length} range${C.date_ranges.length===1?"":"s"}`]:[],...C.day_conditions.map(d=>i1[d])],a=r.length===0?"":C.date_mode==="exclude"?` \xB7 except ${r.join(", ")}`:C.date_mode==="include"?` \xB7 only ${r.join(", ")}`:"";return t`
+    `}_renderRule(C,H){let M=[...C.days].sort((d,A)=>O.indexOf(d)-O.indexOf(A)).map(d=>z[d].slice(0,3)).join(", "),t=[...C.dates.length>0?[`${C.dates.length} date${C.dates.length===1?"":"s"}`]:[],...C.date_ranges.length>0?[`${C.date_ranges.length} range${C.date_ranges.length===1?"":"s"}`]:[],...C.day_conditions.map(d=>i1[d])],a=t.length===0?"":C.date_mode==="exclude"?` \xB7 except ${t.join(", ")}`:C.date_mode==="include"?` \xB7 only ${t.join(", ")}`:"";return r`
       <li class="rule ${C.enabled?"":"disabled"}">
         <ha-switch
           .checked=${C.enabled}
@@ -1858,7 +1969,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         <div class="rule-info">
           <span class="rule-name">${C.name}</span>
           <span class="rule-meta">
-            ${M} · ${K2(C)}${a}
+            ${M} · ${J2(C)}${a}
           </span>
         </div>
         <div class="row-actions">
@@ -1868,13 +1979,13 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             @click=${()=>this._openEditRuleDialog(H)}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${w}
+            .path=${_}
             label="Remove rule"
             @click=${()=>this._removeRule(H)}
           ></ha-icon-button>
         </div>
       </li>
-    `}};Z.styles=v`
+    `}};s.styles=v`
     .form {
       display: flex;
       flex-direction: column;
@@ -1952,6 +2063,42 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       border: 1px solid var(--divider-color);
       border-radius: 6px;
     }
+    .conflict-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--warning-color, #ffa600);
+      border-radius: 6px;
+    }
+    .conflict-title {
+      font-weight: 500;
+      color: var(--warning-color, #ffa600);
+    }
+    ul.conflicts {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .conflict-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .conflict-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .conflict-info {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9em;
+    }
     .panel-label {
       font-size: 0.85em;
       font-weight: 500;
@@ -2026,28 +2173,28 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
     .row-actions {
       display: flex;
     }
-  `,e([m({attribute:!1})],Z.prototype,"hass",2),e([m({attribute:!1})],Z.prototype,"entityFilter",2),e([i()],Z.prototype,"_schedule",2),e([i()],Z.prototype,"_open",2),e([i()],Z.prototype,"_name",2),e([i()],Z.prototype,"_deviceType",2),e([i()],Z.prototype,"_enabled",2),e([i()],Z.prototype,"_entities",2),e([i()],Z.prototype,"_rules",2),e([i()],Z.prototype,"_activeDateMode",2),e([i()],Z.prototype,"_activeDateRanges",2),e([i()],Z.prototype,"_newActiveRangeStart",2),e([i()],Z.prototype,"_newActiveRangeEnd",2),e([i()],Z.prototype,"_saving",2),e([i()],Z.prototype,"_error",2),e([O("scheduler-plus-rule-editor")],Z.prototype,"_ruleEditor",2),e([O("scheduler-plus-template-editor")],Z.prototype,"_templateEditor",2),Z=e([x("scheduler-plus-schedule-editor")],Z);function q2(){let L=new Date;return`${L.getFullYear()}-${String(L.getMonth()+1).padStart(2,"0")}-${String(L.getDate()).padStart(2,"0")}`}function g2(L){return!!L.override_until&&L.override_until>=q2()}function j2(L){if(!L.next_event)return;let V=new Date(L.next_event);if(Number.isNaN(V.getTime()))return;let C=L.next_event_action==="off"?"Off":"On",H=V.toLocaleString(void 0,{weekday:"short",hour:"numeric",minute:"2-digit"});return`Next: ${C} ${H}`}function Y2(L){if(L.active_now)return;if(!L.next_active_date)return"Inactive (outside its active dates)";let V=new Date(`${L.next_active_date}T00:00:00`);return Number.isNaN(V.getTime())?"Inactive (outside its active dates)":`Inactive until ${V.toLocaleDateString(void 0,{month:"short",day:"numeric"})}`}function X2(L){if(!g2(L)||!L.override_until)return;let V=new Date(`${L.override_until}T00:00:00`);return Number.isNaN(V.getTime())?"Paused":`Paused through ${V.toLocaleDateString(void 0,{month:"short",day:"numeric"})}`}var J2="#F2A93B",c=class extends n{constructor(){super(...arguments);this._schedules=[];this._loading=!0;this._pendingToggle=new Set;this._toggleScheduleEnabled=async C=>{this._pendingToggle=new Set(this._pendingToggle).add(C.id);try{await U(this.hass,C.id,{...t1(C),enabled:!C.enabled}),await this._refresh()}catch(H){window.alert(H instanceof Error?H.message:String(H))}finally{let H=new Set(this._pendingToggle);H.delete(C.id),this._pendingToggle=H}};this._openAddDialog=()=>{this._editor?.showDialog()};this._openEditDialog=C=>{this._editor?.showDialog(C)};this._openDuplicateDialog=C=>{this._editor?.showDialogDuplicate(C)};this._openPauseDialog=C=>{this._overrideDialog?.showDialog(C)};this._resumeNow=async C=>{this._pendingToggle=new Set(this._pendingToggle).add(C.id);try{await U(this.hass,C.id,{...t1(C),override_until:null}),await this._refresh()}catch(H){window.alert(H instanceof Error?H.message:String(H))}finally{let H=new Set(this._pendingToggle);H.delete(C.id),this._pendingToggle=H}};this._openDayView=()=>{this._dayView?.showDialog()};this._openPreferences=()=>{this._preferences?.showDialog()};this._openQuickEvent=()=>{this._quickEventDialog?.showDialog()};this._openApplyTemplate=()=>{this._applyTemplateDialog?.showDialog()};this._handleUseTemplate=C=>{this._editor?.showDialogFromTemplate(C.detail.template)}}static getStubConfig(){return{type:"custom:scheduler-plus-card"}}static getConfigElement(){return document.createElement("scheduler-plus-card-editor")}setConfig(C){this._config=C}getCardSize(){return 2+this._visibleSchedules.length}get _visibleSchedules(){let C=this._config?.entities;return!C||C.length===0?this._schedules:this._schedules.filter(H=>H.entities.some(M=>C.includes(M)))}connectedCallback(){super.connectedCallback(),this._refresh()}async _refresh(){this._loading=!0;try{this._schedules=await i2(this.hass),this._error=void 0}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}async _handleDelete(C){window.confirm(`Delete schedule "${C.name}"?`)&&(await a2(this.hass,C.id),await this._refresh())}render(){return t`
+  `,e([n({attribute:!1})],s.prototype,"hass",2),e([n({attribute:!1})],s.prototype,"entityFilter",2),e([i()],s.prototype,"_schedule",2),e([i()],s.prototype,"_open",2),e([i()],s.prototype,"_name",2),e([i()],s.prototype,"_deviceType",2),e([i()],s.prototype,"_enabled",2),e([i()],s.prototype,"_entities",2),e([i()],s.prototype,"_rules",2),e([i()],s.prototype,"_activeDateMode",2),e([i()],s.prototype,"_activeDateRanges",2),e([i()],s.prototype,"_newActiveRangeStart",2),e([i()],s.prototype,"_newActiveRangeEnd",2),e([i()],s.prototype,"_saving",2),e([i()],s.prototype,"_checkingConflicts",2),e([i()],s.prototype,"_conflicts",2),e([i()],s.prototype,"_error",2),e([f("scheduler-plus-rule-editor")],s.prototype,"_ruleEditor",2),e([f("scheduler-plus-template-editor")],s.prototype,"_templateEditor",2),s=e([x("scheduler-plus-schedule-editor")],s);function C5(){let L=new Date;return`${L.getFullYear()}-${String(L.getMonth()+1).padStart(2,"0")}-${String(L.getDate()).padStart(2,"0")}`}function b2(L){return!!L.override_until&&L.override_until>=C5()}function H5(L){if(!L.next_event)return;let V=new Date(L.next_event);if(Number.isNaN(V.getTime()))return;let C=L.next_event_action==="off"?"Off":"On",H=V.toLocaleString(void 0,{weekday:"short",hour:"numeric",minute:"2-digit"});return`Next: ${C} ${H}`}function V5(L){if(L.active_now)return;if(!L.next_active_date)return"Inactive (outside its active dates)";let V=new Date(`${L.next_active_date}T00:00:00`);return Number.isNaN(V.getTime())?"Inactive (outside its active dates)":`Inactive until ${V.toLocaleDateString(void 0,{month:"short",day:"numeric"})}`}function L5(L){if(!b2(L)||!L.override_until)return;let V=new Date(`${L.override_until}T00:00:00`);return Number.isNaN(V.getTime())?"Paused":`Paused through ${V.toLocaleDateString(void 0,{month:"short",day:"numeric"})}`}var M5="#F2A93B",S=class extends m{constructor(){super(...arguments);this._schedules=[];this._loading=!0;this._pendingToggle=new Set;this._toggleScheduleEnabled=async C=>{this._pendingToggle=new Set(this._pendingToggle).add(C.id);try{await F(this.hass,C.id,{...G(C),enabled:!C.enabled}),await this._refresh()}catch(H){window.alert(H instanceof Error?H.message:String(H))}finally{let H=new Set(this._pendingToggle);H.delete(C.id),this._pendingToggle=H}};this._openAddDialog=()=>{this._editor?.showDialog()};this._openEditDialog=C=>{this._editor?.showDialog(C)};this._openDuplicateDialog=C=>{this._editor?.showDialogDuplicate(C)};this._openPauseDialog=C=>{this._overrideDialog?.showDialog(C)};this._resumeNow=async C=>{this._pendingToggle=new Set(this._pendingToggle).add(C.id);try{await F(this.hass,C.id,{...G(C),override_until:null}),await this._refresh()}catch(H){window.alert(H instanceof Error?H.message:String(H))}finally{let H=new Set(this._pendingToggle);H.delete(C.id),this._pendingToggle=H}};this._openDayView=()=>{this._dayView?.showDialog()};this._openPreferences=()=>{this._preferences?.showDialog()};this._openQuickEvent=()=>{this._quickEventDialog?.showDialog()};this._openApplyTemplate=()=>{this._applyTemplateDialog?.showDialog()};this._handleUseTemplate=C=>{this._editor?.showDialogFromTemplate(C.detail.template)}}static getStubConfig(){return{type:"custom:scheduler-plus-card"}}static getConfigElement(){return document.createElement("scheduler-plus-card-editor")}setConfig(C){this._config=C}getCardSize(){return 2+this._visibleSchedules.length}get _visibleSchedules(){let C=this._config?.entities;return!C||C.length===0?this._schedules:this._schedules.filter(H=>H.entities.some(M=>C.includes(M)))}connectedCallback(){super.connectedCallback(),this._refresh()}async _refresh(){this._loading=!0;try{this._schedules=await l1(this.hass),this._error=void 0}catch(C){this._error=C instanceof Error?C.message:String(C)}finally{this._loading=!1}}async _handleDelete(C){window.confirm(`Delete schedule "${C.name}"?`)&&(await d2(this.hass,C.id),await this._refresh())}render(){return r`
       <ha-card>
         <div class="header">
           ${this._renderBrandMark()}
           <span>${this._config?.title??"Scheduler+"}</span>
           <ha-icon-button
-            .path=${D1}
+            .path=${W1}
             label="My preferences"
             @click=${this._openPreferences}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${E1}
+            .path=${I1}
             label="Day view"
             @click=${this._openDayView}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${$1}
+            .path=${U1}
             label="Quick event"
             @click=${this._openQuickEvent}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${U1}
+            .path=${K1}
             label="From template"
             @click=${this._openApplyTemplate}
           ></ha-icon-button>
@@ -2082,7 +2229,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         .hass=${this.hass}
         @scheduler-plus-use-template=${this._handleUseTemplate}
       ></scheduler-plus-apply-template-dialog>
-    `}_renderBrandMark(){return t`
+    `}_renderBrandMark(){return r`
       <svg class="brand-mark" viewBox="0 0 60 60" aria-hidden="true">
         <rect
           x="9"
@@ -2110,7 +2257,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           cx="47"
           cy="47"
           r="12"
-          fill=${J2}
+          fill=${M5}
           stroke="var(--card-background-color)"
           stroke-width="3.5"
         />
@@ -2133,11 +2280,11 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
           stroke-linecap="round"
         />
       </svg>
-    `}_renderContent(){if(this._loading)return t`<div class="placeholder">Loading schedules…</div>`;if(this._error)return t`<div class="placeholder error">${this._error}</div>`;let C=this._visibleSchedules;if(C.length===0){let H=this._schedules.length===0?"No schedules yet.":"No schedules for this card's selected devices.";return t`<div class="placeholder">${H}</div>`}return t`
+    `}_renderContent(){if(this._loading)return r`<div class="placeholder">Loading schedules…</div>`;if(this._error)return r`<div class="placeholder error">${this._error}</div>`;let C=this._visibleSchedules;if(C.length===0){let H=this._schedules.length===0?"No schedules yet.":"No schedules for this card's selected devices.";return r`<div class="placeholder">${H}</div>`}return r`
       <ul class="schedules">
         ${C.map(H=>this._renderSchedule(H))}
       </ul>
-    `}_renderSchedule(C){let H=g2(C),M=C.enabled&&!H?j2(C):void 0,r=C.enabled?X2(C):void 0,a=C.enabled&&!H?Y2(C):void 0;return t`
+    `}_renderSchedule(C){let H=b2(C),M=C.enabled&&!H?H5(C):void 0,t=C.enabled?L5(C):void 0,a=C.enabled&&!H?V5(C):void 0;return r`
       <li class="schedule ${C.enabled?"":"disabled"}">
         <ha-switch
           .checked=${C.enabled}
@@ -2147,15 +2294,15 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
         <div class="schedule-info">
           <span class="schedule-name">${C.name}</span>
           <span class="schedule-meta">
-            ${j[C.device_type]} ·
+            ${Y[C.device_type]} ·
             ${C.entities.length}
             ${C.entities.length===1?"entity":"entities"} ·
             ${C.rules.length}
             ${C.rules.length===1?"rule":"rules"}
           </span>
-          ${r?t`<span class="schedule-paused">${r}</span>`:A}
-          ${a?t`<span class="schedule-seasonal">${a}</span>`:A}
-          ${M?t`<span class="schedule-next">${M}</span>`:A}
+          ${t?r`<span class="schedule-paused">${t}</span>`:o}
+          ${a?r`<span class="schedule-seasonal">${a}</span>`:o}
+          ${M?r`<span class="schedule-next">${M}</span>`:o}
         </div>
         <div class="row-actions">
           <ha-icon-button
@@ -2164,28 +2311,28 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
             @click=${()=>this._openEditDialog(C)}
           ></ha-icon-button>
           <ha-icon-button
-            .path=${N1}
+            .path=${G1}
             label="Duplicate"
             @click=${()=>this._openDuplicateDialog(C)}
           ></ha-icon-button>
-          ${H?t`<ha-icon-button
-                .path=${I1}
+          ${H?r`<ha-icon-button
+                .path=${z1}
                 label="Resume now"
                 ?disabled=${this._pendingToggle.has(C.id)}
                 @click=${()=>this._resumeNow(C)}
-              ></ha-icon-button>`:t`<ha-icon-button
-                .path=${W1}
+              ></ha-icon-button>`:r`<ha-icon-button
+                .path=${Q1}
                 label="Pause"
                 @click=${()=>this._openPauseDialog(C)}
               ></ha-icon-button>`}
           <ha-icon-button
-            .path=${w}
+            .path=${_}
             label="Delete"
             @click=${()=>this._handleDelete(C)}
           ></ha-icon-button>
         </div>
       </li>
-    `}};c.styles=v`
+    `}};S.styles=v`
     .header {
       display: flex;
       align-items: center;
@@ -2298,7 +2445,7 @@ var O2=Object.defineProperty;var f2=Object.getOwnPropertyDescriptor;var e=(L,V,C
       justify-content: flex-end;
       padding: 8px 8px 8px 16px;
     }
-  `,e([m({attribute:!1})],c.prototype,"hass",2),e([i()],c.prototype,"_config",2),e([i()],c.prototype,"_schedules",2),e([i()],c.prototype,"_loading",2),e([i()],c.prototype,"_error",2),e([i()],c.prototype,"_pendingToggle",2),e([O("scheduler-plus-schedule-editor")],c.prototype,"_editor",2),e([O("scheduler-plus-day-view")],c.prototype,"_dayView",2),e([O("scheduler-plus-preferences")],c.prototype,"_preferences",2),e([O("scheduler-plus-override-dialog")],c.prototype,"_overrideDialog",2),e([O("scheduler-plus-quick-event-dialog")],c.prototype,"_quickEventDialog",2),e([O("scheduler-plus-apply-template-dialog")],c.prototype,"_applyTemplateDialog",2),c=e([x("scheduler-plus-card")],c);window.customCards=window.customCards??[];window.customCards.push({type:"scheduler-plus-card",name:"Scheduler+",description:"Visual scheduling for lights and climate devices."});export{c as SchedulerPlusCard};
+  `,e([n({attribute:!1})],S.prototype,"hass",2),e([i()],S.prototype,"_config",2),e([i()],S.prototype,"_schedules",2),e([i()],S.prototype,"_loading",2),e([i()],S.prototype,"_error",2),e([i()],S.prototype,"_pendingToggle",2),e([f("scheduler-plus-schedule-editor")],S.prototype,"_editor",2),e([f("scheduler-plus-day-view")],S.prototype,"_dayView",2),e([f("scheduler-plus-preferences")],S.prototype,"_preferences",2),e([f("scheduler-plus-override-dialog")],S.prototype,"_overrideDialog",2),e([f("scheduler-plus-quick-event-dialog")],S.prototype,"_quickEventDialog",2),e([f("scheduler-plus-apply-template-dialog")],S.prototype,"_applyTemplateDialog",2),S=e([x("scheduler-plus-card")],S);window.customCards=window.customCards??[];window.customCards.push({type:"scheduler-plus-card",name:"Scheduler+",description:"Visual scheduling for lights and climate devices."});export{S as SchedulerPlusCard};
 /*! Bundled license information:
 
 @lit/reactive-element/css-tag.js:

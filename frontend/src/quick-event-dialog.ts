@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import type { HomeAssistant, RuleInput, ScheduleInput } from "./api";
-import { createSchedule } from "./api";
+import type { HomeAssistant, RuleInput, ScheduleConflict, ScheduleInput } from "./api";
+import { checkScheduleConflicts, createSchedule } from "./api";
+import { describeConflict, excludeConflictDate } from "./conflict-utils";
 import "./entity-multi-picker";
 import { DEVICE_TYPE_DOMAINS, WEEKDAYS } from "./types";
 
@@ -46,6 +47,10 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
 
   @state() private _saving = false;
 
+  @state() private _checkingConflicts = false;
+
+  @state() private _conflicts: ScheduleConflict[] = [];
+
   @state() private _error?: string;
 
   public showDialog(): void {
@@ -54,6 +59,7 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
     this._name = "";
     this._onTime = "18:00";
     this._offTime = "22:00";
+    this._conflicts = [];
     this._error = undefined;
     this._open = true;
   }
@@ -62,38 +68,36 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
     this._open = false;
   };
 
-  private _save = async (): Promise<void> => {
-    if (this._entities.length === 0) {
-      this._error = "At least one entity is required.";
-      return;
-    }
+  private _buildInput(): ScheduleInput {
+    const rule: RuleInput = {
+      name: "Quick event",
+      enabled: true,
+      days: [...WEEKDAYS],
+      date_mode: "include",
+      dates: [this._date],
+      date_ranges: [],
+      day_conditions: [],
+      on_time: { provider: "fixed", params: { time: this._onTime } },
+      off_time: { provider: "fixed", params: { time: this._offTime } },
+      on_enabled: true,
+      off_enabled: true,
+      allow_override: true,
+      override_grace_minutes: 15,
+      action: {},
+    };
+    return {
+      name: this._name.trim() || `Event – ${this._date}`,
+      device_type: "light_switch",
+      entities: this._entities,
+      enabled: true,
+      rules: [rule],
+    };
+  }
 
+  private async _persist(input: ScheduleInput): Promise<void> {
     this._saving = true;
     this._error = undefined;
     try {
-      const rule: RuleInput = {
-        name: "Quick event",
-        enabled: true,
-        days: [...WEEKDAYS],
-        date_mode: "include",
-        dates: [this._date],
-        date_ranges: [],
-        day_conditions: [],
-        on_time: { provider: "fixed", params: { time: this._onTime } },
-        off_time: { provider: "fixed", params: { time: this._offTime } },
-        on_enabled: true,
-        off_enabled: true,
-        allow_override: true,
-        override_grace_minutes: 15,
-        action: {},
-      };
-      const input: ScheduleInput = {
-        name: this._name.trim() || `Event – ${this._date}`,
-        device_type: "light_switch",
-        entities: this._entities,
-        enabled: true,
-        rules: [rule],
-      };
       await createSchedule(this.hass, input);
       this._open = false;
       this.dispatchEvent(new CustomEvent("schedule-plus-saved"));
@@ -101,6 +105,54 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
       this._error = err instanceof Error ? err.message : String(err);
     } finally {
       this._saving = false;
+    }
+  }
+
+  /** Always re-checks for cross-schedule conflicts before creating - see _saveAnyway. */
+  private _save = async (): Promise<void> => {
+    if (this._entities.length === 0) {
+      this._error = "At least one entity is required.";
+      return;
+    }
+
+    const input = this._buildInput();
+    this._checkingConflicts = true;
+    this._error = undefined;
+    try {
+      const conflicts = await checkScheduleConflicts(this.hass, null, input);
+      if (conflicts.length === 0) {
+        this._conflicts = [];
+        await this._persist(input);
+      } else {
+        this._conflicts = conflicts;
+      }
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this._checkingConflicts = false;
+    }
+  };
+
+  /** Explicit bypass, only offered once conflicts are already shown - see _save. */
+  private _createAnyway = (): void => {
+    void this._persist(this._buildInput());
+  };
+
+  private _excludeConflict = async (conflict: ScheduleConflict): Promise<void> => {
+    try {
+      await excludeConflictDate(this.hass, conflict);
+      this._conflicts = this._conflicts.filter(
+        (c) =>
+          !(
+            c.conflicting_rule_id === conflict.conflicting_rule_id &&
+            c.date === conflict.date
+          ),
+      );
+      if (this._conflicts.length === 0) {
+        await this._persist(this._buildInput());
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -179,19 +231,62 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
             </div>
           </div>
 
+          ${this._conflicts.length > 0 ? this._renderConflictPanel() : nothing}
+
           <div class="dialog-actions">
-            <button type="button" class="btn" @click=${this._closeDialog}>Cancel</button>
+            <button
+              type="button"
+              class="btn"
+              ?disabled=${this._saving || this._checkingConflicts}
+              @click=${this._closeDialog}
+            >
+              Cancel
+            </button>
             <button
               type="button"
               class="btn btn-primary"
-              ?disabled=${this._saving}
+              ?disabled=${this._saving || this._checkingConflicts}
               @click=${this._save}
             >
-              Create
+              ${this._checkingConflicts ? "Checking…" : "Create"}
             </button>
           </div>
         </div>
       </ha-dialog>
+    `;
+  }
+
+  private _renderConflictPanel() {
+    return html`
+      <div class="conflict-panel">
+        <span class="conflict-title">
+          This overlaps ${this._conflicts.length === 1 ? "another schedule" : "other schedules"}
+        </span>
+        <ul class="conflicts">
+          ${this._conflicts.map(
+            (conflict) => html`
+              <li class="conflict-row">
+                <div class="conflict-info">
+                  <span>${describeConflict(conflict)}</span>
+                  <span class="hint">${conflict.entity_ids.join(", ")}</span>
+                </div>
+                ${conflict.fixable
+                  ? html`
+                      <button
+                        type="button"
+                        class="btn"
+                        @click=${() => this._excludeConflict(conflict)}
+                      >
+                        Exclude "${conflict.conflicting_schedule_name}" on ${conflict.date}
+                      </button>
+                    `
+                  : html`<span class="hint">Adjust manually - can't auto-fix this one.</span>`}
+              </li>
+            `,
+          )}
+        </ul>
+        <button type="button" class="btn" @click=${this._createAnyway}>Create anyway</button>
+      </div>
     `;
   }
 
@@ -236,6 +331,42 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 4px;
+    }
+    .conflict-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--warning-color, #ffa600);
+      border-radius: 6px;
+    }
+    .conflict-title {
+      font-weight: 500;
+      color: var(--warning-color, #ffa600);
+    }
+    ul.conflicts {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .conflict-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    .conflict-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .conflict-info {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9em;
     }
     .dialog-actions {
       display: flex;
