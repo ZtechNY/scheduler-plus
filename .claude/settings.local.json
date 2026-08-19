@@ -42,7 +42,28 @@
       "Bash(python -m py_compile custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/device_handlers/base.py custom_components/scheduler_plus/device_handlers/climate.py custom_components/scheduler_plus/device_handlers/light.py custom_components/scheduler_plus/device_handlers/switch.py custom_components/scheduler_plus/models.py)",
       "Bash(python -m py_compile tests/test_device_handlers.py)",
       "Bash(python -m py_compile custom_components/scheduler_plus/const.py custom_components/scheduler_plus/models.py custom_components/scheduler_plus/scheduler.py custom_components/scheduler_plus/websocket.py custom_components/scheduler_plus/config_flow.py custom_components/scheduler_plus/device_handlers/base.py custom_components/scheduler_plus/device_handlers/climate.py custom_components/scheduler_plus/device_handlers/light.py custom_components/scheduler_plus/device_handlers/switch.py tests/test_models.py tests/test_scheduler.py tests/test_device_handlers.py)",
-      "Bash(python -c \"import pytest_homeassistant_custom_component\")"
+      "Bash(python -c \"import pytest_homeassistant_custom_component\")",
+      "Bash(command -v pandoc)",
+      "Bash(command -v wkhtmltopdf)",
+      "Bash(command -v chrome)",
+      "Bash(command -v msedge)",
+      "Bash(where pandoc *)",
+      "Bash(find /c/Users/zkatz/AppData/Local/Temp -iname \"*.png\" -newermt \"-2 hours\" 2>/dev/null | head -50)",
+      "Read(//c/Users/zkatz/AppData/Local/Temp/**)",
+      "Read(//c/Users/zkatz/AppData/Roaming/Code/**)",
+      "Read(//c/Users/zkatz/.claude/**)",
+      "Read(//c/Users/zkatz/AppData/Local/Temp/claude/y--Documents-scheduler-plus/f6d80531-afe9-42d0-ae9b-4593bf660cf5/scratchpad/**)",
+      "Read(//c/Users/zkatz/AppData/Local/Temp/claude/**)",
+      "Read(//c/Users/zkatz/.claude/projects/**)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless --disable-gpu --no-sandbox --print-to-pdf=\"scheduler-plus-guide.pdf\" --print-to-pdf-no-header \"file:///y:/Documents/scheduler-plus/docs/scheduler-plus-guide.html\")",
+      "PowerShell(winget list poppler 2>$null)",
+      "PowerShell(Get-Command choco -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command scoop -ErrorAction SilentlyContinue)",
+      "PowerShell(scoop install poppler 2>&1)",
+      "Bash(rm -f \"y:/Documents/scheduler-plus/docs/verify-page-\"*.png)"
+    ],
+    "additionalDirectories": [
+      "y:\\Documents\\scheduler-plus\\docs"
     ]
   }
 }

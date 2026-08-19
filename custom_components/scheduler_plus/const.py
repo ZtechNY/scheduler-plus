@@ -12,6 +12,14 @@ DOMAIN: Final = "scheduler_plus"
 # Platforms forwarded from the config entry.
 PLATFORMS: Final[list[Platform]] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
+# Fired by SchedulerEngine (under the same Context passed to the resulting
+# light/switch/climate service call) each time a rule turns an entity on or
+# off, so logbook.py can describe *why* it happened - this is what lets the
+# entity's own Logbook entry show "triggered by Scheduler+" instead of
+# nothing, the same mechanism the built-in automation/script integrations
+# use for their own "triggered by automation 'X'" entries.
+EVENT_RULE_TRIGGERED: Final = f"{DOMAIN}_rule_triggered"
+
 # Home Assistant Storage helper configuration. Bump STORAGE_VERSION and add a
 # migration function whenever the persisted schema shape changes.
 STORAGE_VERSION: Final = 1

@@ -21,13 +21,14 @@ import math
 
 import pytest
 from homeassistant.const import ATTR_TEMPERATURE
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.scheduler_plus.const import (
     DayConditionType,
     DeviceType,
+    EVENT_RULE_TRIGGERED,
     TimeProviderType,
 )
 from custom_components.scheduler_plus.coordinator import SchedulerPlusCoordinator
@@ -731,6 +732,74 @@ async def test_refresh_rule_on_only_never_arms_enforcement(
     assert "climate.test" not in engine._active_enforcement
 
 
+async def test_catchup_turn_on_fires_rule_triggered_event(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """Catching up a rule's on-action fires EVENT_RULE_TRIGGERED.
+
+    It fires under the same Context passed to the resulting service call -
+    this is what lets logbook.py (and Home Assistant's Logbook) attribute
+    the entity's own "turned on" entry to Scheduler+ instead of showing no
+    cause at all.
+    """
+    rule = _make_climate_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(
+        rule, name="Kitchen heat", entities=["climate.test"], device_type=DeviceType.CLIMATE
+    )
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    events: list[Event] = []
+    hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data == {
+        "entity_id": "climate.test",
+        "rule_id": rule.id,
+        "rule_name": rule.name,
+        "schedule_name": "Kitchen heat",
+        "turning_on": True,
+    }
+
+    state = hass.states.get("climate.test")
+    assert state is not None
+    assert state.context.id == events[0].context.id
+
+
+async def test_scheduled_turn_off_fires_rule_triggered_event(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """The scheduled (point-in-time) turn-off also fires the event, with turning_on=False.
+
+    Uses real current time (like test_scheduled_turn_on_arms_enforcement_and_
+    lands_in_unsub_rules) since it needs the real scheduled callback to
+    actually fire, via async_fire_time_changed.
+    """
+    real_now = dt_util.now()
+    off_time = (real_now + timedelta(minutes=2)).strftime("%H:%M")
+    rule = _make_climate_rule(on_time="00:00", off_time=off_time)
+    schedule = _make_schedule(
+        rule, name="Kitchen heat", entities=["climate.test"], device_type=DeviceType.CLIMATE
+    )
+
+    events: list[Event] = []
+    hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
+
+    await engine._async_refresh_rule(schedule, rule, real_now)
+    assert [event.data["turning_on"] for event in events] == [True]  # the on-catch-up
+
+    async_fire_time_changed(hass, real_now + timedelta(minutes=3))
+    await hass.async_block_till_done()
+
+    assert [event.data["turning_on"] for event in events] == [True, False]
+    state = hass.states.get("climate.test")
+    assert state is not None
+    assert state.state == "off"
+    assert state.context.id == events[-1].context.id
+
+
 async def test_override_enforcement_reapplies_after_grace_period(
     engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
 ) -> None:
@@ -740,6 +809,9 @@ async def test_override_enforcement_reapplies_after_grace_period(
     )
     schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    events: list[Event] = []
+    hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
 
     await engine._async_refresh_rule(schedule, rule, now)
     assert len(fake_climate_handler.turn_on_calls) == 1  # the initial catch-up
@@ -756,6 +828,11 @@ async def test_override_enforcement_reapplies_after_grace_period(
     state = hass.states.get("climate.test")
     assert state is not None
     assert state.attributes[ATTR_TEMPERATURE] == 69
+
+    # The reapply (like the initial catch-up) fires EVENT_RULE_TRIGGERED,
+    # with schedule_name threaded all the way through _arm_override_enforcement.
+    assert [event.data["schedule_name"] for event in events] == ["Test schedule"] * 2
+    assert events[-1].context.id == state.context.id
 
 
 async def test_override_enforcement_debounce_resets_on_further_change(
@@ -854,7 +931,9 @@ async def test_override_enforcement_teardown_disarms_it(
     """
     rule = _make_climate_rule(allow_override=False, override_grace_minutes=1)
 
-    teardown = engine._arm_override_enforcement(rule, "climate.test", fake_climate_handler)
+    teardown = engine._arm_override_enforcement(
+        rule, "climate.test", fake_climate_handler, "Test schedule"
+    )
     assert "climate.test" in engine._active_enforcement
 
     teardown()
@@ -1117,7 +1196,7 @@ def test_candidate_dates_include_mode_without_day_conditions_excludes_today() ->
 
 
 def test_candidate_dates_include_mode_range_not_yet_started() -> None:
-    """An INCLUDE rule's future range contributes its start date as the candidate."""
+    """An INCLUDE rule's future range contributes every one of its days, starting at day one."""
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
     rule = _make_rule(
         date_mode=RuleDateMode.INCLUDE,
@@ -1126,11 +1205,19 @@ def test_candidate_dates_include_mode_range_not_yet_started() -> None:
 
     candidates = SchedulerEngine._candidate_dates(rule, now)
 
-    assert candidates == [date(2024, 6, 1)]
+    assert candidates == [date(2024, 6, 1) + timedelta(days=i) for i in range(15)]
 
 
 def test_candidate_dates_include_mode_range_already_started() -> None:
-    """An INCLUDE rule's in-progress range contributes today, not its start date."""
+    """An INCLUDE rule's in-progress range contributes every remaining day, not just its start.
+
+    Regression test: the range's first day (June 1) is in the past by
+    June 5, so it must not be the *only* candidate offered - every day from
+    yesterday (June 4) through the range's end has to be checked, or
+    async_get_next_event would miss a real future occurrence later in the
+    same range (e.g. tomorrow) and incorrectly skip ahead to a later,
+    unrelated range instead.
+    """
     now = datetime(2024, 6, 5, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
     rule = _make_rule(
         date_mode=RuleDateMode.INCLUDE,
@@ -1139,7 +1226,50 @@ def test_candidate_dates_include_mode_range_already_started() -> None:
 
     candidates = SchedulerEngine._candidate_dates(rule, now)
 
-    assert candidates == [date(2024, 6, 5)]
+    assert candidates == [date(2024, 6, 4) + timedelta(days=i) for i in range(12)]
+
+
+def test_candidate_dates_include_mode_mid_range_still_offers_later_days() -> None:
+    """Checking from the middle of a multi-day range still offers its later days.
+
+    Directly mirrors the reported bug: a 4-day event range where "now" has
+    already moved past day one (and day one's own on/off has since passed)
+    - day three and four must still show up as candidates, not just
+    whichever range happens to start soonest after today.
+    """
+    now = datetime(2024, 8, 19, 23, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)  # day 3 of 4
+    rule = _make_rule(
+        date_mode=RuleDateMode.INCLUDE,
+        date_ranges=frozenset({("2024-08-17", "2024-08-20")}),
+    )
+
+    candidates = SchedulerEngine._candidate_dates(rule, now)
+
+    assert date(2024, 8, 19) in candidates
+    assert date(2024, 8, 20) in candidates
+
+
+def test_dates_in_range_clamps_to_floor_and_end() -> None:
+    """_dates_in_range returns every day from max(start, floor) through end, inclusive."""
+    result = SchedulerEngine._dates_in_range("2024-06-01", "2024-06-05", date(2024, 6, 3))
+
+    assert result == [date(2024, 6, 3), date(2024, 6, 4), date(2024, 6, 5)]
+
+
+def test_dates_in_range_empty_when_already_ended() -> None:
+    """A range that ended before `floor` contributes nothing."""
+    result = SchedulerEngine._dates_in_range("2024-06-01", "2024-06-05", date(2024, 6, 10))
+
+    assert result == []
+
+
+def test_dates_in_range_caps_at_max_days() -> None:
+    """A range longer than the cap is truncated, not fully enumerated."""
+    result = SchedulerEngine._dates_in_range("2024-01-01", "2024-12-31", date(2024, 1, 1))
+
+    assert len(result) == 31
+    assert result[0] == date(2024, 1, 1)
+    assert result[-1] == date(2024, 1, 31)
 
 
 def test_candidate_dates_include_mode_ignores_past_range() -> None:

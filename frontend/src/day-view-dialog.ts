@@ -6,18 +6,92 @@ import { fetchDaySchedule, fetchWeekSchedule } from "./api";
 import type { DeviceType } from "./types";
 import { CLIMATE_HVAC_MODE_LABELS } from "./types";
 
-/** "YYYY-MM-DD" for the caller's local today, not UTC (unlike Date#toISOString). */
-function todayIso(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+/** "YYYY-MM-DD" for a Date in local time, not UTC (unlike Date#toISOString). */
+function localDateIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+/** "YYYY-MM-DD" for the caller's local today. */
+function todayIso(): string {
+  return localDateIso(new Date());
 }
 
 /** Renders an ISO datetime's time portion, e.g. "6:00 AM". */
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/**
+ * Where an ISO datetime falls on a 24h scale for `dayIso`, as 0-100. An
+ * overnight event's off_at on the *next* calendar day clips to 100 (the
+ * end of this day's bar) rather than wrapping - the following day's own
+ * bar starts fresh at 0, it doesn't show the tail of a rule that started
+ * the day before.
+ */
+function dayPositionPct(iso: string, dayIso: string): number {
+  const instant = new Date(iso);
+  const instantDayIso = localDateIso(instant);
+  if (instantDayIso > dayIso) {
+    return 100;
+  }
+  if (instantDayIso < dayIso) {
+    return 0;
+  }
+  const minutesIntoDay = instant.getHours() * 60 + instant.getMinutes();
+  return (minutesIntoDay / (24 * 60)) * 100;
+}
+
+interface TimelineSegment {
+  leftPct: number;
+  widthPct: number;
+  title: string;
+}
+
+/** One horizontal-bar segment (or a thin point-marker for an on-only/off-only event) per event. */
+function timelineSegments(day: WeekScheduleDay): TimelineSegment[] {
+  return day.events.map((event): TimelineSegment => {
+    const label = `${event.schedule_name} · ${event.rule_name}`;
+    if (event.on_at !== null && event.off_at !== null) {
+      const left = dayPositionPct(event.on_at, day.date);
+      const right = dayPositionPct(event.off_at, day.date);
+      return {
+        leftPct: left,
+        widthPct: Math.max(right - left, 1),
+        title: `${label} (${formatTime(event.on_at)} → ${formatTime(event.off_at)})`,
+      };
+    }
+    if (event.on_at !== null) {
+      return {
+        leftPct: dayPositionPct(event.on_at, day.date),
+        widthPct: 1,
+        title: `${label} (on at ${formatTime(event.on_at)})`,
+      };
+    }
+    return {
+      leftPct: dayPositionPct(event.off_at!, day.date),
+      widthPct: 1,
+      title: `${label} (off at ${formatTime(event.off_at!)})`,
+    };
+  });
+}
+
+/**
+ * Caps a long entity-name list at `max` visible names, e.g. a schedule
+ * covering twenty rooms - `full` (all names, comma-separated) goes in a
+ * title tooltip so nothing is actually hidden, just decluttered by default.
+ */
+function summarizeEntityNames(
+  names: string[],
+  max = 4,
+): { visible: string; full: string; overflow: number } {
+  const full = names.join(", ");
+  if (names.length <= max) {
+    return { visible: full, full, overflow: 0 };
+  }
+  return { visible: names.slice(0, max).join(", "), full, overflow: names.length - max };
 }
 
 /**
@@ -188,7 +262,7 @@ export class SchedulerPlusDayView extends LitElement {
     }
     return html`
       <ha-dialog open @closed=${this._closeDialog}>
-        <div class="form ${this._viewMode === "week" ? "form-wide" : ""}">
+        <div class="form">
           <div class="dialog-title">Day view</div>
 
           <div class="view-toggle">
@@ -287,48 +361,54 @@ export class SchedulerPlusDayView extends LitElement {
     if (this._error) {
       return html`<div class="placeholder error">${this._error}</div>`;
     }
+    if (this._weekDays.every((day) => day.events.length === 0)) {
+      return html`<div class="placeholder">No activity scheduled this week.</div>`;
+    }
     return html`
-      <div class="week-grid-scroll">
-        <div class="week-grid">${this._weekDays.map((day) => this._renderWeekDay(day))}</div>
-      </div>
+      <div class="week-list">${this._weekDays.map((day) => this._renderWeekDay(day))}</div>
     `;
   }
 
   private _renderWeekDay(day: WeekScheduleDay) {
     const label = new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, {
-      weekday: "short",
+      weekday: "long",
       month: "short",
       day: "numeric",
     });
+    const isToday = day.date === todayIso();
     const sorted = [...day.events].sort((a, b) =>
       (a.on_at ?? a.off_at ?? "").localeCompare(b.on_at ?? b.off_at ?? ""),
     );
+    const segments = timelineSegments(day);
+    const now = new Date();
+    const nowPct = isToday ? ((now.getHours() * 60 + now.getMinutes()) / (24 * 60)) * 100 : null;
     return html`
       <div class="week-day">
-        <div class="week-day-header">${label}</div>
+        <div class="week-day-header">
+          <span class=${isToday ? "today" : ""}>${label}</span>
+          ${isToday ? html`<span class="today-badge">Today</span>` : nothing}
+        </div>
+        <div class="day-timeline" title="12 AM to 12 AM">
+          <span class="day-timeline-tick" style="left: 25%"></span>
+          <span class="day-timeline-tick" style="left: 50%"></span>
+          <span class="day-timeline-tick" style="left: 75%"></span>
+          ${segments.map(
+            (seg) => html`
+              <span
+                class="day-timeline-segment"
+                style="left: ${seg.leftPct}%; width: ${seg.widthPct}%"
+                title=${seg.title}
+              ></span>
+            `,
+          )}
+          ${nowPct !== null
+            ? html`<span class="day-timeline-now" style="left: ${nowPct}%" title="Now"></span>`
+            : nothing}
+        </div>
         ${sorted.length === 0
-          ? html`<span class="hint">Nothing scheduled</span>`
-          : html`
-              <ul class="week-events">
-                ${sorted.map((event) => this._renderWeekEvent(event))}
-              </ul>
-            `}
+          ? html`<div class="placeholder small">Nothing scheduled</div>`
+          : html`<ul class="events">${sorted.map((event) => this._renderEvent(event))}</ul>`}
       </div>
-    `;
-  }
-
-  private _renderWeekEvent(event: DayScheduleEvent) {
-    const time =
-      event.on_at !== null
-        ? formatTime(event.on_at)
-        : event.off_at !== null
-          ? formatTime(event.off_at)
-          : "";
-    return html`
-      <li class="week-event" title="${event.schedule_name} · ${event.rule_name}">
-        <span class="week-event-time">${time}</span>
-        <span class="week-event-name">${event.schedule_name}</span>
-      </li>
     `;
   }
 
@@ -338,20 +418,25 @@ export class SchedulerPlusDayView extends LitElement {
       event.off_at !== null &&
       event.off_at.slice(0, 10) !== event.on_at.slice(0, 10);
     const action = formatAction(event.device_type, event.action);
+    const entities = summarizeEntityNames(event.entities.map((id) => this._entityName(id)));
     return html`
       <li class="event">
-        <span class="event-time">
-          ${event.on_at !== null && event.off_at !== null
-            ? html`${formatTime(event.on_at)} → ${formatTime(event.off_at)}`
-            : event.on_at !== null
-              ? html`On at ${formatTime(event.on_at)}`
-              : html`Off at ${formatTime(event.off_at!)}`}
-          ${overnight ? html`<span class="hint">(next day)</span>` : nothing}
-        </span>
+        <div class="event-top">
+          <span class="event-time">
+            ${event.on_at !== null && event.off_at !== null
+              ? html`${formatTime(event.on_at)} → ${formatTime(event.off_at)}`
+              : event.on_at !== null
+                ? html`On at ${formatTime(event.on_at)}`
+                : html`Off at ${formatTime(event.off_at!)}`}
+          </span>
+          ${overnight ? html`<span class="hint">next day</span>` : nothing}
+        </div>
         <span class="event-name">${event.schedule_name} · ${event.rule_name}</span>
         ${action ? html`<span class="event-action">${action}</span>` : nothing}
-        <span class="event-entities">
-          ${event.entities.map((id) => this._entityName(id)).join(", ")}
+        <span class="event-entities" title=${entities.full}>
+          ${entities.visible}${entities.overflow > 0
+            ? html` <span class="event-entities-more">+${entities.overflow} more</span>`
+            : nothing}
         </span>
       </li>
     `;
@@ -363,10 +448,7 @@ export class SchedulerPlusDayView extends LitElement {
       flex-direction: column;
       gap: 16px;
       min-width: 320px;
-      max-width: 460px;
-    }
-    .form-wide {
-      max-width: min(92vw, 900px);
+      max-width: min(92vw, 520px);
     }
     .dialog-title {
       font-size: 1.25rem;
@@ -391,53 +473,75 @@ export class SchedulerPlusDayView extends LitElement {
       background: var(--primary-color);
       border-color: var(--primary-color);
     }
-    .week-grid-scroll {
-      overflow-x: auto;
-    }
-    .week-grid {
-      display: grid;
-      grid-template-columns: repeat(7, minmax(110px, 1fr));
-      gap: 8px;
+    .week-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
     .week-day {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 0;
       border: 1px solid var(--divider-color);
-      border-radius: 6px;
-      padding: 8px;
+      border-radius: 10px;
+      padding: 10px 12px;
     }
     .week-day-header {
-      font-size: 0.8em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.9em;
       font-weight: 600;
-      color: var(--secondary-text-color);
-    }
-    ul.week-events {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    .week-event {
-      display: flex;
-      flex-direction: column;
-      font-size: 0.78em;
-      line-height: 1.3;
-    }
-    .week-event-time {
-      font-weight: 500;
       color: var(--primary-text-color);
     }
-    .week-event-name {
-      color: var(--secondary-text-color);
+    .week-day-header .today {
+      color: var(--primary-color);
+    }
+    .today-badge {
+      font-size: 0.68em;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text-primary-color, #fff);
+      background: var(--primary-color);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .placeholder.small {
+      padding: 0;
+      font-size: 0.85em;
+      text-align: left;
+    }
+    .day-timeline {
+      position: relative;
+      height: 8px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+    .day-timeline-tick {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--card-background-color);
+      opacity: 0.6;
+    }
+    .day-timeline-segment {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      min-width: 3px;
+      border-radius: 3px;
+      background: var(--primary-color);
+      opacity: 0.8;
+    }
+    .day-timeline-now {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 2px;
+      background: var(--error-color, #db4437);
+      border-radius: 1px;
     }
     .controls {
       display: flex;
@@ -474,7 +578,7 @@ export class SchedulerPlusDayView extends LitElement {
       color: var(--error-color);
     }
     .group {
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
     .group:last-child {
       margin-bottom: 0;
@@ -491,22 +595,31 @@ export class SchedulerPlusDayView extends LitElement {
       list-style: none;
       margin: 0;
       padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
     .event {
       display: flex;
       flex-direction: column;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--divider-color);
+      gap: 3px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.035));
     }
-    .event:last-child {
-      border-bottom: none;
+    .event-top {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
     .event-time {
-      font-weight: 500;
-      color: var(--primary-text-color);
+      font-weight: 600;
+      font-size: 0.9em;
+      color: var(--primary-color);
     }
     .event-name {
       font-size: 0.9em;
+      font-weight: 500;
       color: var(--primary-text-color);
     }
     .event-action {
@@ -516,6 +629,9 @@ export class SchedulerPlusDayView extends LitElement {
     .event-entities {
       font-size: 0.8em;
       color: var(--secondary-text-color);
+    }
+    .event-entities-more {
+      font-style: italic;
     }
     .hint {
       font-size: 0.85em;

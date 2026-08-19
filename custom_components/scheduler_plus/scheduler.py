@@ -32,7 +32,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DeviceType
+from .const import DeviceType, EVENT_RULE_TRIGGERED
 from .coordinator import SchedulerPlusCoordinator
 from .day_conditions import DEFAULT_DAY_CONDITIONS, DayConditionRegistry
 from .device_handlers import (
@@ -61,9 +61,10 @@ _WEEKDAY_BY_ISO_INDEX: tuple[Weekday, ...] = (
 # scan; see async_find_conflicts' own docstring for what this misses.
 _DEFAULT_CONFLICT_LOOKAHEAD_DAYS = 14
 
-# Cap on how many days of an INCLUDE rule's date_range get checked for
-# conflicts, so a long-running range (e.g. a 90-day summer window) doesn't
-# resolve an unbounded number of dates in one check.
+# Cap on how many days of an INCLUDE rule's date_range get checked at once
+# (see _dates_in_range, used by both _candidate_dates and
+# _conflict_check_dates), so a long-running range (e.g. a 90-day summer
+# window) doesn't resolve an unbounded number of dates in one pass.
 _MAX_INCLUDE_RANGE_CHECK_DAYS = 31
 
 
@@ -382,17 +383,36 @@ class SchedulerEngine:
         return self._dedupe_conflicts(conflicts)
 
     @staticmethod
+    def _dates_in_range(start_str: str, end_str: str, floor: date) -> list[date]:
+        """Every day of [start, end] from `floor` onward, capped at _MAX_INCLUDE_RANGE_CHECK_DAYS.
+
+        Shared by _candidate_dates and _conflict_check_dates - both need
+        "which days of this date_ranges entry are still worth resolving",
+        differing only in what `floor` means to each caller (yesterday vs.
+        today). Naturally returns [] for a range that already ended before
+        `floor`, so callers don't need a separate "already past" guard.
+        """
+        start = date.fromisoformat(start_str)
+        end = date.fromisoformat(end_str)
+        d = max(start, floor)
+        result: list[date] = []
+        count = 0
+        while d <= end and count < _MAX_INCLUDE_RANGE_CHECK_DAYS:
+            result.append(d)
+            d += timedelta(days=1)
+            count += 1
+        return result
+
+    @staticmethod
     def _conflict_check_dates(
         rule: Rule, now: datetime, lookahead_days: int
     ) -> list[date]:
         """Dates worth resolving `rule` against for async_find_conflicts.
 
         INCLUDE-mode: every literal date in `dates`, plus every day of each
-        date_ranges entry, clamped to start no earlier than today (mirrors
-        _candidate_dates' own max(start, yesterday) clamp, but anchored to
-        today since a conflict preview only cares about the live remainder
-        of an in-progress range, not days already past) and capped at
-        _MAX_INCLUDE_RANGE_CHECK_DAYS per range.
+        date_ranges entry (via _dates_in_range) - anchored to today, since a
+        conflict preview only cares about the live remainder of an
+        in-progress range, not days already past.
 
         ALWAYS/EXCLUDE-mode: the next `lookahead_days` days from today.
         """
@@ -402,14 +422,9 @@ class SchedulerEngine:
                 d for raw in rule.dates if (d := date.fromisoformat(raw)) >= today
             }
             for start_str, end_str in rule.date_ranges:
-                start = date.fromisoformat(start_str)
-                end = date.fromisoformat(end_str)
-                d = max(start, today)
-                count = 0
-                while d <= end and count < _MAX_INCLUDE_RANGE_CHECK_DAYS:
-                    dates.add(d)
-                    d += timedelta(days=1)
-                    count += 1
+                dates.update(
+                    SchedulerEngine._dates_in_range(start_str, end_str, today)
+                )
             return sorted(dates)
         return [(now + timedelta(days=offset)).date() for offset in range(lookahead_days)]
 
@@ -501,10 +516,15 @@ class SchedulerEngine:
         A RuleDateMode.INCLUDE rule can name a literal date (or a range)
         arbitrarily far in the future - a fixed day window could miss it
         entirely - so candidates are built directly from the rule's own
-        `dates`/`date_ranges` instead. For a range, only its earliest
-        not-yet-past day is needed: whatever on/off times resolve for that
-        day are necessarily the range's soonest occurrence, so there's no
-        need to enumerate every day in a (potentially very long) range. If
+        `dates`/`date_ranges` instead, via _dates_in_range (every day of
+        each range from yesterday onward, capped). Every day is checked,
+        not just a range's first day: once "now" has moved past a range's
+        start but is still inside it (a multi-day date_ranges entry, e.g. a
+        4-day event), the first day's on/off has already passed and gets
+        filtered out by async_get_next_event - if only that one day were
+        offered as a candidate, the remaining in-progress days (including
+        today/tomorrow) would never be considered, and the next real
+        occurrence would be missed entirely in favor of a later range. If
         the rule also has day_conditions, today is added too: a
         day-condition's current-state-only sensor (see DayCondition) can
         only ever confirm *today*, so that's the furthest such a rule can
@@ -522,10 +542,9 @@ class SchedulerEngine:
                 d for raw in rule.dates if (d := date.fromisoformat(raw)) >= yesterday
             }
             for start_str, end_str in rule.date_ranges:
-                end = date.fromisoformat(end_str)
-                if end < yesterday:
-                    continue
-                candidates.add(max(date.fromisoformat(start_str), yesterday))
+                candidates.update(
+                    SchedulerEngine._dates_in_range(start_str, end_str, yesterday)
+                )
             if rule.day_conditions:
                 candidates.add(now.date())
             return sorted(candidates)
@@ -643,7 +662,11 @@ class SchedulerEngine:
                         # rules, or schedules in the same refresh pass.
                         try:
                             await self._issue_turn_on(
-                                device_handler, entity_id, rule.action
+                                device_handler,
+                                entity_id,
+                                rule.action,
+                                rule=rule,
+                                schedule_name=schedule.name,
                             )
                         except Exception:  # noqa: BLE001
                             _LOGGER.exception(
@@ -655,7 +678,7 @@ class SchedulerEngine:
                             if both_enabled and not rule.allow_override:
                                 unsub_list.append(
                                     self._arm_override_enforcement(
-                                        rule, entity_id, device_handler
+                                        rule, entity_id, device_handler, schedule.name
                                     )
                                 )
                     else:
@@ -667,11 +690,14 @@ class SchedulerEngine:
                                 entity_id,
                                 rule.action,
                                 on_at,
+                                schedule.name,
                             )
                         )
                 if rule.off_enabled:
                     unsub_list.append(
-                        self._schedule_turn_off(device_handler, entity_id, off_at)
+                        self._schedule_turn_off(
+                            device_handler, entity_id, off_at, rule, schedule.name
+                        )
                     )
 
         if unsub_list:
@@ -762,26 +788,74 @@ class SchedulerEngine:
         return False
 
     async def _issue_turn_on(
-        self, device_handler: DeviceHandler, entity_id: str, action: dict[str, Any]
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        action: dict[str, Any],
+        *,
+        rule: Rule,
+        schedule_name: str,
     ) -> None:
         """Call async_turn_on with a fresh Context, remembered for override detection.
 
         Every turn-on the engine itself performs goes through here (never
         device_handler.async_turn_on directly), so _arm_override_enforcement
         can always recognize a resulting state_changed event as "us" via
-        the context id, regardless of which code path issued it.
+        the context id, regardless of which code path issued it. Also fires
+        EVENT_RULE_TRIGGERED under that same context before dispatching -
+        see _fire_rule_triggered.
         """
         context = Context()
         self._last_self_context[entity_id] = context.id
+        self._fire_rule_triggered(
+            entity_id, rule, schedule_name, turning_on=True, context=context
+        )
         await device_handler.async_turn_on(self.hass, entity_id, action, context=context)
 
     async def _issue_turn_off(
-        self, device_handler: DeviceHandler, entity_id: str
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        *,
+        rule: Rule,
+        schedule_name: str,
     ) -> None:
         """Call async_turn_off with a fresh Context - see _issue_turn_on."""
         context = Context()
         self._last_self_context[entity_id] = context.id
+        self._fire_rule_triggered(
+            entity_id, rule, schedule_name, turning_on=False, context=context
+        )
         await device_handler.async_turn_off(self.hass, entity_id, context=context)
+
+    def _fire_rule_triggered(
+        self,
+        entity_id: str,
+        rule: Rule,
+        schedule_name: str,
+        *,
+        turning_on: bool,
+        context: Context,
+    ) -> None:
+        """Fire EVENT_RULE_TRIGGERED under `context`, for logbook.py to describe.
+
+        `context` is the same Context object about to be passed to the
+        light/switch/climate service call - sharing it is what lets Home
+        Assistant's Logbook link the entity's own "turned on/off" entry back
+        to this event and show it as the cause, rather than the change
+        looking like it came from nowhere.
+        """
+        self.hass.bus.async_fire(
+            EVENT_RULE_TRIGGERED,
+            {
+                "entity_id": entity_id,
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "schedule_name": schedule_name,
+                "turning_on": turning_on,
+            },
+            context=context,
+        )
 
     def _schedule_turn_on(
         self,
@@ -791,6 +865,7 @@ class SchedulerEngine:
         entity_id: str,
         action: dict[str, Any],
         when: datetime,
+        schedule_name: str,
     ) -> CALLBACK_TYPE:
         """Schedule a single turn-on call at `when`.
 
@@ -803,17 +878,24 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
-            await self._issue_turn_on(device_handler, entity_id, action)
+            await self._issue_turn_on(
+                device_handler, entity_id, action, rule=rule, schedule_name=schedule_name
+            )
             if both_enabled and not rule.allow_override:
                 teardown = self._arm_override_enforcement(
-                    rule, entity_id, device_handler
+                    rule, entity_id, device_handler, schedule_name
                 )
                 self._unsub_rules.setdefault(rule.id, []).append(teardown)
 
         return async_track_point_in_time(self.hass, _fire, when)
 
     def _schedule_turn_off(
-        self, device_handler: DeviceHandler, entity_id: str, when: datetime
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        when: datetime,
+        rule: Rule,
+        schedule_name: str,
     ) -> CALLBACK_TYPE:
         """Schedule a single turn-off call at `when`.
 
@@ -825,7 +907,9 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
-            await self._issue_turn_off(device_handler, entity_id)
+            await self._issue_turn_off(
+                device_handler, entity_id, rule=rule, schedule_name=schedule_name
+            )
             teardown = self._active_enforcement.get(entity_id)
             if teardown is not None:
                 teardown()
@@ -833,7 +917,7 @@ class SchedulerEngine:
         return async_track_point_in_time(self.hass, _fire, when)
 
     def _arm_override_enforcement(
-        self, rule: Rule, entity_id: str, device_handler: DeviceHandler
+        self, rule: Rule, entity_id: str, device_handler: DeviceHandler, schedule_name: str
     ) -> CALLBACK_TYPE:
         """Watch `entity_id` for manual overrides during `rule`'s on-window.
 
@@ -873,7 +957,13 @@ class SchedulerEngine:
             unsub_timer = None
             if device_handler.matches_action(self.hass, entity_id, rule.action):
                 return
-            await self._issue_turn_on(device_handler, entity_id, rule.action)
+            await self._issue_turn_on(
+                device_handler,
+                entity_id,
+                rule.action,
+                rule=rule,
+                schedule_name=schedule_name,
+            )
 
         @callback
         def _on_state_change(event: Event[EventStateChangedData]) -> None:

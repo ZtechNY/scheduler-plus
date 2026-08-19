@@ -1,4 +1,3 @@
-import { mdiDelete } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
@@ -96,13 +95,16 @@ export class SchedulerPlusEntityMultiPicker extends LitElement {
             <ul class="selected">
               ${this.value.map(
                 (entityId) => html`
-                  <li>
+                  <li class="chip">
                     <span>${this._entityName(entityId)}</span>
-                    <ha-icon-button
-                      .path=${mdiDelete}
-                      label="Remove"
+                    <button
+                      type="button"
+                      class="chip-remove"
+                      aria-label="Remove ${this._entityName(entityId)}"
                       @click=${() => this._removeEntity(entityId)}
-                    ></ha-icon-button>
+                    >
+                      ×
+                    </button>
                   </li>
                 `,
               )}
@@ -152,25 +154,51 @@ export class SchedulerPlusEntityMultiPicker extends LitElement {
       flex-direction: column;
       gap: 8px;
     }
+    /* Wrapping chips instead of one full-width row per entity - a schedule
+       with dozens of entities (a whole building's worth of rooms) used to
+       mean dozens of rows and a lot of scrolling just to see them all. */
     ul.selected {
       list-style: none;
       margin: 0;
       padding: 0;
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
     }
-    ul.selected li {
-      display: flex;
+    .chip {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 6px 10px;
+      gap: 2px;
+      padding: 4px 4px 4px 10px;
       border: 1px solid var(--divider-color);
-      border-radius: 6px;
+      border-radius: 14px;
       background: var(--card-background-color);
+      font-size: 0.85em;
+      color: var(--primary-text-color);
+      max-width: 100%;
     }
-    ul.selected li span {
-      font-size: 0.9em;
+    .chip span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chip-remove {
+      flex: none;
+      font: inherit;
+      font-size: 1rem;
+      line-height: 1;
+      width: 20px;
+      height: 20px;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--secondary-text-color);
+      cursor: pointer;
+    }
+    .chip-remove:hover {
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.08));
       color: var(--primary-text-color);
     }
     .native-input {
