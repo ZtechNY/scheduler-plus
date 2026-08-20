@@ -42,38 +42,11 @@ type: custom:scheduler-plus-card
 3. Select the target entity and configure its action, for example, turning on a light or setting a climate temperature.
 4. Save the schedule, then use the card to pause, resume, or edit it.
 
-For detailed examples and screenshots, see the [Scheduler+ User Guide](docs/scheduler-plus-guide.html) or the [printable PDF guide](docs/scheduler-plus-guide.pdf).
+For detailed examples and screenshots, see the [printable Scheduler+ User Guide](docs/scheduler-plus-guide.pdf).
 
 ## Configuration options
 
 Open **Settings -> Devices & services -> Scheduler+ -> Configure** to set weekday and weekend presets, working-hours start and end times, and whether light rules show brightness and fade-in controls.
-
-## Development and tests
-
-The integration code is in `custom_components/scheduler_plus`. Tests are in `tests` and can be run with:
-
-```bash
-pip install -r requirements_test.txt
-pytest
-```
-
-## Releasing a new version
-
-1. Update the `version` field in `custom_components/scheduler_plus/manifest.json`.
-2. Add release notes to `CHANGELOG.md`.
-3. Commit the changes and create a matching version tag, for example:
-
-   ```bash
-   git add .
-   git commit -m "Release v0.1.1"
-   git tag v0.1.1
-   git push origin main
-   git push origin v0.1.1
-   ```
-
-4. Create a GitHub Release from the tag.
-
-The tag must use the `vX.Y.Z` format and match the manifest version without the `v` prefix. The release validation workflow checks this automatically. Once HACS refreshes repository data, users can install the new release from HACS and Home Assistant can expose its update notification.
 
 ## License
 
