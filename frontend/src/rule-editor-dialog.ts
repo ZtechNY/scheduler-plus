@@ -388,6 +388,53 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
   };
 
+  private _updateAdditionalActionField = (index: number, key: string, value: unknown): void => {
+    this._additionalActions = this._additionalActions.map((action, i) =>
+      i === index ? { ...action, [key]: value } : action,
+    );
+  };
+
+  private _renderAdditionalAction(action: Action, index: number) {
+    if (this._deviceType === "climate") {
+      return html`
+        <label class="field-label">HVAC mode</label>
+        <select class="native-select" .value=${String(action.hvac_mode ?? "heat")}
+          @change=${(e: Event) => this._updateAdditionalActionField(index, "hvac_mode", (e.target as HTMLSelectElement).value)}>
+          ${CLIMATE_HVAC_MODES.map((mode) => html`<option value=${mode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`)}
+        </select>
+        <label class="check-row">
+          <input type="checkbox" .checked=${action.target_temperature !== undefined}
+            @change=${(e: Event) => {
+              const checked = (e.target as HTMLInputElement).checked;
+              this._additionalActions = this._additionalActions.map((item, i) => {
+                if (i !== index) return item;
+                const next = { ...item };
+                if (checked) next.target_temperature = 70; else delete next.target_temperature;
+                return next;
+              });
+            }} /> Set temperature
+        </label>
+        ${action.target_temperature !== undefined ? html`
+          <input class="native-input" type="number" .value=${String(action.target_temperature)}
+            @input=${(e: Event) => this._updateAdditionalActionField(index, "target_temperature", Number((e.target as HTMLInputElement).value))} />
+        ` : nothing}
+      `;
+    }
+    if (this._deviceType === "light" || this._deviceType === "light_switch") {
+      return html`
+        <label class="check-row"><input type="checkbox" .checked=${action.brightness !== undefined}
+          @change=${(e: Event) => this._updateAdditionalActionField(index, "brightness", (e.target as HTMLInputElement).checked ? 255 : undefined)} /> Set brightness</label>
+        ${action.brightness !== undefined ? html`<input class="native-input" type="range" min="1" max="255" .value=${String(action.brightness)}
+          @input=${(e: Event) => this._updateAdditionalActionField(index, "brightness", Number((e.target as HTMLInputElement).value))} />` : nothing}
+        <label class="check-row"><input type="checkbox" .checked=${action.transition !== undefined}
+          @change=${(e: Event) => this._updateAdditionalActionField(index, "transition", (e.target as HTMLInputElement).checked ? 0 : undefined)} /> Fade in</label>
+        ${action.transition !== undefined ? html`<input class="native-input" type="number" min="0" .value=${String(action.transition)}
+          @input=${(e: Event) => this._updateAdditionalActionField(index, "transition", Number((e.target as HTMLInputElement).value))} />` : nothing}
+      `;
+    }
+    return html`<span class="hint">This action uses the selected switch entities.</span>`;
+  }
+
   /** Returns an error message if the current form state isn't saveable, else null. */
   private _validate(): string | null {
     if (!this._name.trim()) {
@@ -697,12 +744,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 (action, index) => html`
                   <div class="additional-action-row">
                     <label>Action ${index + 2}</label>
-                    <textarea
-                      class="action-json"
-                      .value=${JSON.stringify(action, null, 2)}
-                      @change=${(e: Event) =>
-                        this._updateAdditionalAction(index, (e.target as HTMLTextAreaElement).value)}
-                    ></textarea>
+                    ${this._renderAdditionalAction(action, index)}
                     <button type="button" class="btn" @click=${() => this._removeAdditionalAction(index)}>
                       Remove
                     </button>
