@@ -739,7 +739,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
             ${this._renderActionFields()}
             <div class="additional-actions">
               <h4>Additional actions</h4>
-              <p class="hint">These run in order on the same schedule entities. Use JSON action settings for additional actions.</p>
+              <p class="hint">These run in order on the same schedule entities.</p>
               ${this._additionalActions.map(
                 (action, index) => html`
                   <div class="additional-action-row">
@@ -1093,15 +1093,6 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     .additional-actions h4 { margin: 0; font-size: 0.9em; }
     .additional-action-row { display: flex; flex-direction: column; gap: 6px; }
-    .action-json {
-      min-height: 64px;
-      font-family: monospace;
-      background: var(--secondary-background-color);
-      color: var(--primary-text-color);
-      border: 1px solid var(--divider-color);
-      border-radius: 4px;
-      padding: 6px;
-    }
     .filter-summary {
       margin: 0 0 4px;
       font-size: 0.9em;
