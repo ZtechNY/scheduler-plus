@@ -4,7 +4,7 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - 2026-08-20
+## [0.1.2] - 2026-08-20
 
 ### Added
 
