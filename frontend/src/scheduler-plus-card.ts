@@ -160,15 +160,26 @@ function formatOverridePendingStatus(schedule: Schedule): string | undefined {
     return undefined;
   }
   const when = new Date(schedule.override_pending_until);
+  const target = schedule.device_type === "climate"
+    ? (() => {
+        const descriptions = new Set(
+          schedule.rules
+            .filter((rule) => rule.enabled && rule.on_enabled && !rule.allow_override)
+            .map((rule) => formatAction("climate", rule.action))
+            .filter((description): description is string => !!description),
+        );
+        return descriptions.size === 1 ? ` to ${[...descriptions][0]}` : " to the scheduled setting";
+      })()
+    : " to the scheduled setting";
   if (Number.isNaN(when.getTime())) {
-    return "Manual change - reverting soon";
+    return `Manual change${target} - reverting soon`;
   }
   const formatted = when.toLocaleString(undefined, {
     weekday: "short",
     hour: "numeric",
     minute: "2-digit",
   });
-  return `Manual change - reverting ${formatted}`;
+  return `Manual change${target} - reverting ${formatted}`;
 }
 
 /** Formats a paused schedule's status as e.g. "Paused through Jul 29". */
