@@ -18,6 +18,7 @@ based on its actual domain.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -142,6 +143,14 @@ class SchedulerEngine:
         # enforcement (state-change subscription + any pending reapply
         # timer), if any rule with allow_override=False is in its window.
         self._active_enforcement: dict[str, CALLBACK_TYPE] = {}
+        # entity_id -> when a currently-pending reapply timer will fire, for
+        # entities with a manual change awaiting reversion right now - a
+        # side channel onto the same timer _arm_override_enforcement already
+        # tracks in `unsub_timer`, purely so callers like the websocket API
+        # can answer "is this overridden right now, and when does it
+        # revert" without reaching into that closure. Populated/cleared
+        # alongside the real timer; see _arm_override_enforcement.
+        self._pending_reapply_at: dict[str, datetime] = {}
 
     async def async_start(self) -> None:
         """Start the engine: scan now, then rescan at every local midnight.
@@ -171,8 +180,9 @@ class SchedulerEngine:
                 unsub()
         self._unsub_rules.clear()
         # Defensive: enforcement teardowns above already self-remove from
-        # this dict, so it should already be empty by this point.
+        # these dicts, so both should already be empty by this point.
         self._active_enforcement.clear()
+        self._pending_reapply_at.clear()
 
     async def async_get_next_event(
         self, schedule: Schedule
@@ -221,6 +231,22 @@ class SchedulerEngine:
                         soonest = (when, label)
 
         return soonest
+
+    def pending_override_revert_at(self, entity_ids: Sequence[str]) -> datetime | None:
+        """Soonest pending override-reapply time among `entity_ids`, if any.
+
+        None when none of the given entities currently has a manual change
+        awaiting reversion. Read-only, like async_get_next_event: reflects
+        exactly what _arm_override_enforcement's _on_state_change/_reapply
+        have recorded in `_pending_reapply_at`, with no resolution work of
+        its own - so unlike async_get_next_event this needs no await.
+        """
+        pending = [
+            self._pending_reapply_at[entity_id]
+            for entity_id in entity_ids
+            if entity_id in self._pending_reapply_at
+        ]
+        return min(pending) if pending else None
 
     async def async_get_day_events(
         self, schedule: Schedule, reference_date: date
@@ -810,7 +836,10 @@ class SchedulerEngine:
         self._fire_rule_triggered(
             entity_id, rule, schedule_name, turning_on=True, context=context
         )
-        await device_handler.async_turn_on(self.hass, entity_id, action, context=context)
+        for action_item in (rule.actions or [action]):
+            await device_handler.async_turn_on(
+                self.hass, entity_id, action_item, context=context
+            )
 
     async def _issue_turn_off(
         self,
@@ -897,19 +926,34 @@ class SchedulerEngine:
         rule: Rule,
         schedule_name: str,
     ) -> CALLBACK_TYPE:
-        """Schedule a single turn-off call at `when`.
+        """Schedule a single turn-off (or eco-setback) call at `when`.
 
-        Disarms any override enforcement for this entity once off actually
-        fires - essential, not optional: otherwise the state-change
-        listener would outlive the window, and a legitimate later change
-        (e.g. someone turning heat back on that evening) would be wrongly
-        treated as an override needing reversion to a stale setpoint.
+        When `rule.off_action` is set, off_time applies that action (via
+        async_turn_on) instead of actually turning the entity off - see
+        Rule.off_action's docstring. This is otherwise identical to a plain
+        off: no enforcement is armed for a setback window, same as a plain
+        off never has been.
+
+        Disarms any override enforcement for this entity once this fires -
+        essential, not optional: otherwise the state-change listener would
+        outlive the window, and a legitimate later change (e.g. someone
+        turning heat back on that evening) would be wrongly treated as an
+        override needing reversion to a stale setpoint.
         """
 
         async def _fire(_now: datetime) -> None:
-            await self._issue_turn_off(
-                device_handler, entity_id, rule=rule, schedule_name=schedule_name
-            )
+            if rule.off_action is not None:
+                await self._issue_turn_on(
+                    device_handler,
+                    entity_id,
+                    rule.off_action,
+                    rule=rule,
+                    schedule_name=schedule_name,
+                )
+            else:
+                await self._issue_turn_off(
+                    device_handler, entity_id, rule=rule, schedule_name=schedule_name
+                )
             teardown = self._active_enforcement.get(entity_id)
             if teardown is not None:
                 teardown()
@@ -951,10 +995,12 @@ class SchedulerEngine:
             if unsub_timer is not None:
                 unsub_timer()
                 unsub_timer = None
+            self._pending_reapply_at.pop(entity_id, None)
 
         async def _reapply(_now: datetime) -> None:
             nonlocal unsub_timer
             unsub_timer = None
+            self._pending_reapply_at.pop(entity_id, None)
             if device_handler.matches_action(self.hass, entity_id, rule.action):
                 return
             await self._issue_turn_on(
@@ -973,11 +1019,9 @@ class SchedulerEngine:
             if device_handler.matches_action(self.hass, entity_id, rule.action):
                 return  # already matches - nothing to correct
             _cancel_pending_reapply()
-            unsub_timer = async_call_later(
-                self.hass,
-                timedelta(minutes=rule.override_grace_minutes).total_seconds(),
-                _reapply,
-            )
+            grace = timedelta(minutes=rule.override_grace_minutes)
+            self._pending_reapply_at[entity_id] = dt_util.now() + grace
+            unsub_timer = async_call_later(self.hass, grace.total_seconds(), _reapply)
 
         unsub_state = async_track_state_change_event(
             self.hass, entity_id, _on_state_change

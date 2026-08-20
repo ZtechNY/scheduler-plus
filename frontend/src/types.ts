@@ -204,6 +204,16 @@ export interface Rule {
   allow_override: boolean;
   override_grace_minutes: number;
   action: Action;
+  /** Ordered action payloads; action is retained for older clients/storage. */
+  actions?: Action[];
+  /**
+   * Climate-only "eco setback": when set, off_time applies this action
+   * (typically a milder hvac_mode/target_temperature) instead of actually
+   * turning the entity off - e.g. holding 78° instead of shutting the AC
+   * off entirely for an unoccupied afternoon. Null (the default) means off
+   * behaves as it always has: a plain turn-off.
+   */
+  off_action: Action | null;
 }
 
 export interface Schedule {
@@ -229,4 +239,13 @@ export interface Schedule {
   active_now: boolean;
   /** Soonest upcoming date active_date_ranges turns the schedule on, if currently inactive. */
   next_active_date: string | null;
+  /**
+   * When a manual change to one of this schedule's entities, made during a
+   * not-allow_override rule's on-window, will be reverted back to that
+   * rule's action - null unless one is currently pending. Server-computed
+   * from the engine's in-memory override-enforcement state (see
+   * websocket_list_schedules in websocket.py), so it reflects only what's
+   * pending right now, not history.
+   */
+  override_pending_until: string | null;
 }

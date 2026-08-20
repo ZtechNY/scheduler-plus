@@ -157,6 +157,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _targetTemperature = 70;
 
+  @state() private _useSetback = false;
+
+  @state() private _setbackHvacMode: string = "heat";
+
+  @state() private _setbackTemperature = 78;
+
   @state() private _allowOverride = true;
 
   @state() private _overrideGraceMinutes = 15;
@@ -225,6 +231,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._hvacMode = (rule?.action.hvac_mode as string | undefined) ?? "heat";
       this._useTargetTemperature = rule?.action.target_temperature !== undefined;
       this._targetTemperature = (rule?.action.target_temperature as number | undefined) ?? 70;
+      this._useSetback = !!rule?.off_action;
+      this._setbackHvacMode = (rule?.off_action?.hvac_mode as string | undefined) ?? "heat";
+      this._setbackTemperature =
+        (rule?.off_action?.target_temperature as number | undefined) ?? 78;
     }
     // Switches have no action-specific state to populate - Rule.action is
     // always {} for a switch rule.
@@ -379,6 +389,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
   /** Builds the RuleInput from current form state - assumes _validate() already passed. */
   private _buildRuleInput(): RuleInput {
     let action: Action = {};
+    let offAction: Action | null = null;
     if (this._deviceType === "light" || this._deviceType === "light_switch") {
       action = {
         ...(this._setBrightness
@@ -391,8 +402,11 @@ export class SchedulerPlusRuleEditor extends LitElement {
         hvac_mode: this._hvacMode,
         ...(this._useTargetTemperature ? { target_temperature: this._targetTemperature } : {}),
       };
+      offAction = this._useSetback
+        ? { hvac_mode: this._setbackHvacMode, target_temperature: this._setbackTemperature }
+        : null;
     }
-    // Switches have no action - action stays {}.
+    // Switches have no action - action stays {} and offAction stays null.
 
     return {
       id: this._rule?.id,
@@ -410,6 +424,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
       allow_override: this._allowOverride,
       override_grace_minutes: this._overrideGraceMinutes,
       action,
+      actions: this._rule?.actions?.length ? this._rule.actions : [action],
+      off_action: offAction,
     };
   }
 
@@ -856,6 +872,49 @@ export class SchedulerPlusRuleEditor extends LitElement {
               .value=${String(this._targetTemperature)}
               @input=${(e: Event) => {
                 this._targetTemperature =
+                  Number((e.target as HTMLInputElement).value) || 0;
+              }}
+            />
+          `
+        : nothing}
+
+      <ha-formfield label="Eco setback instead of turning off">
+        <ha-switch
+          .checked=${this._useSetback}
+          @change=${(e: Event) => {
+            this._useSetback = (e.target as HTMLInputElement).checked;
+          }}
+        ></ha-switch>
+      </ha-formfield>
+      <span class="hint">
+        ${this._useSetback
+          ? "At the Off time below, the thermostat is set to this instead of being turned off - useful for avoiding humidity or freeze issues in an unoccupied space while still saving energy."
+          : "Off by default - the Off time below simply turns the thermostat off."}
+      </span>
+      ${this._useSetback
+        ? html`
+            <label class="field-label" for="setback-hvac-mode">Setback HVAC mode</label>
+            <select
+              id="setback-hvac-mode"
+              class="native-select"
+              .value=${this._setbackHvacMode}
+              @change=${(e: Event) => {
+                this._setbackHvacMode = (e.target as HTMLSelectElement).value;
+              }}
+            >
+              ${CLIMATE_HVAC_MODES.map(
+                (mode) => html`<option value=${mode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`,
+              )}
+            </select>
+
+            <label class="field-label" for="setback-temperature">Setback temperature</label>
+            <input
+              id="setback-temperature"
+              type="number"
+              class="native-input"
+              .value=${String(this._setbackTemperature)}
+              @input=${(e: Event) => {
+                this._setbackTemperature =
                   Number((e.target as HTMLInputElement).value) || 0;
               }}
             />

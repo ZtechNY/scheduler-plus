@@ -50,32 +50,105 @@ interface TimelineSegment {
   title: string;
 }
 
-/** One horizontal-bar segment (or a thin point-marker for an on-only/off-only event) per event. */
-function timelineSegments(day: WeekScheduleDay): TimelineSegment[] {
-  return day.events.map((event): TimelineSegment => {
-    const label = `${event.schedule_name} · ${event.rule_name}`;
-    if (event.on_at !== null && event.off_at !== null) {
-      const left = dayPositionPct(event.on_at, day.date);
-      const right = dayPositionPct(event.off_at, day.date);
-      return {
-        leftPct: left,
-        widthPct: Math.max(right - left, 1),
-        title: `${label} (${formatTime(event.on_at)} → ${formatTime(event.off_at)})`,
-      };
-    }
-    if (event.on_at !== null) {
-      return {
-        leftPct: dayPositionPct(event.on_at, day.date),
-        widthPct: 1,
-        title: `${label} (on at ${formatTime(event.on_at)})`,
-      };
-    }
+/** Builds one event's horizontal-bar segment (or thin point-marker for an on-only/off-only event). */
+function segmentForEvent(event: DayScheduleEvent, dayIso: string): TimelineSegment {
+  const label = `${event.schedule_name} · ${event.rule_name}`;
+  if (event.on_at !== null && event.off_at !== null) {
+    const left = dayPositionPct(event.on_at, dayIso);
+    const right = dayPositionPct(event.off_at, dayIso);
     return {
-      leftPct: dayPositionPct(event.off_at!, day.date),
-      widthPct: 1,
-      title: `${label} (off at ${formatTime(event.off_at!)})`,
+      leftPct: left,
+      widthPct: Math.max(right - left, 1),
+      title: `${label} (${formatTime(event.on_at)} → ${formatTime(event.off_at)})`,
     };
+  }
+  if (event.on_at !== null) {
+    return {
+      leftPct: dayPositionPct(event.on_at, dayIso),
+      widthPct: 1,
+      title: `${label} (on at ${formatTime(event.on_at)})`,
+    };
+  }
+  return {
+    leftPct: dayPositionPct(event.off_at!, dayIso),
+    widthPct: 1,
+    title: `${label} (off at ${formatTime(event.off_at!)})`,
+  };
+}
+
+/** One segment per event, for a day's combined bar - see segmentForEvent. */
+function timelineSegments(day: WeekScheduleDay): TimelineSegment[] {
+  return day.events.map((event) => segmentForEvent(event, day.date));
+}
+
+/** Whether two [on_at, off_at) ISO-datetime windows overlap at all. */
+function windowsOverlap(aOn: string, aOff: string, bOn: string, bOff: string): boolean {
+  return aOn < bOff && bOn < aOff;
+}
+
+/**
+ * Whether `event`'s full on/off window overlaps a DIFFERENT schedule's
+ * window among `events` - false for an on-only/off-only event, since a
+ * single moment can't meaningfully "overlap" a window.
+ */
+function eventOverlapsOtherSchedule(event: DayScheduleEvent, events: DayScheduleEvent[]): boolean {
+  const { on_at: onAt, off_at: offAt, schedule_id: scheduleId } = event;
+  if (onAt === null || offAt === null) {
+    return false;
+  }
+  return events.some((other) => {
+    if (other.schedule_id === scheduleId || other.on_at === null || other.off_at === null) {
+      return false;
+    }
+    return windowsOverlap(onAt, offAt, other.on_at, other.off_at);
   });
+}
+
+interface ScheduleSwimlane {
+  scheduleId: string;
+  scheduleName: string;
+  segments: (TimelineSegment & { conflict: boolean })[];
+}
+
+/**
+ * Groups a day's events into one row per schedule ("swimlane"), each row's
+ * bars built the same way timelineSegments builds a week-day's single
+ * combined bar - but kept separate per schedule here, specifically so two
+ * zones running at the same time show as two parallel bars rather than
+ * one shared row where an overlap can only be told apart by hovering.
+ * Segments whose full on/off window overlaps a DIFFERENT schedule's are
+ * flagged `conflict`, so the row-per-schedule layout can call the overlap
+ * out visually rather than leaving it to be spotted by eye - an on-only/
+ * off-only point marker is never flagged, since a single moment can't
+ * meaningfully "overlap" a window.
+ */
+function scheduleSwimlanes(events: DayScheduleEvent[], dayIso: string): ScheduleSwimlane[] {
+  const bySchedule = new Map<string, DayScheduleEvent[]>();
+  for (const event of events) {
+    const list = bySchedule.get(event.schedule_id);
+    if (list) {
+      list.push(event);
+    } else {
+      bySchedule.set(event.schedule_id, [event]);
+    }
+  }
+
+  return [...bySchedule.values()]
+    .map((scheduleEvents): ScheduleSwimlane => {
+      // Every group started from `[event]` in the loop above, so this is
+      // always non-empty - the assertion just tells the (array-index-wary)
+      // compiler what that construction already guarantees.
+      const [{ schedule_id: scheduleId, schedule_name: scheduleName }] = scheduleEvents as [
+        DayScheduleEvent,
+        ...DayScheduleEvent[],
+      ];
+      const segments = scheduleEvents.map((event): TimelineSegment & { conflict: boolean } => ({
+        ...segmentForEvent(event, dayIso),
+        conflict: eventOverlapsOtherSchedule(event, events),
+      }));
+      return { scheduleId, scheduleName, segments };
+    })
+    .sort((a, b) => a.scheduleName.localeCompare(b.scheduleName));
 }
 
 /**
@@ -310,6 +383,7 @@ export class SchedulerPlusDayView extends LitElement {
     })).filter((g) => g.events.length > 0);
 
     return html`
+      ${this._renderDayTimeline()}
       ${groups.map(
         (g) => html`
           <div class="group">
@@ -320,6 +394,48 @@ export class SchedulerPlusDayView extends LitElement {
           </div>
         `,
       )}
+    `;
+  }
+
+  /**
+   * One timeline row per schedule for the selected day - see
+   * scheduleSwimlanes' docstring for why this is separate from the
+   * week view's single combined bar per day. Reuses the week view's
+   * .day-timeline styling for each row so the two views read as the same
+   * visual language, just at different granularities.
+   */
+  private _renderDayTimeline() {
+    const lanes = scheduleSwimlanes(this._events, this._date);
+    const isToday = this._date === todayIso();
+    const now = new Date();
+    const nowPct = isToday ? ((now.getHours() * 60 + now.getMinutes()) / (24 * 60)) * 100 : null;
+    return html`
+      <div class="swimlanes">
+        ${lanes.map(
+          (lane) => html`
+            <div class="swimlane">
+              <span class="swimlane-label" title=${lane.scheduleName}>${lane.scheduleName}</span>
+              <div class="day-timeline" title="12 AM to 12 AM">
+                <span class="day-timeline-tick" style="left: 25%"></span>
+                <span class="day-timeline-tick" style="left: 50%"></span>
+                <span class="day-timeline-tick" style="left: 75%"></span>
+                ${lane.segments.map(
+                  (seg) => html`
+                    <span
+                      class="day-timeline-segment ${seg.conflict ? "conflict" : ""}"
+                      style="left: ${seg.leftPct}%; width: ${seg.widthPct}%"
+                      title="${seg.conflict ? "⚠ Overlaps another schedule - " : ""}${seg.title}"
+                    ></span>
+                  `,
+                )}
+                ${nowPct !== null
+                  ? html`<span class="day-timeline-now" style="left: ${nowPct}%" title="Now"></span>`
+                  : nothing}
+              </div>
+            </div>
+          `,
+        )}
+      </div>
     `;
   }
 
@@ -511,6 +627,32 @@ export class SchedulerPlusDayView extends LitElement {
       width: 2px;
       background: var(--error-color, #db4437);
       border-radius: 1px;
+    }
+    .day-timeline-segment.conflict {
+      background: var(--warning-color, #ffa600);
+      opacity: 1;
+    }
+    .swimlanes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .swimlane {
+      display: grid;
+      grid-template-columns: minmax(0, 100px) 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+    .swimlane-label {
+      font-size: 0.78em;
+      color: var(--secondary-text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .swimlane .day-timeline {
+      margin-bottom: 0;
     }
     .controls {
       display: flex;

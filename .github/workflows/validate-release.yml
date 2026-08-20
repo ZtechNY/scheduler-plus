@@ -1,0 +1,31 @@
+name: Validate release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches manifest version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          manifest_version="$(python -c 'import json; print(json.load(open("custom_components/scheduler_plus/manifest.json"))["version"])')"
+
+          if [[ "$tag_version" != "$manifest_version" ]]; then
+            echo "Tag version ($tag_version) does not match manifest version ($manifest_version)."
+            exit 1
+          fi
+
+          echo "Validated release version: $manifest_version"

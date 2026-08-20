@@ -90,6 +90,19 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
     return entries[0] if entries else None
 
 
+def _require_admin(
+    connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> bool:
+    """Allow schedule mutations only to Home Assistant administrators."""
+    if connection.user.is_admin:
+        return True
+    connection.send_error(
+        msg["id"], websocket_api.ERR_UNAUTHORIZED,
+        "Administrator permission required",
+    )
+    return False
+
+
 def _get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
     """Return the coordinator for the single Scheduler+ config entry."""
     entry = _get_entry(hass)
@@ -136,6 +149,8 @@ _RULE_SCHEMA = vol.All(
                 vol.Coerce(int), vol.Range(min=1)
             ),
             vol.Optional("action", default=dict): dict,
+            vol.Optional("actions", default=None): vol.Any(None, [dict]),
+            vol.Optional("off_action", default=None): vol.Any(None, dict),
         }
     ),
     _validate_time_enabled,
@@ -207,13 +222,19 @@ def _prepare_rule_data(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _build_schedule(schedule_id: str, msg: dict[str, Any]) -> Schedule:
     """Build a Schedule from an already-validated create/update message."""
+    rules = []
+    for raw_rule in msg["rules"]:
+        prepared = _prepare_rule_data(raw_rule)
+        if prepared.get("actions") is None:
+            prepared["actions"] = [prepared.get("action", {})]
+        rules.append(Rule.from_dict(prepared))
     return Schedule(
         id=schedule_id,
         name=msg["name"],
         enabled=msg["enabled"],
         device_type=msg["device_type"],
         entities=list(msg["entities"]),
-        rules=[Rule.from_dict(_prepare_rule_data(rule)) for rule in msg["rules"]],
+        rules=rules,
         active_date_mode=msg["active_date_mode"],
         active_date_ranges=frozenset(msg["active_date_ranges"]),
         override_until=msg["override_until"],
@@ -311,6 +332,12 @@ async def websocket_list_schedules(
     entity - a schedule's own list response is the one place the UI already
     has to read, and it keeps "what's next" logic in one place instead of
     duplicated between SchedulerEngine and the frontend.
+
+    `override_pending_until` surfaces the engine's in-memory override-
+    enforcement state (see SchedulerEngine.pending_override_revert_at) -
+    set when one of the schedule's entities was changed manually during a
+    not-allow_override rule's on-window and is still awaiting reversion,
+    so the card can show that rather than leaving the change unexplained.
     """
     entry = _get_entry(hass)
     if entry is None:
@@ -325,6 +352,7 @@ async def websocket_list_schedules(
     for raw_schedule in entry.runtime_data.coordinator.data["schedules"]:
         schedule = Schedule.from_dict(raw_schedule)
         next_event = await engine.async_get_next_event(schedule)
+        override_pending_until = engine.pending_override_revert_at(schedule.entities)
         schedules.append(
             {
                 **raw_schedule,
@@ -333,6 +361,9 @@ async def websocket_list_schedules(
                 "active_now": schedule.is_active_on(today)
                 and not schedule.is_overridden(today),
                 "next_active_date": _next_active_date(schedule, today),
+                "override_pending_until": (
+                    override_pending_until.isoformat() if override_pending_until else None
+                ),
             }
         )
 
@@ -349,6 +380,8 @@ async def websocket_create_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Create a new schedule."""
+    if not _require_admin(connection, msg):
+        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -386,6 +419,8 @@ async def websocket_update_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Replace an existing schedule's fields."""
+    if not _require_admin(connection, msg):
+        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -509,6 +544,8 @@ async def websocket_delete_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule."""
+    if not _require_admin(connection, msg):
+        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -799,6 +836,8 @@ async def websocket_create_template(
     websocket_create_schedule_from_template, which supplies those along
     with a fresh id for every rule.
     """
+    if not _require_admin(connection, msg):
+        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -826,6 +865,8 @@ async def websocket_delete_template(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule template."""
+    if not _require_admin(connection, msg):
+        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(

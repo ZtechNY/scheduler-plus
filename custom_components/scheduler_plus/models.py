@@ -94,6 +94,17 @@ class Rule:
     still doesn't match after `override_grace_minutes` (debounced - reset
     on each further manual change). Only meaningful when both `on_enabled`
     and `off_enabled` are True, since enforcement needs a defined window.
+
+    `off_action` is climate-only "eco setback": when set, the engine
+    applies it (via the same async_turn_on path as `action`) at off_time
+    instead of actually turning the entity off - e.g. holding 78° rather
+    than shutting an AC off entirely for an unoccupied afternoon. None
+    (the default) means off behaves as it always has, a plain turn-off.
+    Unlike `action`/on-window enforcement, a setback window is never
+    watched for manual overrides - it fires once, the same as a plain off
+    always has. Independent of `actions` (the ordered on-side action
+    list) - the two vary different things: which action(s) `action`/
+    `actions` fire, versus what happens at the *off* moment.
     """
 
     id: str
@@ -111,6 +122,15 @@ class Rule:
     allow_override: bool = True
     override_grace_minutes: int = 15
     action: dict[str, Any] = field(default_factory=dict)
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    off_action: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Normalize legacy single-action rules to the ordered action list."""
+        if not self.actions:
+            self.actions = [dict(self.action)]
+        elif not self.action:
+            self.action = dict(self.actions[0])
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict for storage."""
@@ -130,6 +150,8 @@ class Rule:
             "allow_override": self.allow_override,
             "override_grace_minutes": self.override_grace_minutes,
             "action": dict(self.action),
+            "actions": [dict(action) for action in self.actions] or [dict(self.action)],
+            "off_action": dict(self.off_action) if self.off_action is not None else None,
         }
 
     @classmethod
@@ -137,12 +159,14 @@ class Rule:
         """Deserialize from a plain dict loaded from storage.
 
         `date_mode`/`dates`/`date_ranges`/`day_conditions`/`on_enabled`/
-        `off_enabled`/`allow_override`/`override_grace_minutes` use `.get()`
-        with defaults rather than direct indexing, since rules stored
-        before these fields existed won't have them - they behave exactly
-        as before (RuleDateMode.ALWAYS, no dates, no ranges, no day
-        conditions, both on and off enabled, overrides allowed).
+        `off_enabled`/`allow_override`/`override_grace_minutes`/
+        `off_action` use `.get()` with defaults rather than direct
+        indexing, since rules stored before these fields existed won't
+        have them - they behave exactly as before (RuleDateMode.ALWAYS, no
+        dates, no ranges, no day conditions, both on and off enabled,
+        overrides allowed, off_action unset).
         """
+        raw_off_action = data.get("off_action")
         return cls(
             id=data["id"],
             name=data["name"],
@@ -162,7 +186,9 @@ class Rule:
             off_enabled=bool(data.get("off_enabled", True)),
             allow_override=bool(data.get("allow_override", True)),
             override_grace_minutes=int(data.get("override_grace_minutes", 15)),
-            action=dict(data["action"]),
+            action=dict(data.get("action", {})),
+            actions=[dict(action) for action in data.get("actions", [data.get("action", {})])],
+            off_action=dict(raw_off_action) if raw_off_action is not None else None,
         )
 
 

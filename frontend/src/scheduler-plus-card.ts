@@ -65,12 +65,39 @@ function climateOnDescription(schedule: Schedule): string | undefined {
 }
 
 /**
+ * For a climate schedule, what the "off" side actually does when every
+ * enabled, off-acting rule has an eco setback configured (Rule.off_action)
+ * - e.g. "Heat · 78°" in place of a bare "Off". If even one such rule
+ * still does a plain turn-off, "Off" is left as the (accurate-enough)
+ * fallback rather than guessing which rule fires next - same ambiguity
+ * rule as climateOnDescription.
+ */
+function climateOffDescription(schedule: Schedule): string | undefined {
+  if (schedule.device_type !== "climate") {
+    return undefined;
+  }
+  const offRules = schedule.rules.filter((rule) => rule.enabled && rule.off_enabled);
+  if (offRules.length === 0 || offRules.some((rule) => !rule.off_action)) {
+    return undefined;
+  }
+  const descriptions = new Set(
+    offRules
+      .map((rule) => formatAction("climate", rule.off_action as Record<string, unknown>))
+      .filter((description): description is string => description !== undefined),
+  );
+  return descriptions.size === 1 ? [...descriptions][0] : undefined;
+}
+
+/**
  * Formats a schedule's server-computed next event as e.g. "Next: On Fri, 6:00 AM"
  * - or, for a climate schedule with an unambiguous setpoint, "Next: Heat · 70°
- * Fri, 6:00 AM". `next_event`/`next_event_action` come straight from
- * list_schedules (see websocket.py) rather than being looked up from a
- * separate sensor entity - one less thing that can be missing/renamed/
- * disabled out from under the card.
+ * Fri, 6:00 AM". The "off" side gets the same treatment when every acting
+ * rule has an eco setback configured, e.g. "Next: Heat · 78° Fri, 9:00 PM"
+ * instead of a bare "Off" - see climateOnDescription/climateOffDescription.
+ * `next_event`/`next_event_action` come straight from list_schedules (see
+ * websocket.py) rather than being looked up from a separate sensor entity -
+ * one less thing that can be missing/renamed/disabled out from under the
+ * card.
  */
 function formatNextEvent(schedule: Schedule): string | undefined {
   if (!schedule.next_event) {
@@ -81,7 +108,9 @@ function formatNextEvent(schedule: Schedule): string | undefined {
     return undefined;
   }
   const action =
-    schedule.next_event_action === "off" ? "Off" : (climateOnDescription(schedule) ?? "On");
+    schedule.next_event_action === "off"
+      ? (climateOffDescription(schedule) ?? "Off")
+      : (climateOnDescription(schedule) ?? "On");
   const formatted = when.toLocaleString(undefined, {
     weekday: "short",
     hour: "numeric",
@@ -113,6 +142,33 @@ function formatSeasonalStatus(schedule: Schedule): string | undefined {
     day: "numeric",
   });
   return `Inactive until ${formatted}`;
+}
+
+/**
+ * Formats a schedule's pending-override status as e.g. "Manual change -
+ * reverting Thu 8:14 PM", when one of its entities was changed by hand
+ * during a not-allow_override rule's on-window and is still awaiting
+ * reversion. `override_pending_until` mirrors the engine's in-memory
+ * enforcement state (see SchedulerEngine.pending_override_revert_at /
+ * websocket_list_schedules) - undefined otherwise, so this only ever adds
+ * a badge for the exception, and there's nothing to poll: the next
+ * _refresh (e.g. after any card action) picks up the cleared state once
+ * the engine reapplies or the window ends.
+ */
+function formatOverridePendingStatus(schedule: Schedule): string | undefined {
+  if (!schedule.override_pending_until) {
+    return undefined;
+  }
+  const when = new Date(schedule.override_pending_until);
+  if (Number.isNaN(when.getTime())) {
+    return "Manual change - reverting soon";
+  }
+  const formatted = when.toLocaleString(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Manual change - reverting ${formatted}`;
 }
 
 /** Formats a paused schedule's status as e.g. "Paused through Jul 29". */
@@ -467,6 +523,15 @@ export class SchedulerPlusCard extends LitElement {
     // the manager-triggered pause is the more actionable/urgent of the two.
     const seasonalStatus =
       schedule.enabled && !paused ? formatSeasonalStatus(schedule) : undefined;
+    // Shown ahead of every other badge when present - a device not doing
+    // what its schedule says right now is the most actionable state a row
+    // can be in. In practice this shouldn't coexist with `paused` (pausing
+    // tears down enforcement on the next refresh), but that's not asserted
+    // here, so a stale/unexpected combination still surfaces rather than
+    // being silently hidden.
+    const overridePendingStatus = schedule.enabled
+      ? formatOverridePendingStatus(schedule)
+      : undefined;
     return html`
       <li class="schedule ${schedule.enabled ? "" : "disabled"}">
         <ha-switch
@@ -483,6 +548,9 @@ export class SchedulerPlusCard extends LitElement {
             ${schedule.rules.length}
             ${schedule.rules.length === 1 ? "rule" : "rules"}
           </span>
+          ${overridePendingStatus
+            ? html`<span class="schedule-override-pending">${overridePendingStatus}</span>`
+            : nothing}
           ${pauseStatus ? html`<span class="schedule-paused">${pauseStatus}</span>` : nothing}
           ${seasonalStatus
             ? html`<span class="schedule-seasonal">${seasonalStatus}</span>`
@@ -626,6 +694,11 @@ export class SchedulerPlusCard extends LitElement {
     .schedule-paused {
       font-size: 0.85em;
       color: var(--error-color, #db4437);
+    }
+    .schedule-override-pending {
+      font-size: 0.85em;
+      font-weight: 500;
+      color: var(--warning-color, #ffa600);
     }
     .row-actions {
       display: flex;

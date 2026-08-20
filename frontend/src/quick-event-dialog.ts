@@ -84,6 +84,7 @@ export class SchedulerPlusQuickEventDialog extends LitElement {
       allow_override: true,
       override_grace_minutes: 15,
       action: {},
+      off_action: null,
     };
     return {
       name: this._name.trim() || `Event – ${this._date}`,
