@@ -167,6 +167,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _overrideGraceMinutes = 15;
 
+  @state() private _additionalActions: Action[] = [];
+
   @state() private _error?: string;
 
   private _rule?: RuleInput;
@@ -220,6 +222,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._offEnabled = rule?.off_enabled ?? true;
     this._allowOverride = rule?.allow_override ?? true;
     this._overrideGraceMinutes = rule?.override_grace_minutes ?? 15;
+    this._additionalActions = (rule?.actions ?? []).slice(1).map((action) => ({ ...action }));
 
     if (this._deviceType === "light" || this._deviceType === "light_switch") {
       this._setBrightness = rule?.action.brightness !== undefined;
@@ -364,6 +367,27 @@ export class SchedulerPlusRuleEditor extends LitElement {
       : [...this._dayConditions, condition];
   };
 
+  private _addAdditionalAction = (): void => {
+    this._additionalActions = [...this._additionalActions, {}];
+  };
+
+  private _removeAdditionalAction = (index: number): void => {
+    this._additionalActions = this._additionalActions.filter((_, i) => i !== index);
+  };
+
+  private _updateAdditionalAction = (index: number, value: string): void => {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        this._additionalActions = this._additionalActions.map((action, i) =>
+          i === index ? parsed : action,
+        );
+      }
+    } catch {
+      // Keep the last valid action while the user is typing JSON.
+    }
+  };
+
   /** Returns an error message if the current form state isn't saveable, else null. */
   private _validate(): string | null {
     if (!this._name.trim()) {
@@ -424,7 +448,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
       allow_override: this._allowOverride,
       override_grace_minutes: this._overrideGraceMinutes,
       action,
-      actions: this._rule?.actions?.length ? this._rule.actions : [action],
+      actions: [action, ...this._additionalActions],
       off_action: offAction,
     };
   }
@@ -666,6 +690,29 @@ export class SchedulerPlusRuleEditor extends LitElement {
           <section class="section">
             <h3 class="section-title">Action</h3>
             ${this._renderActionFields()}
+            <div class="additional-actions">
+              <h4>Additional actions</h4>
+              <p class="hint">These run in order on the same schedule entities. Use JSON action settings for additional actions.</p>
+              ${this._additionalActions.map(
+                (action, index) => html`
+                  <div class="additional-action-row">
+                    <label>Action ${index + 2}</label>
+                    <textarea
+                      class="action-json"
+                      .value=${JSON.stringify(action, null, 2)}
+                      @change=${(e: Event) =>
+                        this._updateAdditionalAction(index, (e.target as HTMLTextAreaElement).value)}
+                    ></textarea>
+                    <button type="button" class="btn" @click=${() => this._removeAdditionalAction(index)}>
+                      Remove
+                    </button>
+                  </div>
+                `,
+              )}
+              <button type="button" class="btn" @click=${this._addAdditionalAction}>
+                Add action
+              </button>
+            </div>
           </section>
 
           <div class="dialog-actions">
@@ -993,6 +1040,25 @@ export class SchedulerPlusRuleEditor extends LitElement {
       border: 1px solid var(--divider-color);
       border-radius: 8px;
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.03));
+    }
+    .additional-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+    }
+    .additional-actions h4 { margin: 0; font-size: 0.9em; }
+    .additional-action-row { display: flex; flex-direction: column; gap: 6px; }
+    .action-json {
+      min-height: 64px;
+      font-family: monospace;
+      background: var(--secondary-background-color);
+      color: var(--primary-text-color);
+      border: 1px solid var(--divider-color);
+      border-radius: 4px;
+      padding: 6px;
     }
     .filter-summary {
       margin: 0 0 4px;
