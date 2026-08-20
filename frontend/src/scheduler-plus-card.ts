@@ -19,6 +19,7 @@ import type { SchedulerPlusApplyTemplateDialog } from "./apply-template-dialog";
 import "./card-editor";
 import "./day-view-dialog";
 import type { SchedulerPlusDayView } from "./day-view-dialog";
+import { formatAction } from "./format-action";
 import "./override-dialog";
 import type { SchedulerPlusOverrideDialog } from "./override-dialog";
 import "./preferences-dialog";
@@ -44,10 +45,32 @@ function isPaused(schedule: Schedule): boolean {
 }
 
 /**
- * Formats a schedule's server-computed next event as e.g. "Next: On Fri, 6:00 AM".
- * `next_event`/`next_event_action` come straight from list_schedules (see
- * websocket.py) rather than being looked up from a separate sensor entity -
- * one less thing that can be missing/renamed/disabled out from under the card.
+ * For a climate schedule, what turning "on" actually does - e.g. "Heat · 70°" -
+ * so formatNextEvent can show more than a bare "On". Only returned when every
+ * enabled, on-acting rule agrees on the same description: a schedule with a
+ * 70° weekday rule and a 65° weekend rule has no single answer, and showing
+ * just one would be misleading, so callers fall back to the plain "On" then.
+ */
+function climateOnDescription(schedule: Schedule): string | undefined {
+  if (schedule.device_type !== "climate") {
+    return undefined;
+  }
+  const descriptions = new Set(
+    schedule.rules
+      .filter((rule) => rule.enabled && rule.on_enabled)
+      .map((rule) => formatAction("climate", rule.action))
+      .filter((description): description is string => description !== undefined),
+  );
+  return descriptions.size === 1 ? [...descriptions][0] : undefined;
+}
+
+/**
+ * Formats a schedule's server-computed next event as e.g. "Next: On Fri, 6:00 AM"
+ * - or, for a climate schedule with an unambiguous setpoint, "Next: Heat · 70°
+ * Fri, 6:00 AM". `next_event`/`next_event_action` come straight from
+ * list_schedules (see websocket.py) rather than being looked up from a
+ * separate sensor entity - one less thing that can be missing/renamed/
+ * disabled out from under the card.
  */
 function formatNextEvent(schedule: Schedule): string | undefined {
   if (!schedule.next_event) {
@@ -57,7 +80,8 @@ function formatNextEvent(schedule: Schedule): string | undefined {
   if (Number.isNaN(when.getTime())) {
     return undefined;
   }
-  const action = schedule.next_event_action === "off" ? "Off" : "On";
+  const action =
+    schedule.next_event_action === "off" ? "Off" : (climateOnDescription(schedule) ?? "On");
   const formatted = when.toLocaleString(undefined, {
     weekday: "short",
     hour: "numeric",
