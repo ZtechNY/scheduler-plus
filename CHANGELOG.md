@@ -4,6 +4,16 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-08-24
+
+### Fixed
+
+- Report PDF: row text was invisible (white-on-white/light) because the header row's white text color was never reset before drawing the data rows below it.
+
+### Changed
+
+- Report PDF layout redesigned: hairline row separators and color-coded text instead of a busy full grid with colored cell fills, a page-number footer on every page, and a redrawn column header when an entity's table spans multiple pages.
+
 ## [0.2.2] - 2026-08-24
 
 ### Changed

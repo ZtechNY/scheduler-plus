@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from aiohttp import web
@@ -31,9 +31,59 @@ from .report import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# fpdf2 column widths (mm) for the per-entity table: Time / State / Details / Source.
-_COLUMN_WIDTHS = (40, 30, 70, 50)
+# fpdf2 column widths (mm), landscape A4 (297mm) minus 16mm margins each side.
+_COLUMN_WIDTHS = (40, 28, 118, 79)
 _COLUMN_HEADERS = ("Time", "State", "Details", "Source")
+
+# Color palette (RGB 0-255) - a single small set reused throughout, rather
+# than picking colors ad hoc per element, so the PDF reads as one design
+# instead of a patchwork. Body text is always _TEXT_DARK/_TEXT_MUTED against
+# a plain white/near-white row background - state/source get their meaning
+# from *text* color, not a colored cell fill, specifically to avoid the bug
+# this redesign fixes (a fill color with no matching text-color reset made
+# an earlier version's row text invisible - white-on-white/light).
+_ACCENT = (14, 148, 190)
+_TEXT_DARK = (30, 41, 59)
+_TEXT_MUTED = (110, 118, 128)
+_HEADER_BG = (30, 41, 59)
+_HEADER_TEXT = (255, 255, 255)
+_ROW_ALT_BG = (246, 248, 250)
+_ROW_BORDER = (224, 228, 232)
+_STATE_ACTIVE = (13, 130, 90)  # on/heat/cool/open/playing
+_STATE_INACTIVE = (120, 128, 138)  # off/idle/closed
+_STATE_OTHER = (178, 110, 15)  # unavailable/unknown/anything else
+_SOURCE_RULE = (14, 116, 190)
+_SOURCE_OTHER = (140, 148, 158)
+
+_ACTIVE_STATES = {"on", "open", "playing", "heat", "cool", "heat_cool", "auto", "dry", "fan_only"}
+_INACTIVE_STATES = {"off", "closed", "idle"}
+
+
+def _state_color(state: str) -> tuple[int, int, int]:
+    """Which text color communicates a state's meaning at a glance."""
+    lowered = state.lower()
+    if lowered in _ACTIVE_STATES:
+        return _STATE_ACTIVE
+    if lowered in _INACTIVE_STATES:
+        return _STATE_INACTIVE
+    return _STATE_OTHER
+
+
+class _ReportPdf(FPDF):
+    """FPDF subclass adding a page-number footer to every page automatically.
+
+    fpdf2 calls footer() once per page on its own; this is the idiomatic way
+    to get consistent page chrome without re-invoking it manually per
+    add_page() call (the previous version's footer only ever appeared once,
+    at the very end, regardless of how many pages the report spanned).
+    """
+
+    def footer(self) -> None:
+        """Draw a small centered page-number line near the bottom margin."""
+        self.set_y(-12)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(*_TEXT_MUTED)
+        self.cell(0, 8, f"Scheduler+  ·  Page {self.page_no()}", align="C")
 
 
 class SchedulerPlusReportPdfView(HomeAssistantView):
@@ -125,6 +175,17 @@ def _format_temp(value: float) -> str:
     return f"{round(value, 1)}°"
 
 
+def _format_pdf_time(at: datetime) -> str:
+    """e.g. "Aug 24, 2026  3:05 PM" - no leading zeros, without relying on
+
+    %-d/%-I: those "no leading zero" strftime flags are a glibc extension
+    (Windows' C runtime raises ValueError for them), so day/hour are built
+    from plain ints instead of leaning on a platform-specific format flag.
+    """
+    hour12 = at.hour % 12 or 12
+    return f"{at:%b} {at.day}, {at.year}  {hour12}:{at:%M %p}"
+
+
 def _describe_attributes(domain: str, point: ReportPoint) -> str:
     """A domain-aware, human-readable summary of a point's tracked attributes.
 
@@ -188,87 +249,114 @@ def _significant_points(points: list[ReportPoint], domain: str) -> list[ReportPo
     return kept
 
 
-def _render_pdf(report: ReportData) -> bytearray:
-    """Render a readable landscape PDF with wrapped, alternating table rows."""
-    pdf = FPDF(orientation="L", format="A4")
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_margins(14, 14, 14)
-    pdf.add_page()
-    pdf.set_text_color(25, 45, 70)
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 11, _safe_text(
-        f"Scheduler+ Report: {report.start_date.isoformat()} to {report.end_date.isoformat()}"
-    ), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_fill_color(20, 155, 195)
-    pdf.rect(pdf.l_margin, pdf.get_y(), pdf.w - pdf.l_margin - pdf.r_margin, 2, style="F")
-    pdf.ln(4)
-    pdf.set_text_color(90, 95, 100)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 6, "State and attribute history from Home Assistant", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(5)
+def _draw_table_header(pdf: FPDF) -> None:
+    """Draw the dark column-header row at the current position."""
+    pdf.set_fill_color(*_HEADER_BG)
+    pdf.set_text_color(*_HEADER_TEXT)
+    pdf.set_font("Helvetica", "B", 8.5)
+    for width, header in zip(_COLUMN_WIDTHS, _COLUMN_HEADERS):
+        pdf.cell(width, 7.5, header.upper(), fill=True)
+    pdf.ln(7.5)
 
-    widths = (42, 28, 112, 76)
-    for entity in report.entities:
-        pdf.set_fill_color(224, 242, 248)
-        pdf.set_text_color(25, 45, 70)
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 9, _safe_text(f"{entity.friendly_name} ({entity.entity_id})"), fill=True,
-                 new_x="LMARGIN", new_y="NEXT")
+
+def _render_pdf(report: ReportData) -> bytearray:
+    """Render a clean, readable landscape PDF: hairline row separators and
+    color-coded text (not colored cell fills - see this module's palette
+    comment for why) rather than a busy full grid, one small header/footer
+    per page, and a compact title block up front.
+    """
+    pdf = _ReportPdf(orientation="L", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_margins(16, 16, 16)
+    pdf.add_page()
+
+    pdf.set_text_color(*_TEXT_DARK)
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(0, 10, "Scheduler+ Report", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*_TEXT_MUTED)
+    pdf.set_font("Helvetica", "", 10.5)
+    date_range = (
+        report.start_date.isoformat()
+        if report.start_date == report.end_date
+        else f"{report.start_date.isoformat()} to {report.end_date.isoformat()}"
+    )
+    pdf.cell(0, 6, date_range, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    pdf.set_draw_color(*_ACCENT)
+    pdf.set_line_width(0.8)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(7)
+
+    total_width = sum(_COLUMN_WIDTHS)
+    for entity_index, entity in enumerate(report.entities):
+        if entity_index > 0:
+            pdf.ln(7)
+
+        pdf.set_text_color(*_TEXT_DARK)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 7, _safe_text(entity.friendly_name), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(*_TEXT_MUTED)
+        pdf.set_font("Helvetica", "", 8.5)
+        pdf.cell(0, 5, entity.entity_id, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
         if entity.no_data:
-            pdf.set_text_color(100, 100, 100)
+            pdf.set_text_color(*_TEXT_MUTED)
             pdf.set_font("Helvetica", "I", 9)
             pdf.cell(0, 6, "No data found - may be outside your Home Assistant history retention.",
                      new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(4)
             continue
 
-        pdf.set_fill_color(55, 85, 115)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 9)
-        for width, header in zip(widths, _COLUMN_HEADERS):
-            pdf.cell(width, 7, header, border=1, fill=True)
-        pdf.ln(7)
-        pdf.set_font("Helvetica", "", 8)
+        _draw_table_header(pdf)
+
         rows = _significant_points(entity.points, entity.domain)
         for index, point in enumerate(rows):
             details = _describe_attributes(entity.domain, point)
-            source = f"Rule: {point.rule_name} ({point.schedule_name})" if point.source == "rule" else "Other"
+            source_text = point.rule_name if point.source == "rule" else "Other"
             values = (
-                point.at.strftime("%Y-%m-%d %H:%M:%S"),
+                _format_pdf_time(point.at),
                 _humanize_word(point.state),
                 details,
-                source,
+                source_text or "",
             )
-            row_height = max(_line_count(pdf, str(value), width) for value, width in zip(values, widths)) * 4.5
+            row_height = max(
+                _line_count(pdf, str(value), width)
+                for value, width in zip(values, _COLUMN_WIDTHS)
+            ) * 5 + 2
+
             if pdf.get_y() + row_height > pdf.page_break_trigger:
                 pdf.add_page()
+                _draw_table_header(pdf)
+
             x, y = pdf.get_x(), pdf.get_y()
-            base_fill = (248, 250, 252) if index % 2 == 0 else (238, 244, 248)
-            for column, (width, value) in enumerate(zip(widths, values)):
-                pdf.set_xy(x, y)
+            if index % 2 == 1:
+                pdf.set_fill_color(*_ROW_ALT_BG)
+                pdf.rect(x, y, total_width, row_height, style="F")
+
+            for column, (width, value) in enumerate(zip(_COLUMN_WIDTHS, values)):
+                pdf.set_xy(x, y + 1.2)
                 if column == 1:
-                    state = str(value).lower()
-                    if state in {"on", "open", "playing", "heat", "cool"}:
-                        pdf.set_fill_color(218, 244, 232)
-                    elif state in {"off", "closed", "idle"}:
-                        pdf.set_fill_color(242, 242, 242)
-                    else:
-                        pdf.set_fill_color(255, 247, 218)
-                elif column == 3 and point.source == "rule":
-                    pdf.set_fill_color(225, 239, 255)
+                    pdf.set_text_color(*_state_color(point.state))
+                    pdf.set_font("Helvetica", "B", 8.5)
+                elif column == 3:
+                    pdf.set_text_color(*(_SOURCE_RULE if point.source == "rule" else _SOURCE_OTHER))
+                    pdf.set_font("Helvetica", "", 8.5)
                 else:
-                    pdf.set_fill_color(*base_fill)
-                pdf.multi_cell(width, 4.5, _safe_text(str(value)), border=1, fill=True)
+                    pdf.set_text_color(*_TEXT_DARK)
+                    pdf.set_font("Helvetica", "", 8.5)
+                pdf.multi_cell(width, 5, _safe_text(str(value)), border=0, align="L")
                 x += width
+
+            pdf.set_draw_color(*_ROW_BORDER)
+            pdf.set_line_width(0.2)
+            pdf.line(pdf.l_margin, y + row_height, pdf.l_margin + total_width, y + row_height)
             pdf.set_xy(pdf.l_margin, y + row_height)
+
         if entity.truncated:
-            pdf.set_text_color(100, 100, 100)
+            pdf.ln(1)
+            pdf.set_text_color(*_TEXT_MUTED)
             pdf.set_font("Helvetica", "I", 8)
-            pdf.cell(0, 6, "Report truncated - too many changes in this range to list all of them.",
+            pdf.cell(0, 6, "Truncated - too many changes in this range to list all of them.",
                      new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(4)
-    pdf.set_y(pdf.h - 10)
-    pdf.set_text_color(120, 130, 140)
-    pdf.set_font("Helvetica", "", 8)
-    pdf.cell(0, 5, "Generated by Scheduler+  |  Home Assistant history report", align="C")
+
     return pdf.output()
