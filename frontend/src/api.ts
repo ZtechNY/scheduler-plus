@@ -287,3 +287,68 @@ export async function checkScheduleConflicts(
   return result.conflicts;
 }
 
+/**
+ * Whether a report point's change is provably a Scheduler+ rule firing
+ * (matched against a Scheduler+ EVENT_RULE_TRIGGERED event close in time -
+ * see report.py's module docstring) or not - "other" doesn't necessarily
+ * mean "a person did it", it could equally be a different automation, so
+ * the frontend should say "Other" rather than implying a human cause.
+ */
+export type ReportSource = "rule" | "other";
+
+/** One state transition for a reported entity - see report.py's ReportPoint. */
+export interface ReportPoint {
+  at: string;
+  state: string;
+  attributes: Record<string, unknown>;
+  source: ReportSource;
+  rule_name: string | null;
+  schedule_name: string | null;
+}
+
+/** One entity's reported history for the requested range - see report.py's EntityReport. */
+export interface EntityReport {
+  entity_id: string;
+  domain: string;
+  friendly_name: string;
+  points: ReportPoint[];
+  no_data: boolean;
+  truncated: boolean;
+}
+
+/** A full report, as returned by generate_report - see report.py's ReportData. */
+export interface Report {
+  start_date: string;
+  end_date: string;
+  entities: EntityReport[];
+}
+
+export async function fetchReport(
+  hass: HomeAssistant,
+  entityIds: string[],
+  startDate: string,
+  endDate: string,
+): Promise<Report> {
+  return hass.callWS<Report>({
+    type: `${DOMAIN}/generate_report`,
+    entities: entityIds,
+    start_date: startDate,
+    end_date: endDate,
+  });
+}
+
+/**
+ * URL for the same report as a downloadable PDF (report_view.py). A plain
+ * string, not a callWS call - the browser's existing same-origin session
+ * cookie authenticates the request when the frontend navigates/fetches it
+ * directly, the same way it already authenticates the static card bundle.
+ */
+export function reportPdfUrl(entityIds: string[], startDate: string, endDate: string): string {
+  const params = new URLSearchParams({
+    entities: entityIds.join(","),
+    start: startDate,
+    end: endDate,
+  });
+  return `/api/scheduler_plus/report/pdf?${params.toString()}`;
+}
+

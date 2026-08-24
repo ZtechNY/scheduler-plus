@@ -9,3 +9,8 @@
 # Home Assistant version this integration targets (see the "homeassistant"
 # key in hacs.json).
 pytest-homeassistant-custom-component
+
+# report_view.py's runtime dependency (also declared in manifest.json's
+# requirements, which is how a real Home Assistant install gets it - listed
+# here too so the test environment has it as well).
+fpdf2>=2.7,<3

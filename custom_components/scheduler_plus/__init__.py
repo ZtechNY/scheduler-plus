@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import SchedulerPlusCoordinator
+from .report_view import SchedulerPlusReportPdfView
 from .scheduler import SchedulerEngine
 from .storage import SchedulerPlusStore
 from .websocket import async_register_websocket_commands
@@ -38,11 +39,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Scheduler+ integration.
 
     Called once per Home Assistant run, independent of config entries.
-    Websocket commands are registered here rather than in
-    async_setup_entry() because they must only be registered once, while
-    async_setup_entry() re-runs on every config entry reload.
+    Websocket commands (and the report PDF view, for the same reason) are
+    registered here rather than in async_setup_entry() because they must
+    only be registered once, while async_setup_entry() re-runs on every
+    config entry reload.
     """
     async_register_websocket_commands(hass)
+    hass.http.register_view(SchedulerPlusReportPdfView())
     await _async_register_frontend(hass)
     return True
 

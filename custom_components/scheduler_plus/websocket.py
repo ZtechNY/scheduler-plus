@@ -42,6 +42,7 @@ from .const import (
 )
 from .coordinator import SchedulerPlusCoordinator
 from .models import Rule, RuleDateMode, Schedule, ScheduleTemplate, TemplateScope, Weekday
+from .report import MAX_REPORT_ENTITIES, ReportError, ReportRangeError, async_build_report
 from .scheduler import ScheduleConflict, SchedulerEngine
 from .storage import SchedulerPlusStoreData
 
@@ -801,6 +802,55 @@ async def websocket_get_week_schedule(
     connection.send_result(msg["id"], {"days": days})
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/generate_report",
+        vol.Required("entities"): vol.All(
+            cv.ensure_list, [cv.entity_id], vol.Length(min=1, max=MAX_REPORT_ENTITIES)
+        ),
+        vol.Required("start_date"): vol.Match(_DATE_RE),
+        vol.Required("end_date"): vol.Match(_DATE_RE),
+    }
+)
+@websocket_api.async_response
+async def websocket_generate_report(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return a historical report of what happened to `entities` over a date range.
+
+    Read-only, like get_day_schedule/get_week_schedule - reports what
+    Home Assistant's recorder actually recorded (report.py), not anything
+    Scheduler+ itself persists, so it's unaffected by which schedules
+    exist. start_date/end_date are only format-checked by the schema;
+    the actual start<=end and range/entity-count bounds are cross-field
+    checks, so they're validated in report.async_build_report (via
+    report.validate_report_bounds) and turned into ERR_INVALID_FORMAT here,
+    matching how websocket_create_schedule validates device_type/entities.
+    """
+    entry = _get_entry(hass)
+    if entry is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    start_date = date.fromisoformat(msg["start_date"])
+    end_date = date.fromisoformat(msg["end_date"])
+
+    try:
+        report = await async_build_report(hass, msg["entities"], start_date, end_date)
+    except ReportRangeError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        return
+    except ReportError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_UNKNOWN_ERROR, str(err))
+        return
+
+    connection.send_result(msg["id"], report.to_dict())
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_templates"})
 @websocket_api.async_response
 async def websocket_list_templates(
@@ -898,6 +948,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_set_preferences)
     websocket_api.async_register_command(hass, websocket_get_day_schedule)
     websocket_api.async_register_command(hass, websocket_get_week_schedule)
+    websocket_api.async_register_command(hass, websocket_generate_report)
     websocket_api.async_register_command(hass, websocket_list_templates)
     websocket_api.async_register_command(hass, websocket_create_template)
     websocket_api.async_register_command(hass, websocket_delete_template)

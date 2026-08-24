@@ -4,6 +4,7 @@ import {
   mdiCalendarPlus,
   mdiContentCopy,
   mdiDelete,
+  mdiFileChartOutline,
   mdiPauseCircleOutline,
   mdiPencil,
   mdiPlayCircleOutline,
@@ -26,6 +27,8 @@ import "./preferences-dialog";
 import type { SchedulerPlusPreferences } from "./preferences-dialog";
 import "./quick-event-dialog";
 import type { SchedulerPlusQuickEventDialog } from "./quick-event-dialog";
+import "./report-dialog";
+import type { SchedulerPlusReportDialog } from "./report-dialog";
 import "./schedule-editor-dialog";
 import type { SchedulerPlusScheduleEditor } from "./schedule-editor-dialog";
 import type { Schedule } from "./types";
@@ -243,6 +246,9 @@ export class SchedulerPlusCard extends LitElement {
   @query("scheduler-plus-apply-template-dialog")
   private _applyTemplateDialog?: SchedulerPlusApplyTemplateDialog;
 
+  @query("scheduler-plus-report-dialog")
+  private _reportDialog?: SchedulerPlusReportDialog;
+
   static getStubConfig(): SchedulerPlusCardConfig {
     return { type: "custom:scheduler-plus-card" };
   }
@@ -377,6 +383,10 @@ export class SchedulerPlusCard extends LitElement {
     this._applyTemplateDialog?.showDialog();
   };
 
+  private _openReport = (): void => {
+    this._reportDialog?.showDialog();
+  };
+
   /** Opens the full schedule editor pre-filled from a picked template, rather than
    *  creating the schedule sight-unseen - see apply-template-dialog.ts. */
   private _handleUseTemplate = (e: CustomEvent<{ template: ScheduleTemplate }>): void => {
@@ -409,6 +419,11 @@ export class SchedulerPlusCard extends LitElement {
             label="From template"
             @click=${this._openApplyTemplate}
           ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiFileChartOutline}
+            label="Report"
+            @click=${this._openReport}
+          ></ha-icon-button>
         </div>
         <div class="content">${this._renderContent()}</div>
         <div class="card-actions">
@@ -426,6 +441,10 @@ export class SchedulerPlusCard extends LitElement {
         .hass=${this.hass}
         .entityFilter=${this._config?.entities}
       ></scheduler-plus-day-view>
+      <scheduler-plus-report-dialog
+        .hass=${this.hass}
+        .entityFilter=${this._config?.entities}
+      ></scheduler-plus-report-dialog>
       <scheduler-plus-preferences .hass=${this.hass}></scheduler-plus-preferences>
       <scheduler-plus-override-dialog
         .hass=${this.hass}

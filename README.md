@@ -10,6 +10,7 @@ Scheduler+ is a Home Assistant scheduling engine for creating and managing time-
 - Add date, weekday, holiday, and active-period conditions to rules.
 - Schedule one-time events or recurring rules.
 - Review schedules in day and week views and detect conflicting events.
+- Generate a history report for any set of entities and a date range - on screen or as a downloadable PDF - showing what happened and whether a Scheduler+ rule caused it.
 - Customize weekday/weekend presets, working hours, brightness, and fade-in options.
 
 ## Requirements
