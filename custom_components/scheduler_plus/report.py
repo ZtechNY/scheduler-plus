@@ -364,6 +364,18 @@ def _compact_points(
             continue
         last_key = key
 
+        # An idle/off climate commonly records a new current_temperature
+        # every few minutes. Those readings are not useful in a schedule
+        # report; keep the first off row, then wait for the next meaningful
+        # state transition (for example, off -> cool or off -> heat).
+        if (
+            domain == "climate"
+            and raw_state.state == "off"
+            and points
+            and points[-1].state == "off"
+        ):
+            continue
+
         if len(points) >= _MAX_POINTS_PER_ENTITY:
             truncated = True
             break
