@@ -33,10 +33,12 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
 
     url = "/api/scheduler_plus/report/pdf"
     name = "api:scheduler_plus:report_pdf"
-    # requires_auth defaults to True on HomeAssistantView: the same session
-    # cookie the Lovelace card already runs under covers this request, so
-    # the frontend can just navigate/fetch this URL with no extra token
-    # plumbing.
+    # requires_auth defaults to True on HomeAssistantView. A plain same-tab
+    # navigation/fetch to this URL is NOT enough on its own, despite the
+    # browser holding a valid HA session - the frontend (report-dialog.ts's
+    # _downloadPdf) explicitly sends the signed-in user's hass.auth access
+    # token as a Bearer header, the same way the rest of Home Assistant's
+    # own frontend authenticates its /api/* calls.
 
     async def get(self, request: web.Request) -> web.Response:
         """Handle GET /api/scheduler_plus/report/pdf?entities=a,b&start=YYYY-MM-DD&end=YYYY-MM-DD."""

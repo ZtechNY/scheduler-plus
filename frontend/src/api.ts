@@ -33,6 +33,7 @@ export interface HassEntityState {
 export interface HomeAssistant {
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
   states: Record<string, HassEntityState>;
+  auth?: { data?: { access_token?: string } };
 }
 
 const DOMAIN = "scheduler_plus";
@@ -339,9 +340,10 @@ export async function fetchReport(
 
 /**
  * URL for the same report as a downloadable PDF (report_view.py). A plain
- * string, not a callWS call - the browser's existing same-origin session
- * cookie authenticates the request when the frontend navigates/fetches it
- * directly, the same way it already authenticates the static card bundle.
+ * string, not a callWS call - the caller (report-dialog.ts's _downloadPdf)
+ * must fetch it with an `Authorization: Bearer <hass.auth access token>`
+ * header, the same way Home Assistant's own frontend authenticates its
+ * other /api/* calls; a bare navigation/fetch with no token is rejected.
  */
 export function reportPdfUrl(entityIds: string[], startDate: string, endDate: string): string {
   const params = new URLSearchParams({
