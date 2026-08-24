@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-08-24
+
+### Changed
+
+- Report view's list/PDF rows: only a genuine change (target temperature, hvac mode/action, or on-off) gets its own row now, instead of every routine ambient-temperature reading - those are still fully visible as the continuous chart line, just no longer repeated as near-identical rows underneath it.
+- Report view's row wording: attributes are now described in plain language ("Target 69° · Room 71° · Cooling", "Brightness 80%") instead of raw `key=value` pairs, and applied identically to both the on-screen list and the PDF.
+
 ## [0.2.1] - 2026-08-24
 
 ### Fixed

@@ -13,13 +13,21 @@ never disagree about what a report contains.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 from aiohttp import web
 from fpdf import FPDF
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 
-from .report import ReportData, ReportError, ReportRangeError, async_build_report
+from .report import (
+    ReportData,
+    ReportError,
+    ReportPoint,
+    ReportRangeError,
+    async_build_report,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,91 +101,174 @@ def _safe_text(value: str) -> str:
     return value.encode("latin-1", "replace").decode("latin-1")
 
 
-def _render_pdf(report: ReportData) -> bytearray:
-    """Render a ReportData as a simple table-per-entity PDF.
+def _line_count(pdf: FPDF, value: str, width: float) -> int:
+    """Estimate wrapped lines so adjacent table rows never overlap."""
+    lines = 1
+    current = ""
+    for word in _safe_text(value).split():
+        candidate = f"{current} {word}".strip()
+        if current and pdf.get_string_width(candidate) > width - 4:
+            lines += 1
+            current = word
+        else:
+            current = candidate
+    return lines
 
-    Synchronous - fpdf2 has no async API - so this always runs via
-    hass.async_add_executor_job, never directly on the event loop. Table-
-    only for this pass (no embedded chart); the same compacted ReportPoint
-    list the on-screen report renders, so row count is already bounded by
-    report.py's per-entity compaction/truncation.
+
+def _humanize_word(value: str) -> str:
+    """"cool" -> "Cool", "hvac_action" values like "heating" -> "Heating"."""
+    spaced = value.replace("_", " ")
+    return spaced[:1].upper() + spaced[1:] if spaced else spaced
+
+
+def _format_temp(value: float) -> str:
+    return f"{round(value, 1)}°"
+
+
+def _describe_attributes(domain: str, point: ReportPoint) -> str:
+    """A domain-aware, human-readable summary of a point's tracked attributes.
+
+    Mirrors frontend/src/report-dialog.ts's describeAttributes exactly, so
+    the PDF and the on-screen report never disagree about what a row means -
+    see this module's own docstring for why the two must stay in sync. Raw
+    "current_temperature=70, temperature=69" key=value text (the original
+    version of this column) meant nothing to someone just reading the
+    report; light's brightness=200 is even less legible without converting
+    HA's raw 0-255 scale to a percentage.
     """
-    pdf = FPDF()
+    if domain == "climate":
+        parts: list[str] = []
+        target = point.attributes.get("temperature")
+        current = point.attributes.get("current_temperature")
+        action = point.attributes.get("hvac_action")
+        if isinstance(target, (int, float)):
+            parts.append(f"Target {_format_temp(target)}")
+        if isinstance(current, (int, float)):
+            parts.append(f"Room {_format_temp(current)}")
+        if isinstance(action, str) and action:
+            parts.append(_humanize_word(action))
+        return " · ".join(parts)
+    if domain == "light":
+        brightness = point.attributes.get("brightness")
+        if isinstance(brightness, (int, float)):
+            return f"Brightness {round(brightness / 255 * 100)}%"
+        return ""
+    return ""
+
+
+# Per domain, which of a point's tracked attributes count as a "real" change
+# worth its own PDF row - as opposed to routine sensor noise (climate's
+# current_temperature drifting by a degree every few minutes) that's only
+# useful as a continuous line in the on-screen chart, not as a wall of
+# near-identical rows. Mirrors frontend/src/report-dialog.ts's
+# LIST_SIGNIFICANT_KEYS - see that constant's docstring for the full
+# reasoning. Nothing is filtered for light/switch: their only tracked
+# signal already is the meaningful thing.
+_LIST_SIGNIFICANT_KEY: dict[str, Callable[[ReportPoint], Any]] = {
+    "climate": lambda point: (
+        point.state,
+        point.attributes.get("temperature"),
+        point.attributes.get("hvac_action"),
+    ),
+}
+
+
+def _significant_points(points: list[ReportPoint], domain: str) -> list[ReportPoint]:
+    """Collapse `points` to just the ones significant enough for a PDF row."""
+    key_of = _LIST_SIGNIFICANT_KEY.get(domain)
+    if key_of is None:
+        return points
+    kept: list[ReportPoint] = []
+    last_key: Any = None
+    for point in points:
+        key = key_of(point)
+        if not kept or key != last_key:
+            kept.append(point)
+            last_key = key
+    return kept
+
+
+def _render_pdf(report: ReportData) -> bytearray:
+    """Render a readable landscape PDF with wrapped, alternating table rows."""
+    pdf = FPDF(orientation="L", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_margins(14, 14, 14)
     pdf.add_page()
-
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(
-        0,
-        10,
-        _safe_text(
-            f"Scheduler+ Report: {report.start_date.isoformat()} "
-            f"to {report.end_date.isoformat()}"
-        ),
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
+    pdf.set_text_color(25, 45, 70)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 11, _safe_text(
+        f"Scheduler+ Report: {report.start_date.isoformat()} to {report.end_date.isoformat()}"
+    ), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_fill_color(20, 155, 195)
+    pdf.rect(pdf.l_margin, pdf.get_y(), pdf.w - pdf.l_margin - pdf.r_margin, 2, style="F")
     pdf.ln(4)
+    pdf.set_text_color(90, 95, 100)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, "State and attribute history from Home Assistant", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
 
+    widths = (42, 28, 112, 76)
     for entity in report.entities:
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(
-            0,
-            8,
-            _safe_text(f"{entity.friendly_name} ({entity.entity_id})"),
-            new_x="LMARGIN",
-            new_y="NEXT",
-        )
-
+        pdf.set_fill_color(224, 242, 248)
+        pdf.set_text_color(25, 45, 70)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 9, _safe_text(f"{entity.friendly_name} ({entity.entity_id})"), fill=True,
+                 new_x="LMARGIN", new_y="NEXT")
         if entity.no_data:
-            pdf.set_font("Helvetica", "I", 10)
-            pdf.cell(
-                0,
-                6,
-                "No data found - may be outside your Home Assistant history retention.",
-                new_x="LMARGIN",
-                new_y="NEXT",
-            )
+            pdf.set_text_color(100, 100, 100)
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.cell(0, 6, "No data found - may be outside your Home Assistant history retention.",
+                     new_x="LMARGIN", new_y="NEXT")
             pdf.ln(4)
             continue
 
+        pdf.set_fill_color(55, 85, 115)
+        pdf.set_text_color(255, 255, 255)
         pdf.set_font("Helvetica", "B", 9)
-        for width, header in zip(_COLUMN_WIDTHS, _COLUMN_HEADERS):
-            pdf.cell(width, 6, header, border=1)
-        pdf.ln(6)
-
-        pdf.set_font("Helvetica", "", 9)
-        for point in entity.points:
-            details = ", ".join(
-                f"{key}={value}"
-                for key, value in point.attributes.items()
-                if value is not None
-            )
-            source = (
-                f"Rule: {point.rule_name} ({point.schedule_name})"
-                if point.source == "rule"
-                else "Other"
-            )
-            row = (
+        for width, header in zip(widths, _COLUMN_HEADERS):
+            pdf.cell(width, 7, header, border=1, fill=True)
+        pdf.ln(7)
+        pdf.set_font("Helvetica", "", 8)
+        rows = _significant_points(entity.points, entity.domain)
+        for index, point in enumerate(rows):
+            details = _describe_attributes(entity.domain, point)
+            source = f"Rule: {point.rule_name} ({point.schedule_name})" if point.source == "rule" else "Other"
+            values = (
                 point.at.strftime("%Y-%m-%d %H:%M:%S"),
-                point.state,
+                _humanize_word(point.state),
                 details,
                 source,
             )
-            for width, cell_value in zip(_COLUMN_WIDTHS, row):
-                pdf.cell(width, 6, _safe_text(str(cell_value))[:60], border=1)
-            pdf.ln(6)
-
+            row_height = max(_line_count(pdf, str(value), width) for value, width in zip(values, widths)) * 4.5
+            if pdf.get_y() + row_height > pdf.page_break_trigger:
+                pdf.add_page()
+            x, y = pdf.get_x(), pdf.get_y()
+            base_fill = (248, 250, 252) if index % 2 == 0 else (238, 244, 248)
+            for column, (width, value) in enumerate(zip(widths, values)):
+                pdf.set_xy(x, y)
+                if column == 1:
+                    state = str(value).lower()
+                    if state in {"on", "open", "playing", "heat", "cool"}:
+                        pdf.set_fill_color(218, 244, 232)
+                    elif state in {"off", "closed", "idle"}:
+                        pdf.set_fill_color(242, 242, 242)
+                    else:
+                        pdf.set_fill_color(255, 247, 218)
+                elif column == 3 and point.source == "rule":
+                    pdf.set_fill_color(225, 239, 255)
+                else:
+                    pdf.set_fill_color(*base_fill)
+                pdf.multi_cell(width, 4.5, _safe_text(str(value)), border=1, fill=True)
+                x += width
+            pdf.set_xy(pdf.l_margin, y + row_height)
         if entity.truncated:
+            pdf.set_text_color(100, 100, 100)
             pdf.set_font("Helvetica", "I", 8)
-            pdf.cell(
-                0,
-                6,
-                "Report truncated - too many changes in this range to list all of them.",
-                new_x="LMARGIN",
-                new_y="NEXT",
-            )
-
+            pdf.cell(0, 6, "Report truncated - too many changes in this range to list all of them.",
+                     new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
-
+    pdf.set_y(pdf.h - 10)
+    pdf.set_text_color(120, 130, 140)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(0, 5, "Generated by Scheduler+  |  Home Assistant history report", align="C")
     return pdf.output()

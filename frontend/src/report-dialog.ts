@@ -48,18 +48,84 @@ function defaultStartIso(): string {
   return localDateIso(date);
 }
 
-/** Domain-agnostic "key=value, key=value" rendering of a point's tracked attributes. */
-function describeAttributes(point: ReportPoint): string {
-  return Object.entries(point.attributes)
-    .filter(([, value]) => value !== null && value !== undefined)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(", ");
+/** "cool" -> "Cool", "hvac_action" style values -> "Heating", etc. */
+function humanizeWord(value: string): string {
+  const spaced = value.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * A domain-aware, human-readable description of a point's tracked
+ * attributes - e.g. "Target 69° · Room 71° · Cooling" for climate,
+ * "Brightness 80%" for a light (converted from HA's raw 0-255 scale, which
+ * means nothing to someone reading a report), or "" for a switch (its
+ * on/off state alone, shown separately, already says everything).
+ */
+function describeAttributes(domain: string, point: ReportPoint): string {
+  if (domain === "climate") {
+    const parts: string[] = [];
+    const target = point.attributes.temperature;
+    const current = point.attributes.current_temperature;
+    const action = point.attributes.hvac_action;
+    if (typeof target === "number") {
+      parts.push(`Target ${formatTemp(target)}`);
+    }
+    if (typeof current === "number") {
+      parts.push(`Room ${formatTemp(current)}`);
+    }
+    if (typeof action === "string" && action) {
+      parts.push(humanizeWord(action));
+    }
+    return parts.join(" · ");
+  }
+  if (domain === "light") {
+    const brightness = point.attributes.brightness;
+    return typeof brightness === "number"
+      ? `Brightness ${Math.round((brightness / 255) * 100)}%`
+      : "";
+  }
+  return "";
 }
 
 function describeSource(point: ReportPoint): string {
   return point.source === "rule"
     ? `Scheduler+: ${point.rule_name} (${point.schedule_name})`
     : "Other";
+}
+
+/**
+ * Per domain, which of a point's tracked attributes count as a "real"
+ * change worth its own row in the list - as opposed to routine sensor
+ * noise that's already visible as a continuous line in the chart above.
+ * climate's current_temperature is deliberately excluded: it updates
+ * every few minutes just from a room's ambient temperature drifting, and
+ * listing every such tick (report.py's backend compaction already treats
+ * each distinct reading as a real "transition") buried the moments that
+ * actually matter - the target changing, or the system switching between
+ * heating/cooling/idle. Nothing is filtered for light/switch: their only
+ * tracked signal (state, plus light's brightness) already is the
+ * meaningful thing.
+ */
+const LIST_SIGNIFICANT_KEYS: Record<string, (point: ReportPoint) => unknown> = {
+  climate: (point) => `${point.state}|${point.attributes.temperature}|${point.attributes.hvac_action}`,
+};
+
+/** Collapses `points` to just the ones significant enough to list - see LIST_SIGNIFICANT_KEYS. */
+function significantPoints(points: ReportPoint[], domain: string): ReportPoint[] {
+  const keyOf = LIST_SIGNIFICANT_KEYS[domain];
+  if (!keyOf) {
+    return points;
+  }
+  const kept: ReportPoint[] = [];
+  let lastKey: unknown;
+  for (const point of points) {
+    const key = keyOf(point);
+    if (kept.length === 0 || key !== lastKey) {
+      kept.push(point);
+      lastKey = key;
+    }
+  }
+  return kept;
 }
 
 /**
@@ -257,12 +323,12 @@ export class SchedulerPlusReportDialog extends LitElement {
                 ? html`<div class="hint">Truncated - too many changes to list them all.</div>`
                 : nothing}
               <ul class="points">
-                ${entity.points.map(
+                ${significantPoints(entity.points, entity.domain).map(
                   (point) => html`
                     <li class="point">
                       <span class="point-time">${formatDateTime(point.at)}</span>
-                      <span class="point-state">${point.state}</span>
-                      <span class="point-details">${describeAttributes(point)}</span>
+                      <span class="point-state">${humanizeWord(point.state)}</span>
+                      <span class="point-details">${describeAttributes(entity.domain, point)}</span>
                       <span class="point-source ${point.source}">${describeSource(point)}</span>
                     </li>
                   `,
