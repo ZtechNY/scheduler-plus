@@ -14,7 +14,6 @@ import {
   timeAtPositionPct,
   valueToYPct,
 } from "./report-charts";
-import type { ChartBounds } from "./report-charts";
 import { ALL_DEVICE_DOMAINS } from "./types";
 
 /** The two attributes climate's numeric chart plots - shared so bounds/paths/hover all agree. */
@@ -128,21 +127,30 @@ function significantPoints(points: ReportPoint[], domain: string): ReportPoint[]
   return kept;
 }
 
+export interface SchedulerPlusReportCardConfig {
+  type: string;
+  title?: string;
+  /** Restricts the entity picker's default selection - unset/empty lets the user pick freely. */
+  entities?: string[];
+}
+
 /**
- * Read-only "Report" view: pick a set of entities and a date range, see what
- * actually happened to them (state/attribute history from Home Assistant's
+ * "Report" card: pick a set of entities and a date range, see what actually
+ * happened to them (state/attribute history from Home Assistant's
  * recorder, annotated with whether a Scheduler+ rule caused each change) -
- * plus a "Download PDF" export of the same data. Like day-view-dialog.ts,
- * this only ever fetches and never mutates anything.
+ * plus a "Download PDF" export of the same data. A standalone Lovelace card
+ * (its own `type: custom:scheduler-plus-report-card`) rather than a dialog
+ * opened from the main Scheduler+ card - the two are independent enough
+ * (reads history, doesn't touch schedules at all) that a dashboard page can
+ * carry just this one without the scheduling card, or vice versa. Shares
+ * its backend (websocket.py's generate_report command, report_view.py's
+ * PDF endpoint) with nothing card-specific about either.
  */
-@customElement("scheduler-plus-report-dialog")
-export class SchedulerPlusReportDialog extends LitElement {
+@customElement("scheduler-plus-report-card")
+export class SchedulerPlusReportCard extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
 
-  /** The owning card's own device filter, if configured - defaults entity selection to it. */
-  @property({ attribute: false }) entityFilter?: string[];
-
-  @state() private _open = false;
+  @state() private _config?: SchedulerPlusReportCardConfig;
 
   @state() private _entities: string[] = [];
 
@@ -158,18 +166,22 @@ export class SchedulerPlusReportDialog extends LitElement {
 
   @state() private _hover?: ChartHover;
 
-  public showDialog(): void {
-    this._entities = this.entityFilter ?? [];
-    this._startDate = defaultStartIso();
-    this._endDate = todayIso();
-    this._report = undefined;
-    this._error = undefined;
-    this._open = true;
+  static getStubConfig(): SchedulerPlusReportCardConfig {
+    return { type: "custom:scheduler-plus-report-card" };
   }
 
-  private _closeDialog = (): void => {
-    this._open = false;
-  };
+  static getConfigElement(): HTMLElement {
+    return document.createElement("scheduler-plus-report-card-editor");
+  }
+
+  setConfig(config: SchedulerPlusReportCardConfig): void {
+    this._config = config;
+    this._entities = config.entities ?? [];
+  }
+
+  getCardSize(): number {
+    return 6;
+  }
 
   private _handleEntitiesChanged = (e: CustomEvent<{ value: string[] }>): void => {
     this._entities = e.detail.value;
@@ -233,14 +245,12 @@ export class SchedulerPlusReportDialog extends LitElement {
   };
 
   protected override render() {
-    if (!this._open) {
-      return nothing;
-    }
     return html`
-      <ha-dialog open @closed=${this._closeDialog}>
-        <div class="form">
-          <div class="dialog-title">Report</div>
-
+      <ha-card>
+        <div class="header">
+          <span>${this._config?.title ?? "Report"}</span>
+        </div>
+        <div class="content">
           <scheduler-plus-entity-multi-picker
             .hass=${this.hass}
             .value=${this._entities}
@@ -285,13 +295,9 @@ export class SchedulerPlusReportDialog extends LitElement {
 
           ${this._error ? html`<div class="placeholder error">${this._error}</div>` : nothing}
 
-          <div class="content">${this._renderResults()}</div>
-
-          <div class="dialog-actions">
-            <button type="button" class="btn" @click=${this._closeDialog}>Close</button>
-          </div>
+          ${this._renderResults()}
         </div>
-      </ha-dialog>
+      </ha-card>
     `;
   }
 
@@ -474,17 +480,20 @@ export class SchedulerPlusReportDialog extends LitElement {
   }
 
   static override styles = css`
-    .form {
+    .header {
       display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-width: 320px;
-      max-width: min(92vw, 560px);
-    }
-    .dialog-title {
+      align-items: center;
+      gap: 10px;
+      padding: 16px 16px 4px;
       font-size: 1.25rem;
       font-weight: 500;
       color: var(--primary-text-color);
+    }
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 8px 16px 16px;
     }
     .controls {
       display: flex;
@@ -511,9 +520,6 @@ export class SchedulerPlusReportDialog extends LitElement {
     .actions-row {
       display: flex;
       gap: 8px;
-    }
-    .content {
-      min-height: 40px;
     }
     .placeholder {
       padding: 16px 0;
@@ -591,7 +597,7 @@ export class SchedulerPlusReportDialog extends LitElement {
     }
     .chart-plot svg {
       width: 100%;
-      height: 110px;
+      height: 130px;
       display: block;
       background: var(--secondary-background-color, rgba(0, 0, 0, 0.04));
       border-radius: 4px;
@@ -685,7 +691,7 @@ export class SchedulerPlusReportDialog extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 4px;
-      max-height: 200px;
+      max-height: 260px;
       overflow-y: auto;
     }
     .point {
@@ -720,13 +726,6 @@ export class SchedulerPlusReportDialog extends LitElement {
     .point-source.rule {
       color: var(--primary-color);
     }
-    .dialog-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      padding-top: 8px;
-      border-top: 1px solid var(--divider-color);
-    }
     .btn {
       font: inherit;
       font-weight: 500;
@@ -758,6 +757,16 @@ export class SchedulerPlusReportDialog extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "scheduler-plus-report-dialog": SchedulerPlusReportDialog;
+    "scheduler-plus-report-card": SchedulerPlusReportCard;
+  }
+  interface Window {
+    customCards?: { type: string; name: string; description: string }[];
   }
 }
+
+window.customCards = window.customCards ?? [];
+window.customCards.push({
+  type: "scheduler-plus-report-card",
+  name: "Scheduler+ Report",
+  description: "History report for any entities and date range, with PDF export.",
+});

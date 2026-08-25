@@ -4,6 +4,16 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-25
+
+### Added
+
+- New standalone Report card (`type: custom:scheduler-plus-report-card`), addable to any dashboard on its own - same entity picker, date range, chart, table, and PDF export as before, now in a normal card instead of a dialog.
+
+### Removed
+
+- The Report icon/dialog on the main Scheduler+ card - the feature moved entirely to the new Report card above; it no longer lives inside the scheduling card.
+
 ## [0.2.3] - 2026-08-24
 
 ### Fixed

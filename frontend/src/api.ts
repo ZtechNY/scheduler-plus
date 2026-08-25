@@ -340,7 +340,7 @@ export async function fetchReport(
 
 /**
  * URL for the same report as a downloadable PDF (report_view.py). A plain
- * string, not a callWS call - the caller (report-dialog.ts's _downloadPdf)
+ * string, not a callWS call - the caller (report-card.ts's _downloadPdf)
  * must fetch it with an `Authorization: Bearer <hass.auth access token>`
  * header, the same way Home Assistant's own frontend authenticates its
  * other /api/* calls; a bare navigation/fetch with no token is rejected.

@@ -10,7 +10,6 @@ Scheduler+ is a Home Assistant scheduling engine for creating and managing time-
 - Add date, weekday, holiday, and active-period conditions to rules.
 - Schedule one-time events or recurring rules.
 - Review schedules in day and week views and detect conflicting events.
-- Generate a history report for any set of entities and a date range - on screen or as a downloadable PDF - showing what happened and whether a Scheduler+ rule caused it.
 - Customize weekday/weekend presets, working hours, brightness, and fade-in options.
 
 ## Requirements
@@ -34,6 +33,14 @@ After installing the integration, add the Scheduler+ card to a dashboard:
 
 ```yaml
 type: custom:scheduler-plus-card
+```
+
+## Report card
+
+A separate card for reviewing entity history: pick any set of entities and a date range and see what actually happened to them (state and attribute history, e.g. climate actual/target temperature or light/switch on-off), on screen or as a downloadable PDF. Each change is annotated as caused by a Scheduler+ rule (naming the rule and schedule) or by something else, when Home Assistant's recorder/logbook have the history to tell. Independent of the main Scheduler+ card - add it to any dashboard on its own:
+
+```yaml
+type: custom:scheduler-plus-report-card
 ```
 
 ## Basic usage

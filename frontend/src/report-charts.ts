@@ -1,5 +1,5 @@
 /**
- * Pure render-data helpers for report-dialog.ts's on-screen chart/timeline,
+ * Pure render-data helpers for report-card.ts's on-screen chart/timeline,
  * mirroring day-view-dialog.ts's module-scope functions (dayPositionPct/
  * segmentForEvent) but generalized from one calendar day to an arbitrary
  * multi-day date range. No charting library involved - hand-rolled SVG/CSS,

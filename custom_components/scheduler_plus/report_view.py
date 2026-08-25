@@ -93,7 +93,7 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
     name = "api:scheduler_plus:report_pdf"
     # requires_auth defaults to True on HomeAssistantView. A plain same-tab
     # navigation/fetch to this URL is NOT enough on its own, despite the
-    # browser holding a valid HA session - the frontend (report-dialog.ts's
+    # browser holding a valid HA session - the frontend (report-card.ts's
     # _downloadPdf) explicitly sends the signed-in user's hass.auth access
     # token as a Bearer header, the same way the rest of Home Assistant's
     # own frontend authenticates its /api/* calls.
@@ -189,7 +189,7 @@ def _format_pdf_time(at: datetime) -> str:
 def _describe_attributes(domain: str, point: ReportPoint) -> str:
     """A domain-aware, human-readable summary of a point's tracked attributes.
 
-    Mirrors frontend/src/report-dialog.ts's describeAttributes exactly, so
+    Mirrors frontend/src/report-card.ts's describeAttributes exactly, so
     the PDF and the on-screen report never disagree about what a row means -
     see this module's own docstring for why the two must stay in sync. Raw
     "current_temperature=70, temperature=69" key=value text (the original
@@ -221,7 +221,7 @@ def _describe_attributes(domain: str, point: ReportPoint) -> str:
 # worth its own PDF row - as opposed to routine sensor noise (climate's
 # current_temperature drifting by a degree every few minutes) that's only
 # useful as a continuous line in the on-screen chart, not as a wall of
-# near-identical rows. Mirrors frontend/src/report-dialog.ts's
+# near-identical rows. Mirrors frontend/src/report-card.ts's
 # LIST_SIGNIFICANT_KEYS - see that constant's docstring for the full
 # reasoning. Nothing is filtered for light/switch: their only tracked
 # signal already is the meaningful thing.
