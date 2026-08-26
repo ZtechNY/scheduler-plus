@@ -127,6 +127,27 @@ function significantPoints(points: ReportPoint[], domain: string): ReportPoint[]
   return kept;
 }
 
+function groupPointsByDay(points: ReportPoint[]): Array<{ key: string; label: string; points: ReportPoint[] }> {
+  const groups = new Map<string, ReportPoint[]>();
+  for (const point of points) {
+    const date = new Date(point.at);
+    const key = localDateIso(date);
+    const group = groups.get(key) ?? [];
+    group.push(point);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].map(([key, grouped]) => ({
+    key,
+    label: new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(`${key}T12:00:00`)),
+    points: grouped,
+  }));
+}
+
 export interface SchedulerPlusReportCardConfig {
   type: string;
   title?: string;
@@ -329,13 +350,20 @@ export class SchedulerPlusReportCard extends LitElement {
                 ? html`<div class="hint">Truncated - too many changes to list them all.</div>`
                 : nothing}
               <ul class="points">
-                ${significantPoints(entity.points, entity.domain).map(
-                  (point) => html`
-                    <li class="point">
-                      <span class="point-time">${formatDateTime(point.at)}</span>
-                      <span class="point-state">${humanizeWord(point.state)}</span>
-                      <span class="point-details">${describeAttributes(entity.domain, point)}</span>
-                      <span class="point-source ${point.source}">${describeSource(point)}</span>
+                ${groupPointsByDay(significantPoints(entity.points, entity.domain)).map(
+                  (group) => html`
+                    <li class="day-group">
+                      <div class="day-header"><span>${group.label}</span><span>${group.points.length} changes</span></div>
+                      <ul class="day-points">
+                        ${group.points.map((point) => html`
+                          <li class="point">
+                            <span class="point-time">${formatDateTime(point.at)}</span>
+                            <span class="point-state">${humanizeWord(point.state)}</span>
+                            <span class="point-details">${describeAttributes(entity.domain, point)}</span>
+                            <span class="point-source ${point.source}">${describeSource(point)}</span>
+                          </li>
+                        `)}
+                      </ul>
                     </li>
                   `,
                 )}
@@ -693,6 +721,34 @@ export class SchedulerPlusReportCard extends LitElement {
       gap: 4px;
       max-height: 260px;
       overflow-y: auto;
+    }
+    .day-group {
+      margin: 2px 0 8px;
+    }
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 8px;
+      border-left: 4px solid var(--primary-color);
+      border-bottom: 1px solid var(--divider-color);
+      background: var(--secondary-background-color, rgba(0, 0, 0, 0.06));
+      color: var(--primary-text-color);
+      font-size: 0.82em;
+      font-weight: 700;
+    }
+    .day-header span:last-child {
+      color: var(--secondary-text-color);
+      font-size: 0.9em;
+      font-weight: 500;
+    }
+    ul.day-points {
+      list-style: none;
+      margin: 4px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
     .point {
       display: grid;
