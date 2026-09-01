@@ -9,7 +9,7 @@ import type {
   ScheduleInput,
   ScheduleTemplate,
 } from "./api";
-import { checkScheduleConflicts, createSchedule, updateSchedule } from "./api";
+import { checkScheduleConflicts, createSchedule, formatApiError, updateSchedule } from "./api";
 import { describeConflict, excludeConflictDate } from "./conflict-utils";
 import "./entity-multi-picker";
 import "./rule-editor-dialog";
@@ -302,7 +302,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       this._open = false;
       this.dispatchEvent(new CustomEvent("schedule-plus-saved"));
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      this._error = formatApiError(err);
     } finally {
       this._saving = false;
     }
@@ -342,7 +342,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         this._conflicts = conflicts;
       }
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      this._error = formatApiError(err);
     } finally {
       this._checkingConflicts = false;
     }
@@ -371,7 +371,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
         await this._persist(this._buildInput(this._name.trim()));
       }
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : String(err));
+      window.alert(formatApiError(err));
     }
   };
 

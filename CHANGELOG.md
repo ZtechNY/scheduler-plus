@@ -4,6 +4,17 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-09-01
+
+### Added
+
+- Report card: points are now grouped by day in the list, with a per-day header showing how many changes that day had.
+
+### Changed
+
+- Schedule create/update/delete and template creation no longer require Home Assistant administrator permission - any signed-in user can now manage schedules through the card.
+- Frontend error messages (schedule save/conflict-check failures) go through a shared formatter for more consistent, readable text.
+
 ## [0.3.0] - 2026-08-25
 
 ### Added

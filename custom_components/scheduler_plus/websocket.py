@@ -91,19 +91,6 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
     return entries[0] if entries else None
 
 
-def _require_admin(
-    connection: websocket_api.ActiveConnection, msg: dict[str, Any]
-) -> bool:
-    """Allow schedule mutations only to Home Assistant administrators."""
-    if connection.user.is_admin:
-        return True
-    connection.send_error(
-        msg["id"], websocket_api.ERR_UNAUTHORIZED,
-        "Administrator permission required",
-    )
-    return False
-
-
 def _get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
     """Return the coordinator for the single Scheduler+ config entry."""
     entry = _get_entry(hass)
@@ -381,8 +368,6 @@ async def websocket_create_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Create a new schedule."""
-    if not _require_admin(connection, msg):
-        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -420,8 +405,6 @@ async def websocket_update_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Replace an existing schedule's fields."""
-    if not _require_admin(connection, msg):
-        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -545,8 +528,6 @@ async def websocket_delete_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule."""
-    if not _require_admin(connection, msg):
-        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -886,8 +867,6 @@ async def websocket_create_template(
     websocket_create_schedule_from_template, which supplies those along
     with a fresh id for every rule.
     """
-    if not _require_admin(connection, msg):
-        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
@@ -915,8 +894,6 @@ async def websocket_delete_template(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule template."""
-    if not _require_admin(connection, msg):
-        return
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(

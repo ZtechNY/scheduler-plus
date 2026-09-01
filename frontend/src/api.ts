@@ -38,6 +38,19 @@ export interface HomeAssistant {
 
 const DOMAIN = "scheduler_plus";
 
+/** Convert Home Assistant websocket errors into a useful user-facing message. */
+export function formatApiError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    if (typeof value.message === "string") return value.message;
+    if (typeof value.error === "string") return value.error;
+    try { return JSON.stringify(error); } catch { /* fall through */ }
+  }
+  return String(error);
+}
+
 /** A rule as submitted to create/update_schedule: `id` is optional, filled in by the server for new rules. */
 export type RuleInput = Omit<Rule, "id"> & { id?: string };
 
