@@ -43,22 +43,18 @@ class ClimateDeviceHandler(DeviceHandler):
         action: dict[str, Any],
         context: Context | None = None,
     ) -> None:
-        """Set the climate entity's HVAC mode, and target temperature if provided."""
-        hvac_mode = action["hvac_mode"]
+        """Set the climate entity's HVAC mode, and target temperature if provided.
 
-        if "target_temperature" in action:
-            await hass.services.async_call(
-                CLIMATE_DOMAIN,
-                SERVICE_SET_TEMPERATURE,
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    ATTR_HVAC_MODE: hvac_mode,
-                    ATTR_TEMPERATURE: action["target_temperature"],
-                },
-                blocking=True,
-                context=context,
-            )
-            return
+        The mode is always set via its own SERVICE_SET_HVAC_MODE call rather
+        than bundling ATTR_HVAC_MODE into the SERVICE_SET_TEMPERATURE call.
+        HA core's climate component forwards SERVICE_SET_TEMPERATURE's data
+        as-is to the entity's own async_set_temperature(**kwargs) - whether
+        a bundled hvac_mode is honored is up to that integration, and many
+        silently ignore it. That previously meant a rule combining a new
+        hvac_mode with a target_temperature (e.g. "Cool" + 69°) could apply
+        the temperature while leaving the mode unchanged.
+        """
+        hvac_mode = action["hvac_mode"]
 
         await hass.services.async_call(
             CLIMATE_DOMAIN,
@@ -67,6 +63,18 @@ class ClimateDeviceHandler(DeviceHandler):
             blocking=True,
             context=context,
         )
+
+        if "target_temperature" in action:
+            await hass.services.async_call(
+                CLIMATE_DOMAIN,
+                SERVICE_SET_TEMPERATURE,
+                {
+                    ATTR_ENTITY_ID: entity_id,
+                    ATTR_TEMPERATURE: action["target_temperature"],
+                },
+                blocking=True,
+                context=context,
+            )
 
     async def async_turn_off(
         self, hass: HomeAssistant, entity_id: str, context: Context | None = None

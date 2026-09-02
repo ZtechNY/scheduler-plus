@@ -112,7 +112,12 @@ async def test_async_turn_on_passes_context_to_service_call(
     climate_handler: ClimateDeviceHandler,
     recorded_calls: list[ServiceCall],
 ) -> None:
-    """context= reaches the underlying set_temperature service call unchanged."""
+    """A target_temperature action issues both calls, context= reaching each unchanged.
+
+    set_hvac_mode is issued explicitly (rather than bundling hvac_mode into
+    set_temperature) so the mode switch takes effect even on integrations
+    whose async_set_temperature ignores a bundled hvac_mode kwarg.
+    """
     context = Context()
 
     await climate_handler.async_turn_on(
@@ -122,12 +127,17 @@ async def test_async_turn_on_passes_context_to_service_call(
         context=context,
     )
 
-    assert len(recorded_calls) == 1
-    call = recorded_calls[0]
-    assert call.context is context
-    assert call.data[ATTR_ENTITY_ID] == "climate.test"
-    assert call.data[ATTR_HVAC_MODE] == "heat"
-    assert call.data[ATTR_TEMPERATURE] == 69
+    assert len(recorded_calls) == 2
+    mode_call, temp_call = recorded_calls
+    assert mode_call.context is context
+    assert mode_call.data[ATTR_ENTITY_ID] == "climate.test"
+    assert mode_call.data[ATTR_HVAC_MODE] == "heat"
+    assert ATTR_TEMPERATURE not in mode_call.data
+
+    assert temp_call.context is context
+    assert temp_call.data[ATTR_ENTITY_ID] == "climate.test"
+    assert temp_call.data[ATTR_TEMPERATURE] == 69
+    assert ATTR_HVAC_MODE not in temp_call.data
 
 
 async def test_async_turn_on_without_temperature_uses_set_hvac_mode(
