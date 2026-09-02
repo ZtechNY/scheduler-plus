@@ -1884,9 +1884,9 @@ var X2=Object.defineProperty;var J2=Object.getOwnPropertyDescriptor;var r=(L,V,C
     }
   `,r([p({attribute:!1})],B.prototype,"hass",2),r([a()],B.prototype,"_open",2),r([a()],B.prototype,"_name",2),r([a()],B.prototype,"_saving",2),r([a()],B.prototype,"_error",2),B=r([x("scheduler-plus-template-editor")],B);var _5={weekday_days:["mon","tue","wed","thu","fri"],weekend_days:["sat","sun"],working_hours_start:"09:00",working_hours_end:"17:00",enable_brightness:!0,enable_fade_in:!0},M2=[{key:"fixed",label:K.fixed,makeSpec:()=>({provider:"fixed",params:{time:"06:00"}}),matches:L=>L.provider==="fixed"},{key:"sunrise",label:K.sunrise,makeSpec:()=>({provider:"sunrise",params:{offset_minutes:0}}),matches:L=>L.provider==="sunrise"},{key:"sunset",label:K.sunset,makeSpec:()=>({provider:"sunset",params:{offset_minutes:0}}),matches:L=>L.provider==="sunset"},...D2.map(L=>({key:`yidcal:${L}`,label:T1[L],makeSpec:()=>({provider:"yidcal",params:{zman:L,offset_minutes:0}}),matches:V=>V.provider==="yidcal"&&V.params.zman===L}))];function t1(L){let V=new Date(`${L}T00:00:00`);return Number.isNaN(V.getTime())?L:V.toLocaleDateString(void 0,{month:"short",day:"numeric",year:"numeric"})}var n=class extends m{constructor(){super(...arguments);this._open=!1;this._preferences=_5;this._deviceType="light";this._name="";this._enabled=!0;this._days=[];this._dateMode="always";this._dates=[];this._newDate="";this._dateRanges=[];this._newRangeStart="";this._newRangeEnd="";this._dayConditions=[];this._onTime={provider:"fixed",params:{time:"06:00"}};this._offTime={provider:"fixed",params:{time:"21:00"}};this._onEnabled=!0;this._offEnabled=!0;this._setBrightness=!1;this._brightnessPct=100;this._useTransition=!1;this._transitionSeconds=0;this._hvacMode="heat";this._useTargetTemperature=!1;this._targetTemperature=70;this._useSetback=!1;this._setbackHvacMode="heat";this._setbackTemperature=78;this._allowOverride=!0;this._overrideGraceMinutes=15;this._additionalActions=[];this._applyRuleTemplate=C=>{this._hydrateFromRule(C)};this._openTemplatePicker=()=>{this._templatePicker?.showDialog(this._deviceType,this._applyRuleTemplate)};this._closeDialog=()=>{this._open=!1};this._toggleDay=C=>{this._days=this._days.includes(C)?this._days.filter(H=>H!==C):[...this._days,C]};this._applyDayPreset=C=>{this._days=[...C]};this._applyAfterHoursPreset=()=>{this._days=[...b],this._onTime={provider:"fixed",params:{time:this._preferences.working_hours_end.slice(0,5)}},this._offTime={provider:"fixed",params:{time:this._preferences.working_hours_start.slice(0,5)}}};this._handleDateModeChange=C=>{let H=C.target.value;this._dateMode=H,H==="include"?this._days=[...b]:H==="always"&&(this._dates=[],this._dateRanges=[],this._dayConditions=[])};this._addDate=()=>{!this._newDate||this._dates.includes(this._newDate)||(this._dates=[...this._dates,this._newDate].sort(),this._newDate="")};this._removeDate=C=>{this._dates=this._dates.filter(H=>H!==C)};this._addDateRange=()=>{!this._newRangeStart||!this._newRangeEnd||this._newRangeStart>this._newRangeEnd||(this._dateRanges=[...this._dateRanges,[this._newRangeStart,this._newRangeEnd]],this._newRangeStart="",this._newRangeEnd="")};this._removeDateRange=C=>{this._dateRanges=this._dateRanges.filter(H=>H[0]!==C[0]||H[1]!==C[1])};this._toggleDayCondition=C=>{this._dayConditions=this._dayConditions.includes(C)?this._dayConditions.filter(H=>H!==C):[...this._dayConditions,C]};this._addAdditionalAction=()=>{this._additionalActions=[...this._additionalActions,{}]};this._removeAdditionalAction=C=>{this._additionalActions=this._additionalActions.filter((H,M)=>M!==C)};this._updateAdditionalAction=(C,H)=>{try{let M=JSON.parse(H);M&&typeof M=="object"&&!Array.isArray(M)&&(this._additionalActions=this._additionalActions.map((e,i)=>i===C?M:e))}catch{}};this._updateAdditionalActionField=(C,H,M)=>{this._additionalActions=this._additionalActions.map((e,i)=>i===C?{...e,[H]:M}:e)};this._save=()=>{let C=this._validate();if(C){this._error=C;return}this._onSave?.(this._buildRuleInput()),this._open=!1};this._openSaveAsTemplate=()=>{let C=this._validate();if(C){this._error=C;return}this._templateEditor?.showDialog(this._deviceType,[this._buildRuleInput()],"rule")}}showDialog(C){let{deviceType:H,rule:M,onSave:e}=C;this._deviceType=H,this._rule=M,this._onSave=e,this._loadPreferences(),this._hydrateFromRule(M),this._error=void 0,this._open=!0}_hydrateFromRule(C){if(this._name=C?.name??"",this._enabled=C?.enabled??!0,this._days=C?[...C.days]:[],this._dateMode=C?.date_mode??"always",this._dates=C?[...C.dates]:[],this._newDate="",this._dateRanges=C?C.date_ranges.map(([H,M])=>[H,M]):[],this._newRangeStart="",this._newRangeEnd="",this._dayConditions=C?[...C.day_conditions]:[],this._onTime=C?.on_time??{provider:"fixed",params:{time:"06:00"}},this._offTime=C?.off_time??{provider:"fixed",params:{time:"21:00"}},this._onEnabled=C?.on_enabled??!0,this._offEnabled=C?.off_enabled??!0,this._allowOverride=C?.allow_override??!0,this._overrideGraceMinutes=C?.override_grace_minutes??15,this._additionalActions=(C?.actions??[]).slice(1).map(H=>({...H})),this._deviceType==="light"||this._deviceType==="light_switch"){this._setBrightness=C?.action.brightness!==void 0;let H=C?.action.brightness??255;this._brightnessPct=Math.round(H/255*100),this._useTransition=C?.action.transition!==void 0,this._transitionSeconds=C?.action.transition??0}else this._deviceType==="climate"&&(this._hvacMode=C?.action.hvac_mode??"heat",this._useTargetTemperature=C?.action.target_temperature!==void 0,this._targetTemperature=C?.action.target_temperature??70,this._useSetback=!!C?.off_action,this._setbackHvacMode=C?.off_action?.hvac_mode??"heat",this._setbackTemperature=C?.off_action?.target_temperature??78)}async _loadPreferences(){try{this._preferences=await O1(this.hass)}catch{}}_summarizeDateFilter(){let C=[...this._dates.map(H=>t1(H)),...this._dateRanges.map(([H,M])=>`${t1(H)}\u2013${t1(M)}`),...this._dayConditions.map(H=>m1[H])];return this._dateMode==="include"?C.length===0?"Nothing selected yet - as configured, this rule will never run.":`Runs only when it's ${C.join(", ")} - the Days above are ignored.`:C.length===0?"Nothing excluded yet - this behaves the same as \u201CAlways\u201D.":`Runs on the Days above as usual, except when it's ${C.join(", ")}.`}_renderAdditionalAction(C,H){return this._deviceType==="climate"?t`
         <label class="field-label">HVAC mode</label>
-        <select class="native-select" .value=${String(C.hvac_mode??"heat")}
+        <select class="native-select"
           @change=${M=>this._updateAdditionalActionField(H,"hvac_mode",M.target.value)}>
-          ${w1.map(M=>t`<option value=${M}>${M1[M]}</option>`)}
+          ${w1.map(M=>t`<option value=${M} ?selected=${M===(C.hvac_mode??"heat")}>${M1[M]}</option>`)}
         </select>
         <label class="check-row">
           <input type="checkbox" .checked=${C.target_temperature!==void 0}
@@ -1977,10 +1977,9 @@ var X2=Object.defineProperty;var J2=Object.getOwnPropertyDescriptor;var r=(L,V,C
             <select
               id="date-mode"
               class="native-select"
-              .value=${this._dateMode}
               @change=${this._handleDateModeChange}
             >
-              ${B1.map(C=>t`<option value=${C}>${F2[C]}</option>`)}
+              ${B1.map(C=>t`<option value=${C} ?selected=${C===this._dateMode}>${F2[C]}</option>`)}
             </select>
 
             ${this._dateMode!=="always"?t`
@@ -2125,10 +2124,9 @@ var X2=Object.defineProperty;var J2=Object.getOwnPropertyDescriptor;var r=(L,V,C
               <div class="time-row">
                 <select
                   class="native-select"
-                  .value=${d}
                   @change=${A=>{let l=A.target.value,Z=M2.find(s=>s.key===l);Z&&M(Z.makeSpec())}}
                 >
-                  ${M2.map(A=>t`<option value=${A.key}>${A.label}</option>`)}
+                  ${M2.map(A=>t`<option value=${A.key} ?selected=${A.key===d}>${A.label}</option>`)}
                 </select>
                 ${H.provider==="fixed"?t`
                       <input
@@ -2202,10 +2200,9 @@ var X2=Object.defineProperty;var J2=Object.getOwnPropertyDescriptor;var r=(L,V,C
       <select
         id="hvac-mode"
         class="native-select"
-        .value=${this._hvacMode}
         @change=${C=>{this._hvacMode=C.target.value}}
       >
-        ${w1.map(C=>t`<option value=${C}>${M1[C]}</option>`)}
+        ${w1.map(C=>t`<option value=${C} ?selected=${C===this._hvacMode}>${M1[C]}</option>`)}
       </select>
 
       <ha-formfield label="Set target temperature">
@@ -2239,10 +2236,9 @@ var X2=Object.defineProperty;var J2=Object.getOwnPropertyDescriptor;var r=(L,V,C
             <select
               id="setback-hvac-mode"
               class="native-select"
-              .value=${this._setbackHvacMode}
               @change=${C=>{this._setbackHvacMode=C.target.value}}
             >
-              ${w1.map(C=>t`<option value=${C}>${M1[C]}</option>`)}
+              ${w1.map(C=>t`<option value=${C} ?selected=${C===this._setbackHvacMode}>${M1[C]}</option>`)}
             </select>
 
             <label class="field-label" for="setback-temperature">Setback temperature</label>

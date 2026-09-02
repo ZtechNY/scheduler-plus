@@ -398,9 +398,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
     if (this._deviceType === "climate") {
       return html`
         <label class="field-label">HVAC mode</label>
-        <select class="native-select" .value=${String(action.hvac_mode ?? "heat")}
+        <select class="native-select"
           @change=${(e: Event) => this._updateAdditionalActionField(index, "hvac_mode", (e.target as HTMLSelectElement).value)}>
-          ${CLIMATE_HVAC_MODES.map((mode) => html`<option value=${mode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`)}
+          ${CLIMATE_HVAC_MODES.map((mode) => html`<option value=${mode} ?selected=${mode === (action.hvac_mode ?? "heat")}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`)}
         </select>
         <label class="check-row">
           <input type="checkbox" .checked=${action.target_temperature !== undefined}
@@ -603,11 +603,11 @@ export class SchedulerPlusRuleEditor extends LitElement {
             <select
               id="date-mode"
               class="native-select"
-              .value=${this._dateMode}
               @change=${this._handleDateModeChange}
             >
               ${RULE_DATE_MODES.map(
-                (mode) => html`<option value=${mode}>${RULE_DATE_MODE_LABELS[mode]}</option>`,
+                (mode) =>
+                  html`<option value=${mode} ?selected=${mode === this._dateMode}>${RULE_DATE_MODE_LABELS[mode]}</option>`,
               )}
             </select>
 
@@ -798,7 +798,6 @@ export class SchedulerPlusRuleEditor extends LitElement {
               <div class="time-row">
                 <select
                   class="native-select"
-                  .value=${selectedKey}
                   @change=${(e: Event) => {
                     const key = (e.target as HTMLSelectElement).value;
                     const option = TIME_OPTIONS.find((o) => o.key === key);
@@ -808,7 +807,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
                   }}
                 >
                   ${TIME_OPTIONS.map(
-                    (option) => html`<option value=${option.key}>${option.label}</option>`,
+                    (option) =>
+                      html`<option value=${option.key} ?selected=${option.key === selectedKey}>${option.label}</option>`,
                   )}
                 </select>
                 ${spec.provider === "fixed"
@@ -933,13 +933,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
       <select
         id="hvac-mode"
         class="native-select"
-        .value=${this._hvacMode}
         @change=${(e: Event) => {
           this._hvacMode = (e.target as HTMLSelectElement).value;
         }}
       >
         ${CLIMATE_HVAC_MODES.map(
-          (mode) => html`<option value=${mode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`,
+          (mode) =>
+            html`<option value=${mode} ?selected=${mode === this._hvacMode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`,
         )}
       </select>
 
@@ -986,13 +986,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
             <select
               id="setback-hvac-mode"
               class="native-select"
-              .value=${this._setbackHvacMode}
               @change=${(e: Event) => {
                 this._setbackHvacMode = (e.target as HTMLSelectElement).value;
               }}
             >
               ${CLIMATE_HVAC_MODES.map(
-                (mode) => html`<option value=${mode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`,
+                (mode) =>
+                  html`<option value=${mode} ?selected=${mode === this._setbackHvacMode}>${CLIMATE_HVAC_MODE_LABELS[mode]}</option>`,
               )}
             </select>
 
