@@ -4,6 +4,12 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.4] - 2026-09-16
+
+### Fixed
+
+- Make override listener cleanup safe to repeat, preventing midnight refresh failures and missed next-day schedule runs after a rule turns off or is replaced.
+
 ## [0.3.1] - 2026-09-01
 
 ### Added

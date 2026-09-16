@@ -938,6 +938,8 @@ async def test_override_enforcement_teardown_disarms_it(
 
     teardown()
     assert "climate.test" not in engine._active_enforcement
+    # Midnight refresh/shutdown can call the saved teardown after off-time.
+    teardown()
 
     hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 75})
     await hass.async_block_till_done()
@@ -945,6 +947,28 @@ async def test_override_enforcement_teardown_disarms_it(
     await hass.async_block_till_done()
 
     assert fake_climate_handler.turn_on_calls == []
+
+
+async def test_stale_teardown_preserves_replacement_enforcement(
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+) -> None:
+    """Refreshing an old rule must not cancel its replacement's grace timer."""
+    rule = _make_climate_rule(allow_override=False, override_grace_minutes=1)
+    old_teardown = engine._arm_override_enforcement(
+        rule, "climate.test", fake_climate_handler, "Old schedule"
+    )
+    new_teardown = engine._arm_override_enforcement(
+        rule, "climate.test", fake_climate_handler, "New schedule"
+    )
+    hass.states.async_set("climate.test", "off")
+    await hass.async_block_till_done()
+    pending = engine._pending_reapply_at["climate.test"]
+
+    old_teardown()
+
+    assert engine._active_enforcement["climate.test"] is new_teardown
+    assert engine._pending_reapply_at["climate.test"] == pending
+    new_teardown()
 
 
 async def test_cancel_rule_tears_down_override_enforcement(

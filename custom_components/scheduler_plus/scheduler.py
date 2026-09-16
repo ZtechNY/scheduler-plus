@@ -1026,9 +1026,16 @@ class SchedulerEngine:
         unsub_state = async_track_state_change_event(
             self.hass, entity_id, _on_state_change
         )
+        torn_down = False
 
         @callback
         def _teardown() -> None:
+            nonlocal torn_down
+            # Off-time or a replacement rule can disarm this listener before
+            # the original rule's next refresh calls its saved teardown again.
+            if torn_down:
+                return
+            torn_down = True
             unsub_state()
             _cancel_pending_reapply()
             if self._active_enforcement.get(entity_id) is _teardown:
