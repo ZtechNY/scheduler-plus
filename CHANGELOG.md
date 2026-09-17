@@ -4,6 +4,16 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-09-17
+
+### Added
+
+- Home Assistant notifications for failed scheduled device actions, including schedule, rule, device, action, time, and error. Repeated failures update the same rule/device notification; notices remain until dismissed.
+
+### Fixed
+
+- Catch device action failures during scheduled runs, catch-up, and override reapplication so they are reported and do not interrupt dispatch to other devices.
+
 ## [0.3.4] - 2026-09-16
 
 ### Fixed

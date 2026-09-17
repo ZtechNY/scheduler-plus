@@ -18,6 +18,8 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import math
+from unittest.mock import AsyncMock, patch
+import asyncio
 
 import pytest
 from homeassistant.const import ATTR_TEMPERATURE
@@ -57,6 +59,61 @@ from custom_components.scheduler_plus.time_providers.fixed import FixedTimeProvi
 
 # A known Monday, used as a deterministic reference date throughout.
 _MONDAY = date(2024, 1, 1)
+
+
+@pytest.mark.parametrize("turning_on", [True, False])
+@pytest.mark.parametrize("error", [RuntimeError("Honeywell could not set system mode"), TimeoutError()])
+async def test_device_failure_notifies_and_allows_next_device(
+    engine: SchedulerEngine, turning_on: bool, error: Exception,
+) -> None:
+    """A failed action produces a useful notice and does not escape dispatch."""
+    handler = FakeDeviceHandler()
+    method = "async_turn_on" if turning_on else "async_turn_off"
+    rule = _make_rule()
+    with (
+        patch.object(handler, method, new=AsyncMock(side_effect=[error, None])),
+        patch("custom_components.scheduler_plus.scheduler.persistent_notification.async_create") as notify,
+    ):
+        for entity_id in ("light.failed", "light.healthy"):
+            if turning_on:
+                await engine._issue_turn_on(handler, entity_id, {}, rule=rule, schedule_name="Morning")
+            else:
+                await engine._issue_turn_off(handler, entity_id, rule=rule, schedule_name="Morning")
+        notify.assert_called_once()
+        message = notify.call_args.args[1]
+        assert "Morning" in message
+        assert rule.name in message
+        assert "light.failed" in message
+        assert (str(error) or "TimeoutError") in message
+        assert "Time:" in message
+
+
+async def test_repeated_failures_use_same_notification(engine: SchedulerEngine) -> None:
+    """Repeated failures update one notice; success does not hide the failure."""
+    handler = FakeDeviceHandler()
+    rule = _make_rule()
+    with (
+        patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=[TimeoutError(), TimeoutError(), None])),
+        patch("custom_components.scheduler_plus.scheduler.persistent_notification.async_create") as notify,
+        patch("custom_components.scheduler_plus.scheduler.persistent_notification.async_dismiss") as dismiss,
+    ):
+        for _ in range(3):
+            await engine._issue_turn_off(handler, "light.test", rule=rule, schedule_name="Morning")
+        assert notify.call_count == 2
+        assert notify.call_args_list[0].kwargs["notification_id"] == notify.call_args_list[1].kwargs["notification_id"]
+        dismiss.assert_not_called()
+
+
+async def test_action_cancellation_is_not_reported_as_failure(engine: SchedulerEngine) -> None:
+    """Integration shutdown must still be able to cancel a running action."""
+    handler = FakeDeviceHandler()
+    with (
+        patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=asyncio.CancelledError())),
+        patch("custom_components.scheduler_plus.scheduler.persistent_notification.async_create") as notify,
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await engine._issue_turn_off(handler, "light.test", rule=_make_rule(), schedule_name="Morning")
+    notify.assert_not_called()
 
 
 class UnresolvableTimeProvider(TimeProvider):

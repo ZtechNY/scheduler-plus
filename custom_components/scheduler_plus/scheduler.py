@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from homeassistant.components import persistent_notification
 from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant, callback
 from homeassistant.helpers.event import (
     EventStateChangedData,
@@ -836,10 +837,13 @@ class SchedulerEngine:
         self._fire_rule_triggered(
             entity_id, rule, schedule_name, turning_on=True, context=context
         )
-        for action_item in (rule.actions or [action]):
-            await device_handler.async_turn_on(
-                self.hass, entity_id, action_item, context=context
-            )
+        try:
+            for action_item in (rule.actions or [action]):
+                await device_handler.async_turn_on(
+                    self.hass, entity_id, action_item, context=context
+                )
+        except Exception as err:
+            self._notify_action_failure(entity_id, rule, schedule_name, "on", err)
 
     async def _issue_turn_off(
         self,
@@ -855,7 +859,44 @@ class SchedulerEngine:
         self._fire_rule_triggered(
             entity_id, rule, schedule_name, turning_on=False, context=context
         )
-        await device_handler.async_turn_off(self.hass, entity_id, context=context)
+        try:
+            await device_handler.async_turn_off(self.hass, entity_id, context=context)
+        except Exception as err:
+            self._notify_action_failure(entity_id, rule, schedule_name, "off", err)
+
+    def _notify_action_failure(
+        self,
+        entity_id: str,
+        rule: Rule,
+        schedule_name: str,
+        action: str,
+        error: Exception,
+    ) -> None:
+        """Keep a dismissible failure notice without interrupting other devices.
+
+        Repeated failures replace the same rule/device notice. Successful
+        calls do not dismiss it: users should still know a prior action failed.
+        Cancellation is deliberately not caught by the dispatch wrappers.
+        """
+        detail = str(error).strip() or type(error).__name__
+        _LOGGER.exception(
+            "Schedule '%s', rule '%s': %s action failed for %s: %s",
+            schedule_name, rule.name, action, entity_id, detail,
+        )
+        persistent_notification.async_create(
+            self.hass,
+            f"Schedule: {schedule_name}\n\n"
+            f"Rule: {rule.name}\n\n"
+            f"Device: {entity_id}\n\n"
+            f"Action: {action}\n\n"
+            f"Time: {dt_util.now().isoformat(timespec='seconds')}\n\n"
+            f"Error: {detail}\n\n"
+            "The device action did not complete successfully. "
+            "Check the device's current state. This notice records a past "
+            "failure and stays until you dismiss it.",
+            title="Scheduler+: device action failed",
+            notification_id=f"scheduler_plus_action_failed_{rule.id}_{entity_id}",
+        )
 
     def _fire_rule_triggered(
         self,
