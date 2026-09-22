@@ -1,3 +1,4 @@
+import "./modes-dashboard";
 import {
   mdiAccountClock,
   mdiCalendarClock,
@@ -134,6 +135,7 @@ function formatNextEvent(schedule: Schedule): string | undefined {
  * is active right now, so this only ever adds a badge for the exception.
  */
 function formatSeasonalStatus(schedule: Schedule): string | undefined {
+  if (schedule.mode_blocked) return "Not scheduled for today by its modes";
   if (schedule.active_now) {
     return undefined;
   }
@@ -390,39 +392,80 @@ export class SchedulerPlusCard extends LitElement {
     this._editor?.showDialogFromTemplate(e.detail.template);
   };
 
+  /**
+   * Which of the card's two faces is showing. The dashboard is rendered in
+   * place of the schedule list rather than alongside it and hidden: keeping
+   * it mounted would leave its 30-second poll running behind a card nobody
+   * is looking at. The list itself costs nothing to rebuild - its data
+   * lives on this element, not in the subtree.
+   */
+  @state() private _dashboard = false;
+
+  /** The Schedules / Modes switch in the card header. */
+  private _renderViewSwitch() {
+    return html`
+      <div class="switch" role="group" aria-label="Card view">
+        ${([[false, "Schedules"], [true, "Modes"]] as const).map(
+          ([dashboard, label]) => html`
+            <button
+              type="button"
+              class="switch-option"
+              aria-pressed=${this._dashboard === dashboard}
+              @click=${() => { this._dashboard = dashboard; }}
+            >
+              ${label}
+            </button>
+          `,
+        )}
+      </div>
+    `;
+  }
+
   protected override render() {
     return html`
       <ha-card>
         <div class="header">
           ${this._renderBrandMark()}
           <span>${this._config?.title ?? "Scheduler+"}</span>
-          <ha-icon-button
-            .path=${mdiAccountClock}
-            label="My preferences"
-            @click=${this._openPreferences}
-          ></ha-icon-button>
-          <ha-icon-button
-            .path=${mdiCalendarClock}
-            label="Day view"
-            @click=${this._openDayView}
-          ></ha-icon-button>
-          <ha-icon-button
-            .path=${mdiCalendarPlus}
-            label="Quick event"
-            @click=${this._openQuickEvent}
-          ></ha-icon-button>
-          <ha-icon-button
-            .path=${mdiViewGridPlusOutline}
-            label="From template"
-            @click=${this._openApplyTemplate}
-          ></ha-icon-button>
+          ${this._renderViewSwitch()}
+          ${this._dashboard
+            ? nothing
+            : html`
+                <ha-icon-button
+                  .path=${mdiAccountClock}
+                  label="My preferences"
+                  @click=${this._openPreferences}
+                ></ha-icon-button>
+                <ha-icon-button
+                  .path=${mdiCalendarClock}
+                  label="Day view"
+                  @click=${this._openDayView}
+                ></ha-icon-button>
+                <ha-icon-button
+                  .path=${mdiCalendarPlus}
+                  label="Quick event"
+                  @click=${this._openQuickEvent}
+                ></ha-icon-button>
+                <ha-icon-button
+                  .path=${mdiViewGridPlusOutline}
+                  label="From template"
+                  @click=${this._openApplyTemplate}
+                ></ha-icon-button>
+              `}
         </div>
-        <div class="content">${this._renderContent()}</div>
-        <div class="card-actions">
-          <button type="button" class="btn btn-primary" @click=${this._openAddDialog}>
-            Add schedule
-          </button>
-        </div>
+        ${this._dashboard
+          ? html`<scheduler-plus-dashboard-card
+              .hass=${this.hass}
+              .embedded=${true}
+            ></scheduler-plus-dashboard-card>`
+          : html`
+              <div class="content">${this._renderContent()}</div>
+              <div class="card-actions">
+                <button type="button" class="btn btn-primary" @click=${this._openAddDialog}>
+                  Add schedule
+                </button>
+              </div>
+            `}
       </ha-card>
       <scheduler-plus-schedule-editor
         .hass=${this.hass}
@@ -633,6 +676,26 @@ export class SchedulerPlusCard extends LitElement {
     }
     .header ha-icon-button:last-child {
       margin-right: -8px;
+    }
+    .switch {
+      display: flex;
+      flex: none;
+      border: 1px solid var(--divider-color);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .switch-option {
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 14px;
+      border: 0;
+      background: transparent;
+      color: var(--secondary-text-color);
+      cursor: pointer;
+    }
+    .switch-option[aria-pressed="true"] {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
     }
     .content {
       padding: 0 16px 16px;

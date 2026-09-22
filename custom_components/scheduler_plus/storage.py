@@ -35,6 +35,7 @@ class SchedulerPlusStoreData(TypedDict):
     never itself scheduled/dispatched.
     """
 
+    modes: list[dict[str, Any]]
     version: int
     schedules: list[dict[str, Any]]
     user_preferences: dict[str, dict[str, Any]]
@@ -48,6 +49,7 @@ def _default_data() -> SchedulerPlusStoreData:
         "schedules": [],
         "user_preferences": {},
         "templates": [],
+        "modes": [],
     }
 
 
@@ -72,6 +74,7 @@ class SchedulerPlusStore:
             return _default_data()
         data.setdefault("user_preferences", {})
         data.setdefault("templates", [])
+        data.setdefault("modes", [])
         return data
 
     async def async_save(self, data: SchedulerPlusStoreData) -> None:

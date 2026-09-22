@@ -1972,3 +1972,75 @@ def test_is_exclusion_fixable_include_with_day_conditions() -> None:
     )
 
     assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False
+
+async def test_mode_gates_live_execution_and_preview(engine, fake_device_handler):
+    """A Run assignment makes the schedule exclusive to that mode's dates."""
+    rule = _make_rule()
+    schedule = _make_schedule(rule)
+    engine._coordinator.data["modes"] = [{"weekdays": [], "dates": {}, "run_schedules": [schedule.id]}]
+    now = dt_util.as_local(datetime(2026, 7, 27, 12, tzinfo=dt_util.UTC))
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert not fake_device_handler.turn_on_calls
+    assert not await engine.async_get_day_events(schedule, now.date())
+    engine._coordinator.data["modes"][0]["dates"][now.date().isoformat()] = True
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert fake_device_handler.turn_on_calls
+    assert await engine.async_get_day_events(schedule, now.date())
+
+
+async def test_overnight_mode_keeps_next_morning_off(engine, fake_device_handler):
+    """Gating is by the occurrence's START date, so the off action survives.
+
+    This is the whole reason modes gate on the starting date rather than on
+    the date the action falls: a Tish that runs 20:00-05:00 must still shut
+    off at 5am, on a morning its mode is no longer on.
+    """
+    rule = _make_rule(on_time="20:00", off_time="05:00")
+    schedule = _make_schedule(rule)
+    now = dt_util.as_local(datetime(2026, 7, 28, 1, tzinfo=dt_util.UTC))
+    yesterday = (now - timedelta(days=1)).date()
+    engine._coordinator.data["modes"] = [{"weekdays": [], "dates": {yesterday.isoformat(): True}, "run_schedules": [schedule.id]}]
+    with patch.object(engine, "_schedule_turn_off", return_value=lambda: None) as off:
+        await engine._async_refresh_rule(schedule, rule, now)
+    assert fake_device_handler.turn_on_calls
+    off.assert_called_once()
+    assert off.call_args.args[2].date() == now.date()
+    assert not await engine.async_get_day_events(schedule, now.date())
+
+
+async def test_mode_skip_wins_over_a_run_assignment(engine, fake_device_handler):
+    """Two modes disagreeing about one schedule resolves to "don't run"."""
+    rule = _make_rule()
+    schedule = _make_schedule(rule)
+    now = dt_util.as_local(datetime(2026, 7, 27, 12, tzinfo=dt_util.UTC))
+    today = now.date().isoformat()
+    engine._coordinator.data["modes"] = [
+        {"weekdays": [], "dates": {today: True}, "run_schedules": [schedule.id]},
+        {"weekdays": [], "dates": {today: True}, "skip_schedules": [schedule.id]},
+    ]
+
+    await engine._async_refresh_rule(schedule, rule, now)
+
+    assert not fake_device_handler.turn_on_calls
+    assert not await engine.async_get_day_events(schedule, now.date())
+
+
+async def test_mode_blocked_schedule_is_not_reported_as_conflicting(engine):
+    """Schedules that can never run on the same day don't overlap.
+
+    Conflicts are previewed per checked date, so a mode that keeps one of
+    the pair off that day means there's nothing to warn about - see the
+    caveat the editor shows alongside the conflict list.
+    """
+    candidate = _make_schedule(_make_rule(id="candidate-rule"), id="candidate")
+    other = _make_schedule(_make_rule(id="other-rule"), id="other")
+    engine._coordinator.data["schedules"] = [other.to_dict()]
+    engine._coordinator.data["modes"] = [
+        {"weekdays": [], "dates": {}, "run_schedules": [other.id]}
+    ]
+
+    assert await engine.async_find_conflicts(candidate) == []
+
+    engine._coordinator.data["modes"] = []
+
+    assert await engine.async_find_conflicts(candidate)

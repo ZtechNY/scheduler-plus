@@ -27,11 +27,34 @@
     "binary_sensor": {
       "schedule_enabled": {
         "name": "Enabled"
+      },
+      "mode_active": {
+        "name": "Active today"
       }
     },
     "sensor": {
       "schedule_next_event": {
         "name": "Next event"
+      }
+    }
+  },
+  "services": {
+    "set_mode": {
+      "name": "Set mode",
+      "description": "Turns a Scheduler+ operating mode on or off for a single date, or releases that date back to the mode's weekly repeat.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "The name of the mode, as shown on the Scheduler+ dashboard."
+        },
+        "state": {
+          "name": "State",
+          "description": "On or Off pins the date; 'Follow the weekly repeat' removes a previously pinned date."
+        },
+        "date": {
+          "name": "Date",
+          "description": "The date to change. Defaults to today. A schedule is gated by the date its window starts on, so an event running past midnight belongs to the date it began."
+        }
       }
     }
   }

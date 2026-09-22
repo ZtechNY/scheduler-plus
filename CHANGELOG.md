@@ -4,6 +4,43 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-22
+
+### Added
+
+- Operating modes: name a kind of day ("No school", "Chasunah", "Friday night Tish"),
+  then set which schedules run only on those days and which are skipped. Modes repeat
+  weekly, are pinned to individual dates, or both, and gate a schedule by the date its
+  window starts on - so an event running past midnight keeps its morning off action.
+- An operations dashboard, reachable from the main card's header or as its own
+  **Scheduler+ Operations** card: day modes, live device states, and the next 24 hours
+  or seven days.
+- One `binary_sensor` per mode, on while that mode is on today, with attributes for
+  why it is on and which schedules it affects - so modes work in automations,
+  templates, and history, not just in the card.
+- `scheduler_plus.set_mode` service, to turn a mode on or off for a date (or release
+  that date back to the weekly repeat) from an automation, script, or dashboard button.
+  An unknown mode name fails the action rather than doing nothing.
+- The dashboard now names any schedule a mode change paused, instead of pausing it
+  silently.
+
+### Changed
+
+- A schedule's "resumes on" date accounts for operating modes as well as its seasonal
+  window, so it no longer promises a date a mode will block.
+- The schedule editor's overlap check ignores pairs of schedules that modes keep apart,
+  and says so alongside the results.
+- Suggested mode names are configurable per dashboard card (`mode_presets`).
+- The dashboard fetches only the days the selected outlook shows, and stops polling
+  while its tab is in the background.
+
+### Fixed
+
+- Mode date choices for dates that have passed are cleaned up rather than accumulating
+  in storage for the life of the install.
+- Saving a mode from a form left open no longer overwrites date toggles made in the
+  meantime; the save is rejected and asks you to reopen it.
+
 ## [0.3.5] - 2026-09-17
 
 ### Added

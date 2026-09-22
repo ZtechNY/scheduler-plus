@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Final
 
 import voluptuous as vol
 
@@ -42,6 +42,12 @@ from .const import (
 )
 from .coordinator import SchedulerPlusCoordinator
 from .models import Rule, RuleDateMode, Schedule, ScheduleTemplate, TemplateScope, Weekday
+from .modes import (
+    orphaned_run_schedules,
+    prune_dates,
+    revise,
+    with_date,
+)
 from .report import MAX_REPORT_ENTITIES, ReportError, ReportRangeError, async_build_report
 from .scheduler import ScheduleConflict, SchedulerEngine
 from .storage import SchedulerPlusStoreData
@@ -91,8 +97,14 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry | None:
     return entries[0] if entries else None
 
 
-def _get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
-    """Return the coordinator for the single Scheduler+ config entry."""
+def get_coordinator(hass: HomeAssistant) -> SchedulerPlusCoordinator | None:
+    """Return the coordinator for the single Scheduler+ config entry.
+
+    Public because services.py needs the same lookup: set_mode goes through
+    the same data and the same persist helper as the websocket commands,
+    so a mode toggled from an automation is indistinguishable from one
+    toggled on the card.
+    """
     entry = _get_entry(hass)
     return entry.runtime_data.coordinator if entry is not None else None
 
@@ -259,11 +271,25 @@ async def _async_persist(
     saved preferences or every saved template the next time any schedule
     was created, updated, or deleted.
     """
+    known = {raw["id"] for raw in schedules}
+    modes = []
+    for mode in coordinator.data.get("modes", []):
+        modes.append(
+            {
+                **mode,
+                "run_schedules": [
+                    sid for sid in mode.get("run_schedules", []) if sid in known
+                ],
+                "skip_schedules": [
+                    sid for sid in mode.get("skip_schedules", []) if sid in known
+                ],
+            }
+        )
+
     new_data: SchedulerPlusStoreData = {
-        "version": coordinator.data["version"],
+        **coordinator.data,
         "schedules": schedules,
-        "user_preferences": coordinator.data["user_preferences"],
-        "templates": coordinator.data["templates"],
+        "modes": prune_dates(modes, dt_util.now().date()),
     }
     coordinator.async_set_updated_data(new_data)
     await coordinator.async_save()
@@ -278,32 +304,106 @@ async def _async_persist_templates(
     `schedules` - `schedules`/`user_preferences` are carried over unchanged
     for the same reason _async_persist carries the other two over.
     """
-    new_data: SchedulerPlusStoreData = {
-        "version": coordinator.data["version"],
-        "schedules": coordinator.data["schedules"],
-        "user_preferences": coordinator.data["user_preferences"],
-        "templates": templates,
-    }
+    new_data: SchedulerPlusStoreData = {**coordinator.data, "templates": templates}
     coordinator.async_set_updated_data(new_data)
     await coordinator.async_save()
 
 
-def _next_active_date(schedule: Schedule, today: date) -> str | None:
-    """The soonest upcoming date `schedule`'s seasonal window turns active, if any.
+async def async_persist_modes(
+    coordinator: SchedulerPlusCoordinator,
+    modes: list[dict[str, Any]],
+    *,
+    schedules: list[dict[str, Any]] | None = None,
+) -> None:
+    """Replace the modes list (and optionally schedules), notify, and persist.
 
-    Only meaningful for RuleDateMode.INCLUDE (a window that's currently
-    "off" but has a known future start) - EXCLUDE's "active everywhere but
-    these ranges" doesn't have a single well-defined "next active" moment,
-    so this returns None for it, same as when the schedule is already
-    active or has no active_date_ranges at all.
+    Mirrors _async_persist for `modes`. `schedules` is only passed when a
+    mode change has to pause one (see _paused_by, below); everything else
+    in coordinator.data is carried over for the same reason the other
+    persist helpers carry their siblings over.
+
+    Past date choices are pruned on the way out - see modes.prune_dates.
     """
-    if schedule.active_date_mode is not RuleDateMode.INCLUDE:
+    new_data: SchedulerPlusStoreData = {
+        **coordinator.data,
+        "modes": prune_dates(modes, dt_util.now().date()),
+    }
+    if schedules is not None:
+        new_data["schedules"] = schedules
+    coordinator.async_set_updated_data(new_data)
+    await coordinator.async_save()
+
+
+def _paused_by(
+    coordinator: SchedulerPlusCoordinator,
+    before: list[dict[str, Any]],
+    after: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Pause every schedule the `before` -> `after` mode change orphaned.
+
+    Returns the (possibly unchanged) schedules list and the *names* of the
+    schedules that were paused, so the caller can tell the user what its
+    save just did to schedules it wasn't editing - an unannounced pause is
+    exactly the kind of thing someone only discovers at 6am.
+    """
+    orphaned = orphaned_run_schedules(before, after)
+    if not orphaned:
+        return coordinator.data["schedules"], []
+    schedules = [
+        {**raw, "enabled": False} if raw["id"] in orphaned and raw["enabled"] else raw
+        for raw in coordinator.data["schedules"]
+    ]
+    paused = [
+        raw["name"]
+        for raw in coordinator.data["schedules"]
+        if raw["id"] in orphaned and raw["enabled"]
+    ]
+    return schedules, paused
+
+
+# How far _next_active_date will walk forward before giving up. A mode's
+# weekly repeat resolves within 7 days and its date choices are explicit,
+# so anything this far out is a schedule that has no next active date
+# rather than one we just haven't found yet.
+_NEXT_ACTIVE_SCAN_DAYS: Final = 370
+
+
+def _next_active_date(
+    engine: SchedulerEngine, schedule: Schedule, today: date
+) -> str | None:
+    """The soonest upcoming date `schedule` can actually run, if any.
+
+    Combines the seasonal window (Schedule.is_active_on) with operating
+    modes, because either can hold a schedule back and the card shows a
+    single "resumes on" line for both - promising a resume date that a
+    mode will block is worse than showing nothing.
+
+    RuleDateMode.INCLUDE still supplies the starting point (a window
+    that's "off" now but has a known future start); EXCLUDE has no such
+    anchor, so its scan starts today. From there this walks forward day by
+    day - both checks are cheap dict/string comparisons, and the walk only
+    runs at all for a schedule that can't run today.
+    """
+    start = today
+    if not schedule.is_active_on(today):
+        if schedule.active_date_mode is RuleDateMode.INCLUDE:
+            today_str = today.isoformat()
+            upcoming = [
+                start_str
+                for start_str, end_str in schedule.active_date_ranges
+                if end_str >= today_str
+            ]
+            if not upcoming:
+                return None
+            start = max(today, date.fromisoformat(min(upcoming)))
+    elif engine.mode_allows(schedule.id, today):
         return None
-    if schedule.is_active_on(today):
-        return None
-    today_str = today.isoformat()
-    upcoming = [start for start, end in schedule.active_date_ranges if end >= today_str]
-    return min(upcoming) if upcoming else None
+
+    for offset in range(_NEXT_ACTIVE_SCAN_DAYS):
+        day = start + timedelta(days=offset)
+        if schedule.is_active_on(day) and engine.mode_allows(schedule.id, day):
+            return day.isoformat()
+    return None
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_schedules"})
@@ -347,8 +447,10 @@ async def websocket_list_schedules(
                 "next_event": next_event[0].isoformat() if next_event else None,
                 "next_event_action": next_event[1] if next_event else None,
                 "active_now": schedule.is_active_on(today)
-                and not schedule.is_overridden(today),
-                "next_active_date": _next_active_date(schedule, today),
+                and not schedule.is_overridden(today)
+                and engine.mode_allows(schedule.id, today),
+                "mode_blocked": not engine.mode_allows(schedule.id, today),
+                "next_active_date": _next_active_date(engine, schedule, today),
                 "override_pending_until": (
                     override_pending_until.isoformat() if override_pending_until else None
                 ),
@@ -368,7 +470,7 @@ async def websocket_create_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Create a new schedule."""
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -405,7 +507,7 @@ async def websocket_update_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Replace an existing schedule's fields."""
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -528,7 +630,7 @@ async def websocket_delete_schedule(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule."""
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -634,7 +736,7 @@ async def websocket_set_preferences(
     flow defaults (which remain the fallback for anyone who hasn't set
     their own).
     """
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -648,6 +750,7 @@ async def websocket_set_preferences(
         "working_hours_end": msg["working_hours_end"],
     }
     new_data: SchedulerPlusStoreData = {
+        **coordinator.data,
         "version": coordinator.data["version"],
         "schedules": coordinator.data["schedules"],
         "user_preferences": {
@@ -692,6 +795,7 @@ async def _collect_day_events(
                     "rule_id": rule.id,
                     "rule_name": rule.name,
                     "action": dict(rule.action),
+                    "off_action": rule.off_action,
                     "on_at": on_at.isoformat() if on_at else None,
                     "off_at": off_at.isoformat() if off_at else None,
                 }
@@ -867,7 +971,7 @@ async def websocket_create_template(
     websocket_create_schedule_from_template, which supplies those along
     with a fresh id for every rule.
     """
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -894,7 +998,7 @@ async def websocket_delete_template(
     msg: dict[str, Any],
 ) -> None:
     """Delete a schedule template."""
-    coordinator = _get_coordinator(hass)
+    coordinator = get_coordinator(hass)
     if coordinator is None:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
@@ -914,8 +1018,216 @@ async def websocket_delete_template(
     connection.send_result(msg["id"], {})
 
 
+def _mode_date(value: str) -> str:
+    """Normalize a "YYYY-MM-DD" string, rejecting non-dates like 2026-02-30."""
+    try:
+        return date.fromisoformat(value).isoformat()
+    except (ValueError, TypeError) as err:
+        raise vol.Invalid("Use a valid date") from err
+
+
+# Deliberately no "dates" field: individual date choices are made from the
+# dashboard's per-date toggles (set_mode_date), never as part of saving the
+# mode itself. Round-tripping them through the editor is what would let a
+# form opened five minutes ago write a stale set of dates back over a
+# toggle someone made in the meantime.
+_MODE_FIELDS = {
+    vol.Required("name"): vol.All(str, vol.Length(min=1, max=80)),
+    vol.Optional("weekdays", default=list): [vol.In([day.value for day in Weekday])],
+    vol.Optional("run_schedules", default=list): [str],
+    vol.Optional("skip_schedules", default=list): [str],
+}
+
+
+def _mode_payload(coordinator: SchedulerPlusCoordinator) -> dict[str, Any]:
+    """The list_modes result body, also echoed back from every mutation."""
+    return {
+        "modes": coordinator.data.get("modes", []),
+        "today": dt_util.now().date().isoformat(),
+        "timezone": str(dt_util.DEFAULT_TIME_ZONE),
+    }
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_modes"})
+@websocket_api.async_response
+async def websocket_list_modes(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return every operating mode, plus the server's idea of "today"."""
+    coordinator = get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+    connection.send_result(msg["id"], _mode_payload(coordinator))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/save_mode",
+        vol.Inclusive("mode_id", "existing"): str,
+        vol.Inclusive("rev", "existing"): int,
+        **_MODE_FIELDS,
+    }
+)
+@websocket_api.async_response
+async def websocket_save_mode(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Create a mode, or update an existing one the caller has actually seen.
+
+    Updating requires the `rev` the editor was opened with. A mismatch
+    means the mode changed underneath the open form - a date toggle, or
+    another browser - and is rejected rather than silently overwritten.
+    `mode_id` and `rev` are vol.Inclusive so an update can't skip the
+    check by omitting the field.
+    """
+    coordinator = get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    modes = coordinator.data.get("modes", [])
+    existing: dict[str, Any] | None = None
+    if "mode_id" in msg:
+        existing = next((m for m in modes if m["id"] == msg["mode_id"]), None)
+        if existing is None:
+            connection.send_error(
+                msg["id"], websocket_api.ERR_NOT_FOUND, "Mode no longer exists"
+            )
+            return
+        if existing.get("rev", 0) != msg["rev"]:
+            connection.send_error(
+                msg["id"],
+                "conflict",
+                f"\"{existing['name']}\" was changed somewhere else while this was "
+                "open. Close and reopen it to pick up the current settings.",
+            )
+            return
+
+    known = {raw["id"] for raw in coordinator.data["schedules"]}
+    run, skip = set(msg["run_schedules"]), set(msg["skip_schedules"])
+    if not (run | skip) <= known or run & skip or not msg["name"].strip():
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_INVALID_FORMAT,
+            "Choose existing schedules, with one action per schedule and a mode name",
+        )
+        return
+
+    base = existing if existing is not None else {"id": uuid.uuid4().hex, "dates": {}}
+    mode = revise(
+        base,
+        name=msg["name"].strip(),
+        weekdays=msg["weekdays"],
+        run_schedules=sorted(run),
+        skip_schedules=sorted(skip),
+    )
+    updated = (
+        [mode if m["id"] == mode["id"] else m for m in modes]
+        if existing is not None
+        else [*modes, mode]
+    )
+    schedules, paused = _paused_by(coordinator, modes, updated)
+    await async_persist_modes(coordinator, updated, schedules=schedules)
+    connection.send_result(
+        msg["id"],
+        {"mode": mode, "paused_schedules": paused, **_mode_payload(coordinator)},
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_mode_date",
+        vol.Required("mode_id"): str,
+        vol.Required("date"): _mode_date,
+        vol.Required("active"): vol.Any(bool, None),
+    }
+)
+@websocket_api.async_response
+async def websocket_set_mode_date(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Pin one date on/off for a mode, or release it to the weekly repeat.
+
+    Intentionally not revision-checked: this is a single toggle whose
+    current value the caller can see on screen, not a form that can go
+    stale, and rejecting it would only ever mean "press it again".
+    """
+    coordinator = get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    modes = coordinator.data.get("modes", [])
+    mode = next((m for m in modes if m["id"] == msg["mode_id"]), None)
+    if mode is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Mode no longer exists"
+        )
+        return
+
+    updated = with_date(mode, msg["date"], msg["active"])
+    await async_persist_modes(
+        coordinator, [updated if m["id"] == mode["id"] else m for m in modes]
+    )
+    connection.send_result(msg["id"], {"mode": updated, **_mode_payload(coordinator)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/delete_mode",
+        vol.Required("mode_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_delete_mode(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Delete a mode, pausing any schedule that only ran because of it."""
+    coordinator = get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Scheduler+ is not set up"
+        )
+        return
+
+    modes = coordinator.data.get("modes", [])
+    mode = next((m for m in modes if m["id"] == msg["mode_id"]), None)
+    if mode is None:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Mode no longer exists"
+        )
+        return
+
+    remaining = [m for m in modes if m["id"] != mode["id"]]
+    schedules, paused = _paused_by(coordinator, modes, remaining)
+    await async_persist_modes(coordinator, remaining, schedules=schedules)
+    connection.send_result(
+        msg["id"], {"paused_schedules": paused, **_mode_payload(coordinator)}
+    )
+
+
+
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register all Scheduler+ websocket commands."""
+    websocket_api.async_register_command(hass, websocket_delete_mode)
+    websocket_api.async_register_command(hass, websocket_list_modes)
+    websocket_api.async_register_command(hass, websocket_save_mode)
+    websocket_api.async_register_command(hass, websocket_set_mode_date)
     websocket_api.async_register_command(hass, websocket_list_schedules)
     websocket_api.async_register_command(hass, websocket_create_schedule)
     websocket_api.async_register_command(hass, websocket_update_schedule)

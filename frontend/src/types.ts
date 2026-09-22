@@ -235,9 +235,19 @@ export interface Schedule {
   active_date_ranges: [string, string][];
   /** Manager-triggered pause, "YYYY-MM-DD" (paused through and including this date) or null. */
   override_until: string | null;
-  /** Whether the schedule's seasonal window (if any) currently includes today - server-computed. */
+  /**
+   * Whether the schedule can run today at all: its seasonal window (if any)
+   * includes today, it isn't paused, and no operating mode is holding it
+   * back. Server-computed - see websocket_list_schedules.
+   */
   active_now: boolean;
-  /** Soonest upcoming date active_date_ranges turns the schedule on, if currently inactive. */
+  /** Set when operating modes specifically are what's holding it back today. */
+  mode_blocked?: boolean;
+  /**
+   * Soonest upcoming date the schedule can actually run, if it can't today -
+   * accounts for both active_date_ranges and modes, so it never promises a
+   * resume date a mode will block.
+   */
   next_active_date: string | null;
   /**
    * When a manual change to one of this schedule's entities, made during a

@@ -38,6 +38,69 @@ export interface HomeAssistant {
 
 const DOMAIN = "scheduler_plus";
 
+/** A date-based operating mode - see custom_components/scheduler_plus/modes.py. */
+export interface OperatingMode {
+  id: string;
+  name: string;
+  weekdays: Weekday[];
+  /** Per-date choices, overriding `weekdays`. Only ever written via setModeDate. */
+  dates: Record<string, boolean>;
+  run_schedules: string[];
+  skip_schedules: string[];
+  /**
+   * Bumped by the backend on every write. saveMode sends back the `rev` the
+   * editor was opened with, so a form left open can't overwrite a date
+   * toggle that landed in the meantime - the save is rejected instead.
+   */
+  rev: number;
+}
+
+/** The body every mode command answers with, so one round trip refreshes the lot. */
+export interface ModesResult {
+  modes: OperatingMode[];
+  /** "Today" in the Home Assistant timezone, not the browser's. */
+  today: string;
+  timezone: string;
+}
+
+/** Names of schedules a mode write just paused - see ModesResult and _paused_by. */
+export interface ModeWriteResult extends ModesResult {
+  paused_schedules: string[];
+}
+
+export function fetchModes(hass: HomeAssistant) {
+  return hass.callWS<ModesResult>({ type: `${DOMAIN}/list_modes` });
+}
+
+/**
+ * Creates or updates a mode. `dates` is deliberately not sent: date choices
+ * belong to setModeDate, and round-tripping them through the editor is what
+ * would let a stale form clobber them.
+ */
+export function saveMode(hass: HomeAssistant, mode: OperatingMode) {
+  return hass.callWS<ModeWriteResult>({
+    type: `${DOMAIN}/save_mode`,
+    name: mode.name,
+    weekdays: mode.weekdays,
+    run_schedules: mode.run_schedules,
+    skip_schedules: mode.skip_schedules,
+    ...(mode.id ? { mode_id: mode.id, rev: mode.rev } : {}),
+  });
+}
+
+export function deleteMode(hass: HomeAssistant, id: string) {
+  return hass.callWS<ModeWriteResult>({ type: `${DOMAIN}/delete_mode`, mode_id: id });
+}
+
+export function setModeDate(hass: HomeAssistant, id: string, date: string, active: boolean | null) {
+  return hass.callWS<ModesResult & { mode: OperatingMode }>({
+    type: `${DOMAIN}/set_mode_date`,
+    mode_id: id,
+    date,
+    active,
+  });
+}
+
 /** Convert Home Assistant websocket errors into a useful user-facing message. */
 export function formatApiError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -178,6 +241,7 @@ export interface DayScheduleEvent {
   rule_id: string;
   rule_name: string;
   action: Action;
+  off_action?: Action | null;
   on_at: string | null;
   off_at: string | null;
 }

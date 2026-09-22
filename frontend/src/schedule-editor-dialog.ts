@@ -309,6 +309,12 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   }
 
   /**
+   * Conflicts are previewed against the operating modes in force on each
+   * checked date, so two schedules that can never run on the same day are
+   * not reported as overlapping. The flip side is that this is a snapshot:
+   * switching a mode on afterwards can surface an overlap this pass ruled
+   * out, which is what the caveat under the conflict list says.
+   *
    * Always re-checks for cross-schedule conflicts before saving - unlike
    * _saveAnyway (an explicit, one-time bypass a manager clicks only after
    * already seeing the warning), this button re-runs the check on every
@@ -530,6 +536,10 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             `,
           )}
         </ul>
+        <span class="hint">
+          Checked against the modes that are on for each date today. Turning a
+          mode on later can bring back an overlap that isn't listed here.
+        </span>
         <button type="button" class="btn" @click=${this._saveAnyway}>Save anyway</button>
       </div>
     `;

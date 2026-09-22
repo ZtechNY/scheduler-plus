@@ -34,6 +34,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
+from .modes import schedule_allowed
 from .const import DeviceType, EVENT_RULE_TRIGGERED
 from .coordinator import SchedulerPlusCoordinator
 from .day_conditions import DEFAULT_DAY_CONDITIONS, DayConditionRegistry
@@ -211,7 +212,7 @@ class SchedulerEngine:
                 continue
 
             for reference_date in self._candidate_dates(rule, now):
-                if not schedule.is_active_on(reference_date):
+                if not schedule.is_active_on(reference_date) or not self.mode_allows(schedule.id, reference_date):
                     continue
                 occurrence = await self._async_resolve_occurrence(
                     rule, reference_date
@@ -232,6 +233,10 @@ class SchedulerEngine:
                         soonest = (when, label)
 
         return soonest
+
+    def mode_allows(self, schedule_id: str, day: date) -> bool:
+        """Whether modes allow an occurrence starting on this date."""
+        return schedule_allowed(self._coordinator.data.get("modes", []), schedule_id, day)
 
     def pending_override_revert_at(self, entity_ids: Sequence[str]) -> datetime | None:
         """Soonest pending override-reapply time among `entity_ids`, if any.
@@ -267,6 +272,7 @@ class SchedulerEngine:
         """
         if (
             not schedule.enabled
+            or not self.mode_allows(schedule.id, reference_date)
             or not schedule.is_active_on(reference_date)
             or schedule.is_overridden(reference_date)
         ):
@@ -348,7 +354,7 @@ class SchedulerEngine:
             ):
                 if not candidate.is_active_on(
                     check_date
-                ) or candidate.is_overridden(check_date):
+                ) or candidate.is_overridden(check_date) or not self.mode_allows(candidate.id, check_date):
                     continue
                 candidate_occurrence = await self._async_resolve_occurrence(
                     candidate_rule, check_date
@@ -364,7 +370,7 @@ class SchedulerEngine:
                 for other in relevant_others:
                     if not other.is_active_on(
                         check_date
-                    ) or other.is_overridden(check_date):
+                    ) or other.is_overridden(check_date) or not self.mode_allows(other.id, check_date):
                         continue
                     entity_ids = tuple(
                         sorted(candidate_entities & set(other.entities))
@@ -660,7 +666,7 @@ class SchedulerEngine:
         both_enabled = rule.on_enabled and rule.off_enabled
         for days_ago in (1, 0) if both_enabled else (0,):
             reference_date = (now - timedelta(days=days_ago)).date()
-            if not schedule.is_active_on(reference_date):
+            if not schedule.is_active_on(reference_date) or not self.mode_allows(schedule.id, reference_date):
                 continue
             occurrence = await self._async_resolve_occurrence(rule, reference_date)
             if occurrence is None:
