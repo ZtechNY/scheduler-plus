@@ -425,12 +425,15 @@ export class SchedulerPlusCard extends LitElement {
     return html`
       <ha-card>
         <div class="header">
-          ${this._renderBrandMark()}
-          <span>${this._config?.title ?? "Scheduler+"}</span>
-          ${this._renderViewSwitch()}
+          <div class="header-title">
+            ${this._renderBrandMark()}
+            <span>${this._config?.title ?? "Scheduler+"}</span>
+          </div>
+          <div class="header-view">${this._renderViewSwitch()}</div>
           ${this._dashboard
             ? nothing
             : html`
+                <div class="header-actions">
                 <ha-icon-button
                   .path=${mdiAccountClock}
                   label="My preferences"
@@ -451,6 +454,7 @@ export class SchedulerPlusCard extends LitElement {
                   label="From template"
                   @click=${this._openApplyTemplate}
                 ></ha-icon-button>
+                </div>
               `}
         </div>
         ${this._dashboard
@@ -653,28 +657,49 @@ export class SchedulerPlusCard extends LitElement {
 
   static override styles = css`
     .header {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 10px;
       padding: 16px 16px 0;
+    }
+    .header-title {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     .brand-mark {
       width: 28px;
       height: 28px;
       flex: none;
     }
-    .header span {
+    .header-title span {
       flex: 1;
       min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-size: 1.5rem;
       font-weight: 500;
       line-height: 1.2;
       color: var(--ha-card-header-color, var(--primary-text-color));
     }
-    .header ha-icon-button {
+    .header-view {
+      justify-self: end;
+    }
+    .header-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+    .header-actions ha-icon-button {
       flex: none;
     }
-    .header ha-icon-button:last-child {
+    .header-actions ha-icon-button:last-child {
       margin-right: -8px;
     }
     .switch {
@@ -696,6 +721,17 @@ export class SchedulerPlusCard extends LitElement {
     .switch-option[aria-pressed="true"] {
       background: var(--primary-color);
       color: var(--text-primary-color, #fff);
+    }
+    @media (max-width: 430px) {
+      .header {
+        grid-template-columns: 1fr;
+      }
+      .header-view {
+        justify-self: start;
+      }
+      .header-actions {
+        justify-content: flex-start;
+      }
     }
     .content {
       padding: 0 16px 16px;
