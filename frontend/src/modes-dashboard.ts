@@ -25,6 +25,7 @@ const DEFAULT_MODE_PRESETS = [
 
 /** How often the outlook re-polls, while the tab is actually visible. */
 const REFRESH_MS = 30000;
+const MODE_SCHEDULE_PAGE_SIZE = 8;
 
 interface DashboardConfig {
   type?: string;
@@ -108,6 +109,8 @@ export class SchedulerPlusDashboard extends LitElement {
   @state() private _busy = false;
   @state() private _loaded = false;
   @state() private _editing: OperatingMode | null = null;
+  @state() private _scheduleSearch = "";
+  @state() private _showAllSchedules = false;
   private _timer?: ReturnType<typeof setInterval>;
   private _loading = false;
   /**
@@ -237,6 +240,8 @@ export class SchedulerPlusDashboard extends LitElement {
   }
   private _edit(mode: OperatingMode) {
     this._editing = structuredClone(mode);
+    this._scheduleSearch = "";
+    this._showAllSchedules = false;
     void this.updateComplete.then(() => this.renderRoot.querySelector(".editor")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
   private _effect(id: string, value: string) {
@@ -249,9 +254,22 @@ export class SchedulerPlusDashboard extends LitElement {
   private _time(value: string) {
     return new Date(value).toLocaleString(undefined, { timeZone: this._timezone, weekday: "short", hour: "numeric", minute: "2-digit" });
   }
+  private _modeScheduleMatches(mode: OperatingMode): Schedule[] {
+    const query = this._scheduleSearch.trim().toLocaleLowerCase();
+    const matches = this._schedules.filter(schedule => {
+      if (!query) return true;
+      const details = modeScheduleDetails(schedule);
+      return [schedule.name, details.type, ...schedule.entities].some(value => value.toLocaleLowerCase().includes(query));
+    });
+    if (this._showAllSchedules || query) return matches;
+    const selected = matches.filter(schedule => mode.run_schedules.includes(schedule.id) || mode.skip_schedules.includes(schedule.id));
+    return [...new Map([...matches.slice(0, MODE_SCHEDULE_PAGE_SIZE), ...selected].map(schedule => [schedule.id, schedule])).values()];
+  }
   private _editor() {
     const m = this._editing;
     if (!m) return nothing;
+    const modeSchedules = this._modeScheduleMatches(m);
+    const hasMoreSchedules = !this._scheduleSearch.trim() && !this._showAllSchedules && this._schedules.length > modeSchedules.length;
     return html`<section class="editor" aria-label="Configure mode">
       <h2>${m.id ? "Configure mode" : "Create a mode"}</h2>
       <label>Mode name<input maxlength="80" .value=${m.name} @input=${(e: Event) => this._editing = { ...m, name: (e.target as HTMLInputElement).value }} placeholder="e.g. No school"></label>
@@ -259,8 +277,8 @@ export class SchedulerPlusDashboard extends LitElement {
       <div class="days">${WEEKDAYS.map(day => html`<label><input type="checkbox" .checked=${m.weekdays.includes(day)} @change=${(e: Event) => this._editing = { ...m, weekdays: (e.target as HTMLInputElement).checked ? [...m.weekdays, day] : m.weekdays.filter(d => d !== day) }}>${WEEKDAY_LABELS[day].slice(0, 3)}</label>`)}</div>
       <h3>Mode includes</h3>
       <p>Build each device action as a schedule in the Schedules view, then include it here. Lights and climate can have different actions and timing: one can turn on once while another starts heating or cooling at its own fixed, sunrise, sunset, or preset system time.</p>
-      ${this._schedules.length ? html`<div class="schedule-reference"><b>Available device actions</b>${this._schedules.map(s => { const details = modeScheduleDetails(s); return html`<div class="schedule-reference-row"><span><b>${s.name}</b><small><span class="device-chip">${details.type}</span> · ${details.deviceCount} · ${details.onAction} → ${details.offAction} · ${details.timing}</small></span></div>`; })}</div>` : nothing}
-      ${!this._schedules.length ? html`<p>Create schedules in the main Scheduler+ card first, then assign them here.</p>` : this._schedules.map(s => html`<label class="assignment"><span>${s.name}${!s.enabled ? " (paused)" : ""}<small>${s.rules.length} rules · ${s.entities.length} devices</small></span><select .value=${m.run_schedules.includes(s.id) ? "run" : m.skip_schedules.includes(s.id) ? "skip" : "none"} @change=${(e: Event) => this._effect(s.id, (e.target as HTMLSelectElement).value)}><option value="none">Not included</option><option value="run">Include when on</option><option value="skip">Skip when on</option></select></label>`)}
+      ${this._schedules.length ? html`<div class="schedule-tools"><input type="search" placeholder="Search actions, devices, or type" aria-label="Search device actions" .value=${this._scheduleSearch} @input=${(e: Event) => { this._scheduleSearch = (e.target as HTMLInputElement).value; this._showAllSchedules = false; }} />${hasMoreSchedules ? html`<button type="button" @click=${() => this._showAllSchedules = true}>Show all ${this._schedules.length}</button>` : nothing}</div><p class="schedule-count">${this._scheduleSearch.trim() ? `${modeSchedules.length} matching actions` : `Showing ${modeSchedules.length} of ${this._schedules.length} actions`}</p><div class="schedule-reference"><b>Available device actions</b>${modeSchedules.map(s => { const details = modeScheduleDetails(s); return html`<div class="schedule-reference-row"><span><b>${s.name}</b><small><span class="device-chip">${details.type}</span> · ${details.deviceCount} · ${details.onAction} → ${details.offAction} · ${details.timing}</small></span></div>`; })}</div>` : nothing}
+      ${!this._schedules.length ? html`<p>Create schedules in the main Scheduler+ card first, then assign them here.</p>` : modeSchedules.map(s => html`<label class="assignment"><span>${s.name}${!s.enabled ? " (paused)" : ""}<small>${s.rules.length} rules · ${s.entities.length} devices</small></span><select .value=${m.run_schedules.includes(s.id) ? "run" : m.skip_schedules.includes(s.id) ? "skip" : "none"} @change=${(e: Event) => this._effect(s.id, (e.target as HTMLSelectElement).value)}><option value="none">Not included</option><option value="run">Include when on</option><option value="skip">Skip when on</option></select></label>`)}
       <p class="note">Changing today's mode recalculates schedules immediately and can start an active rule. Skipping cancels its remaining actions; it does not turn devices off. Use a replacement schedule for an early shutdown. Removing a schedule's last “Run” assignment pauses that schedule. Individual dates are set from the toggles above, not here - this form never overwrites them.</p>
       <div class="row"><button class="primary" ?disabled=${this._busy || !m.name.trim()} @click=${() => this._write(() => saveMode(this.hass!, m))}>${this._busy ? "Saving…" : "Save mode"}</button><button ?disabled=${this._busy} @click=${() => this._editing = null}>Cancel</button>${m.id ? html`<button ?disabled=${this._busy} @click=${() => { if (confirm("Delete this mode? Its exclusive schedules will be paused. Regular schedules it skipped will resume.")) void this._write(() => deleteMode(this.hass!, m.id)); }}>Delete mode</button>` : nothing}</div>
     </section>`;
@@ -298,7 +316,7 @@ export class SchedulerPlusDashboard extends LitElement {
     return this.embedded ? body : html`<ha-card>${body}</ha-card>`;
   }
   static override styles = css`
-    .schedule-reference{margin:14px 0 18px;padding:12px;border:1px solid var(--divider-color,#dce4e4);border-radius:10px;background:rgba(127,127,127,.04);font-size:12px}.schedule-reference-row{padding:9px 0;border-top:1px solid var(--divider-color,#e7ecec)}.schedule-reference-row:first-of-type{margin-top:8px}.schedule-reference small{font-size:11px;line-height:1.5}.device-chip{color:var(--primary-color);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+    .schedule-reference{margin:14px 0 18px;padding:12px;border:1px solid var(--divider-color,#dce4e4);border-radius:10px;background:rgba(127,127,127,.04);font-size:12px}.schedule-reference-row{padding:9px 0;border-top:1px solid var(--divider-color,#e7ecec)}.schedule-reference-row:first-of-type{margin-top:8px}.schedule-reference small{font-size:11px;line-height:1.5}.schedule-tools{display:flex;gap:8px;align-items:center;margin-top:16px}.schedule-tools input{flex:1;min-width:0}.schedule-count{font-size:11px;margin:7px 0;color:var(--secondary-text-color)}.device-chip{color:var(--primary-color);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
     :host{display:block;color:var(--primary-text-color);font-family:inherit}ha-card{overflow:hidden;background:var(--card-background-color,#fff)}header{padding:28px;background:linear-gradient(120deg,rgba(16,145,132,.15),rgba(57,120,201,.08))}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:700;color:var(--primary-color,#087f73)}h1{font-size:28px;margin:10px 0}h2{font-size:19px;margin:0 0 6px}h3{font-size:15px;margin:0}p{font-size:13px;color:var(--secondary-text-color);line-height:1.6;margin:6px 0 14px}section{padding:22px;border-top:1px solid var(--divider-color,#e7ecec)}.stats{display:grid;grid-template-columns:repeat(3,1fr);padding:22px;gap:12px}.stats div{display:flex;flex-direction:column;gap:6px}.stats strong{font-size:28px}.stats span,small{font-size:12px;color:var(--secondary-text-color)}small{display:block;margin-top:5px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.spread{justify-content:space-between}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:16px}.mode{padding:17px;border:1px solid var(--divider-color,#dce4e4);border-radius:14px}.mode.on{border-color:#169c89;background:rgba(16,145,132,.07)}.mode p{margin:12px 0 4px}.toggle{min-width:58px;border-radius:30px;font-weight:bold}.on .toggle,.primary{background:var(--primary-color,#087f73);color:var(--text-primary-color,#fff);border-color:transparent}.text{border:0;background:transparent;padding:9px 0;color:var(--primary-color,#087f73);font-size:12px}.empty{padding:22px;border:1px dashed var(--divider-color,#cad5d5);border-radius:12px;margin-top:16px;color:var(--secondary-text-color)}button,input,select{font:inherit;border:1px solid var(--divider-color,#cbd5d5);border-radius:8px;padding:9px 12px;color:var(--primary-text-color);background:var(--card-background-color,#fff)}button{cursor:pointer;font-size:13px}button:disabled{opacity:.5;cursor:wait}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}label{font-size:13px;display:flex;gap:8px;align-items:center}input[type=text]{min-width:160px}.editor{background:rgba(16,145,132,.04)}.editor>label{margin:16px 0}.days{display:flex;flex-wrap:wrap;gap:14px;margin:16px 0 24px}.assignment{display:flex;justify-content:space-between;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--divider-color,#ddd)}.note{font-size:12px;margin-top:16px}.event{display:flex;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--divider-color,#eee);font-size:13px}.event>div{flex:1}.event time{min-width:100px;color:var(--secondary-text-color);font-size:12px}.badge{border-radius:8px;padding:6px 10px;background:rgba(16,145,132,.1);max-width:130px}.day{margin-top:22px;color:var(--primary-color)}.dot{width:8px;height:8px;border-radius:50%;background:#169c89}.device{display:flex;justify-content:space-between;gap:12px;padding:12px;background:rgba(127,127,127,.06);border-radius:8px;font-size:13px}:host([embedded]) section:first-of-type{border-top:0}.banner{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:16px;font-size:13px;line-height:1.5}.banner button{flex:none}.error{background:rgba(220,50,50,.12)}.notice{background:rgba(16,145,132,.12)}.pad{padding:22px}@media(max-width:480px){header,section{padding:16px}h1{font-size:24px}.event{gap:8px}.event time{min-width:80px}.stats span{font-size:11px}.assignment select{width:100%}}
   `;
 }
