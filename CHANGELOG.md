@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-10-16
+
+### Added
+
+- Time plans with exact minute-based on/off durations inside a scheduled window.
+- Manual light auto-off timers that turn off a manually activated light after a configurable delay.
+
 ## [0.4.2] - 2026-10-05
 
 ### Changed

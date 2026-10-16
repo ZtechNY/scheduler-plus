@@ -83,6 +83,15 @@ def _validate_time_enabled(value: dict[str, Any]) -> dict[str, Any]:
     """
     if not value.get("on_enabled", True) and not value.get("off_enabled", True):
         raise vol.Invalid("At least one of on_enabled or off_enabled must be true")
+    time_plan = value.get("time_plan") or {}
+    if time_plan.get("enabled") and (
+        not value.get("on_enabled", True) or not value.get("off_enabled", True)
+    ):
+        raise vol.Invalid("A Time plan requires both On time and Off time")
+    if value.get("manual_auto_off_minutes") is not None and (
+        not value.get("on_enabled", True) or not value.get("off_enabled", True)
+    ):
+        raise vol.Invalid("Manual auto-off requires both On time and Off time")
     return value
 
 
@@ -151,6 +160,23 @@ _RULE_SCHEMA = vol.All(
             vol.Optional("action", default=dict): dict,
             vol.Optional("actions", default=None): vol.Any(None, [dict]),
             vol.Optional("off_action", default=None): vol.Any(None, dict),
+            vol.Optional("time_plan", default=None): vol.Any(
+                None,
+                vol.Schema(
+                    {
+                        vol.Optional("enabled", default=False): bool,
+                        vol.Optional("on_minutes", default=60): vol.All(
+                            vol.Coerce(int), vol.Range(min=1)
+                        ),
+                        vol.Optional("off_minutes", default=60): vol.All(
+                            vol.Coerce(int), vol.Range(min=1)
+                        ),
+                    }
+                ),
+            ),
+            vol.Optional("manual_auto_off_minutes", default=None): vol.Any(
+                None, vol.All(vol.Coerce(int), vol.Range(min=1, max=1440))
+            ),
         }
     ),
     _validate_time_enabled,

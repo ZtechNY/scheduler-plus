@@ -70,6 +70,23 @@ def test_rule_round_trip_on_only() -> None:
     assert restored.off_enabled is False
 
 
+def test_rule_round_trip_with_time_plan_and_manual_auto_off() -> None:
+    """Minute-based Time plan settings survive persistence unchanged."""
+    rule = Rule(
+        id="rule-1",
+        name="Night lights",
+        days=frozenset(Weekday),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "20:44"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "00:16"}),
+        time_plan={"enabled": True, "on_minutes": 32, "off_minutes": 17},
+        manual_auto_off_minutes=10,
+    )
+
+    restored = Rule.from_dict(rule.to_dict())
+
+    assert restored == rule
+
+
 def test_rule_from_dict_defaults_on_off_enabled_for_legacy_data() -> None:
     """A stored rule from before this field existed loads as both enabled."""
     legacy_data = {

@@ -143,6 +143,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _offEnabled = true;
 
+  @state() private _timePlanEnabled = false;
+
+  @state() private _timePlanOnMinutes = 60;
+
+  @state() private _timePlanOffMinutes = 60;
+
+  @state() private _manualAutoOffMinutes: number | null = null;
+
   @state() private _setBrightness = false;
 
   @state() private _brightnessPct = 100;
@@ -220,6 +228,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._offTime = rule?.off_time ?? { provider: "fixed", params: { time: "21:00" } };
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
+    this._timePlanEnabled = rule?.time_plan?.enabled ?? false;
+    this._timePlanOnMinutes = rule?.time_plan?.on_minutes ?? 60;
+    this._timePlanOffMinutes = rule?.time_plan?.off_minutes ?? 60;
+    this._manualAutoOffMinutes = rule?.manual_auto_off_minutes ?? null;
     this._allowOverride = rule?.allow_override ?? true;
     this._overrideGraceMinutes = rule?.override_grace_minutes ?? 15;
     this._additionalActions = (rule?.actions ?? []).slice(1).map((action) => ({ ...action }));
@@ -454,6 +466,15 @@ export class SchedulerPlusRuleEditor extends LitElement {
     if (!this._onEnabled && !this._offEnabled) {
       return "At least one of On time or Off time must be enabled.";
     }
+    if (this._timePlanEnabled && (!this._onEnabled || !this._offEnabled)) {
+      return "A Time plan requires both On time and Off time.";
+    }
+    if (this._manualAutoOffMinutes !== null && (!this._onEnabled || !this._offEnabled)) {
+      return "Manual auto-off requires both On time and Off time.";
+    }
+    if (this._timePlanEnabled && (this._timePlanOnMinutes < 1 || this._timePlanOffMinutes < 1)) {
+      return "Time plan durations must be at least one minute.";
+    }
     return null;
   }
 
@@ -492,6 +513,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
       off_time: this._offTime,
       on_enabled: this._onEnabled,
       off_enabled: this._offEnabled,
+      time_plan: {
+        enabled: this._timePlanEnabled,
+        on_minutes: this._timePlanOnMinutes,
+        off_minutes: this._timePlanOffMinutes,
+      },
+      manual_auto_off_minutes: this._manualAutoOffMinutes,
       allow_override: this._allowOverride,
       override_grace_minutes: this._overrideGraceMinutes,
       action,
@@ -732,6 +759,77 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 (enabled) => (this._offEnabled = enabled),
               )}
             </div>
+            <div class="time-plan-box">
+              <ha-formfield label="Time plan">
+                <ha-switch
+                  .checked=${this._timePlanEnabled}
+                  @change=${(e: Event) => {
+                    this._timePlanEnabled = (e.target as HTMLInputElement).checked;
+                    if (this._timePlanEnabled) {
+                      this._onEnabled = true;
+                      this._offEnabled = true;
+                    }
+                  }}
+                ></ha-switch>
+              </ha-formfield>
+              <span class="hint">
+                Repeat the light on and off between the On time and Off time above.
+              </span>
+              ${this._timePlanEnabled
+                ? html`
+                    <div class="duration-row">
+                      <label class="field-label" for="time-plan-on">On for</label>
+                      <input id="time-plan-on" type="number" min="1" max="1440" class="native-input duration-input"
+                        .value=${String(this._timePlanOnMinutes)}
+                        @input=${(e: Event) => {
+                          this._timePlanOnMinutes = Math.max(1, Number((e.target as HTMLInputElement).value) || 1);
+                        }} />
+                      <span class="hint">minutes</span>
+                    </div>
+                    <div class="duration-row">
+                      <label class="field-label" for="time-plan-off">Off for</label>
+                      <input id="time-plan-off" type="number" min="1" max="1440" class="native-input duration-input"
+                        .value=${String(this._timePlanOffMinutes)}
+                        @input=${(e: Event) => {
+                          this._timePlanOffMinutes = Math.max(1, Number((e.target as HTMLInputElement).value) || 1);
+                        }} />
+                      <span class="hint">minutes</span>
+                    </div>
+                  `
+                : nothing}
+            </div>
+            ${this._deviceType === "light" || this._deviceType === "light_switch"
+              ? html`
+                  <div class="time-plan-box">
+                    <ha-formfield label="Manual auto-off">
+                      <ha-switch
+                        .checked=${this._manualAutoOffMinutes !== null}
+                        @change=${(e: Event) => {
+                          this._manualAutoOffMinutes = (e.target as HTMLInputElement).checked
+                            ? 10
+                            : null;
+                        }}
+                      ></ha-switch>
+                    </ha-formfield>
+                    <span class="hint">
+                      If someone turns the light on during this time window, turn it off automatically.
+                    </span>
+                    ${this._manualAutoOffMinutes !== null
+                      ? html`
+                          <div class="duration-row">
+                            <label class="field-label" for="manual-auto-off">Turn off after</label>
+                            <input id="manual-auto-off" type="number" min="1" max="1440" class="native-input duration-input"
+                              .value=${String(this._manualAutoOffMinutes)}
+                              @input=${(e: Event) => {
+                                this._manualAutoOffMinutes = Math.max(1, Number((e.target as HTMLInputElement).value) || 1);
+                              }} />
+                            <span class="hint">minutes</span>
+                          </div>
+                        `
+                      : nothing}
+                  </div>
+                `
+              : nothing}
           </section>
 
           <section class="section">
@@ -1244,6 +1342,23 @@ export class SchedulerPlusRuleEditor extends LitElement {
     .hint {
       font-size: 0.85em;
       color: var(--secondary-text-color);
+    }
+    .time-plan-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+    }
+    .duration-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .duration-input {
+      width: 96px;
     }
   `;
 }

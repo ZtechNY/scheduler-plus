@@ -243,6 +243,8 @@ def _make_rule(
     allow_override: bool = True,
     override_grace_minutes: int = 15,
     action: dict[str, Any] | None = None,
+    time_plan: dict[str, Any] | None = None,
+    manual_auto_off_minutes: int | None = None,
 ) -> Rule:
     """Build a Rule, defaulting to a FIXED-time rule active every day."""
     return Rule(
@@ -261,6 +263,8 @@ def _make_rule(
         allow_override=allow_override,
         override_grace_minutes=override_grace_minutes,
         action=action if action is not None else {},
+        time_plan=time_plan,
+        manual_auto_off_minutes=manual_auto_off_minutes,
     )
 
 
@@ -398,6 +402,33 @@ async def test_resolve_occurrence_overnight_shifts_off_to_next_day(
     assert on_at.date() == _MONDAY
     assert off_at.date() == date(2024, 1, 2)
     assert on_at < off_at
+
+
+async def test_resolve_time_plan_uses_minute_durations_and_exact_boundaries(
+    engine: SchedulerEngine,
+) -> None:
+    """A Time plan supports arbitrary minute durations and an overnight end."""
+    rule = _make_rule(
+        on_time="20:44",
+        off_time="00:16",
+        time_plan={"enabled": True, "on_minutes": 32, "off_minutes": 17},
+    )
+
+    transitions = await engine._async_resolve_time_plan(rule, _MONDAY)
+
+    assert transitions is not None
+    assert [(at.strftime("%H:%M"), action) for at, action in transitions] == [
+        ("20:44", "on"),
+        ("21:16", "off"),
+        ("21:33", "on"),
+        ("22:05", "off"),
+        ("22:22", "on"),
+        ("22:54", "off"),
+        ("23:11", "on"),
+        ("23:43", "off"),
+        ("00:00", "on"),
+        ("00:16", "off"),
+    ]
 
 
 async def test_resolve_occurrence_exclude_mode_skips_listed_date(

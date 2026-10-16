@@ -9,6 +9,8 @@ Scheduler+ is a Home Assistant scheduling engine for creating and managing time-
 - Use fixed times, sunrise, sunset, and YidCal-based time providers.
 - Add date, weekday, holiday, and active-period conditions to rules.
 - Schedule one-time events or recurring rules.
+- Create minute-based Time plans that alternate on and off inside a time window.
+- Automatically turn a manually activated light off after a configurable delay.
 - Review schedules in day and week views and detect conflicting events.
 - Customize weekday/weekend presets, working hours, brightness, and fade-in options.
 

@@ -214,18 +214,25 @@ class SchedulerEngine:
             for reference_date in self._candidate_dates(rule, now):
                 if not schedule.is_active_on(reference_date) or not self.mode_allows(schedule.id, reference_date):
                     continue
-                occurrence = await self._async_resolve_occurrence(
-                    rule, reference_date
-                )
-                if occurrence is None:
-                    continue
-
-                on_at, off_at = occurrence
                 candidates: list[tuple[datetime, str]] = []
-                if rule.on_enabled:
-                    candidates.append((on_at, "on"))
-                if rule.off_enabled:
-                    candidates.append((off_at, "off"))
+                if rule.time_plan and rule.time_plan.get("enabled"):
+                    transitions = await self._async_resolve_time_plan(
+                        rule, reference_date
+                    )
+                    if transitions is None:
+                        continue
+                    candidates.extend(transitions)
+                else:
+                    occurrence = await self._async_resolve_occurrence(
+                        rule, reference_date
+                    )
+                    if occurrence is None:
+                        continue
+                    on_at, off_at = occurrence
+                    if rule.on_enabled:
+                        candidates.append((on_at, "on"))
+                    if rule.off_enabled:
+                        candidates.append((off_at, "off"))
                 for when, label in candidates:
                     if when <= now:
                         continue
@@ -654,6 +661,10 @@ class SchedulerEngine:
         if not rule.enabled:
             return
 
+        if rule.time_plan and rule.time_plan.get("enabled"):
+            await self._async_refresh_time_plan_rule(schedule, rule, now)
+            return
+
         unsub_list: list[CALLBACK_TYPE] = []
 
         # An overnight rule that started yesterday can still be active right
@@ -732,6 +743,109 @@ class SchedulerEngine:
                             device_handler, entity_id, off_at, rule, schedule.name
                         )
                     )
+                if rule.manual_auto_off_minutes and both_enabled:
+                    unsub_list.append(
+                        self._schedule_manual_auto_off_window(
+                            device_handler,
+                            entity_id,
+                            rule,
+                            schedule.name,
+                            on_at,
+                            off_at,
+                            rule.manual_auto_off_minutes,
+                        )
+                    )
+
+        if unsub_list:
+            self._unsub_rules[rule.id] = unsub_list
+
+    async def _async_refresh_time_plan_rule(
+        self, schedule: Schedule, rule: Rule, now: datetime
+    ) -> None:
+        """Schedule all transitions for a minute-based Time plan window."""
+        unsub_list: list[CALLBACK_TYPE] = []
+        for days_ago in (1, 0):
+            reference_date = (now - timedelta(days=days_ago)).date()
+            if not schedule.is_active_on(reference_date) or not self.mode_allows(
+                schedule.id, reference_date
+            ):
+                continue
+            transitions = await self._async_resolve_time_plan(rule, reference_date)
+            if not transitions or transitions[-1][0] <= now:
+                continue
+
+            start_at = transitions[0][0]
+            end_at = transitions[-1][0]
+            for entity_id in schedule.entities:
+                device_handler = self._handler_for_entity(entity_id)
+                if device_handler is None:
+                    _LOGGER.error(
+                        "No device handler for entity '%s' in schedule '%s'",
+                        entity_id,
+                        schedule.name,
+                    )
+                    continue
+
+                past = [(when, action) for when, action in transitions if when <= now]
+                if past:
+                    _, action = past[-1]
+                    try:
+                        if action == "on":
+                            await self._issue_turn_on(
+                                device_handler,
+                                entity_id,
+                                rule.action,
+                                rule=rule,
+                                schedule_name=schedule.name,
+                            )
+                        else:
+                            await self._issue_turn_off(
+                                device_handler,
+                                entity_id,
+                                rule=rule,
+                                schedule_name=schedule.name,
+                            )
+                    except Exception:  # noqa: BLE001 - isolate each entity
+                        _LOGGER.exception(
+                            "Failed to catch up '%s' to Time plan state for rule '%s'",
+                            entity_id,
+                            rule.name,
+                        )
+
+                for when, action in transitions:
+                    if when <= now:
+                        continue
+                    if action == "on":
+                        unsub_list.append(
+                            self._schedule_turn_on(
+                                rule,
+                                False,
+                                device_handler,
+                                entity_id,
+                                rule.action,
+                                when,
+                                schedule.name,
+                            )
+                        )
+                    else:
+                        unsub_list.append(
+                            self._schedule_turn_off(
+                                device_handler, entity_id, when, rule, schedule.name
+                            )
+                        )
+
+                if rule.manual_auto_off_minutes:
+                    unsub_list.append(
+                        self._schedule_manual_auto_off_window(
+                            device_handler,
+                            entity_id,
+                            rule,
+                            schedule.name,
+                            start_at,
+                            end_at,
+                            rule.manual_auto_off_minutes,
+                        )
+                    )
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list
@@ -786,6 +900,46 @@ class SchedulerEngine:
             off_at += timedelta(days=1)
 
         return on_at, off_at
+
+    async def _async_resolve_time_plan(
+        self, rule: Rule, reference_date: date
+    ) -> list[tuple[datetime, str]] | None:
+        """Resolve a Time plan into (moment, action) transitions.
+
+        The existing on_time/off_time providers define the outer window. The
+        Time plan then alternates on/off for the configured minute durations,
+        ending with an off transition at the outer window's end.
+        """
+        occurrence = await self._async_resolve_occurrence(rule, reference_date)
+        if occurrence is None:
+            return None
+        start_at, end_at = occurrence
+        plan = rule.time_plan or {}
+        try:
+            on_minutes = max(1, int(plan.get("on_minutes", 60)))
+            off_minutes = max(1, int(plan.get("off_minutes", 60)))
+        except (TypeError, ValueError):
+            _LOGGER.error("Rule '%s' has invalid Time plan durations", rule.name)
+            return None
+
+        transitions: list[tuple[datetime, str]] = [(start_at, "on")]
+        cursor = start_at
+        action = "on"
+        while True:
+            duration = on_minutes if action == "on" else off_minutes
+            next_at = cursor + timedelta(minutes=duration)
+            if next_at >= end_at:
+                # Keep the outer window boundary even when the regular
+                # durations land in an off phase. The duplicate off is
+                # harmless and ensures the manual auto-off listener and
+                # previews use the real end of the window.
+                if transitions[-1][0] < end_at:
+                    transitions.append((end_at, "off"))
+                break
+            action = "off" if action == "on" else "on"
+            transitions.append((next_at, action))
+            cursor = next_at
+        return transitions
 
     async def _matches_date_filter(self, rule: Rule, reference_date: date) -> bool:
         """Return whether `reference_date` matches rule.dates/date_ranges/day_conditions.
@@ -1006,6 +1160,120 @@ class SchedulerEngine:
                 teardown()
 
         return async_track_point_in_time(self.hass, _fire, when)
+
+    def _schedule_manual_auto_off_window(
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        rule: Rule,
+        schedule_name: str,
+        start_at: datetime,
+        end_at: datetime,
+        minutes: int,
+    ) -> CALLBACK_TYPE:
+        """Watch a rule window and arm a timer for manual light turn-ons."""
+        active_teardown: CALLBACK_TYPE | None = None
+        start_unsub: CALLBACK_TYPE | None = None
+        end_unsub: CALLBACK_TYPE | None = None
+        torn_down = False
+
+        @callback
+        def _arm(_now: datetime | None = None) -> None:
+            nonlocal active_teardown, end_unsub
+            if torn_down or active_teardown is not None:
+                return
+            active_teardown = self._arm_manual_auto_off(
+                device_handler, entity_id, rule, schedule_name, minutes
+            )
+            end_unsub = async_track_point_in_time(self.hass, _end, end_at)
+
+        @callback
+        def _end(_now: datetime) -> None:
+            nonlocal active_teardown
+            if active_teardown is not None:
+                active_teardown()
+                active_teardown = None
+
+        if start_at <= dt_util.now() < end_at:
+            _arm()
+        elif start_at > dt_util.now():
+            start_unsub = async_track_point_in_time(self.hass, _arm, start_at)
+
+        @callback
+        def _teardown() -> None:
+            nonlocal torn_down, active_teardown, start_unsub, end_unsub
+            if torn_down:
+                return
+            torn_down = True
+            if start_unsub is not None:
+                start_unsub()
+                start_unsub = None
+            if end_unsub is not None:
+                end_unsub()
+                end_unsub = None
+            if active_teardown is not None:
+                active_teardown()
+                active_teardown = None
+
+        return _teardown
+
+    def _arm_manual_auto_off(
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        rule: Rule,
+        schedule_name: str,
+        minutes: int,
+    ) -> CALLBACK_TYPE:
+        """Arm a manual-only delayed off listener for one rule/entity pair."""
+        pending_timer: CALLBACK_TYPE | None = None
+        torn_down = False
+
+        @callback
+        def _cancel_timer() -> None:
+            nonlocal pending_timer
+            if pending_timer is not None:
+                pending_timer()
+                pending_timer = None
+
+        async def _turn_off(_now: datetime) -> None:
+            nonlocal pending_timer
+            pending_timer = None
+            await self._issue_turn_off(
+                device_handler, entity_id, rule=rule, schedule_name=schedule_name
+            )
+
+        @callback
+        def _on_state_change(event: Event[EventStateChangedData]) -> None:
+            nonlocal pending_timer
+            if event.context.id == self._last_self_context.get(entity_id):
+                return
+            old_state = event.data.get("old_state")
+            new_state = event.data.get("new_state")
+            if new_state is None:
+                return
+            _cancel_timer()
+            if new_state.state == "on" and (
+                old_state is None or old_state.state != "on"
+            ):
+                pending_timer = async_call_later(
+                    self.hass, max(1, minutes) * 60, _turn_off
+                )
+
+        unsub_state = async_track_state_change_event(
+            self.hass, entity_id, _on_state_change
+        )
+
+        @callback
+        def _teardown() -> None:
+            nonlocal torn_down
+            if torn_down:
+                return
+            torn_down = True
+            unsub_state()
+            _cancel_timer()
+
+        return _teardown
 
     def _arm_override_enforcement(
         self, rule: Rule, entity_id: str, device_handler: DeviceHandler, schedule_name: str

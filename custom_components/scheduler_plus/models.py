@@ -124,6 +124,13 @@ class Rule:
     action: dict[str, Any] = field(default_factory=dict)
     actions: list[dict[str, Any]] = field(default_factory=list)
     off_action: dict[str, Any] | None = None
+    # Optional repeating on/off timing inside the rule's On/Off window.
+    # The window is still defined by on_time/off_time; this only changes what
+    # happens between those boundaries.
+    time_plan: dict[str, Any] | None = None
+    # When set on a light rule, a manual turn-on during this rule's window is
+    # followed by an automatic turn-off after this many minutes.
+    manual_auto_off_minutes: int | None = None
 
     def __post_init__(self) -> None:
         """Normalize legacy single-action rules to the ordered action list."""
@@ -152,6 +159,8 @@ class Rule:
             "action": dict(self.action),
             "actions": [dict(action) for action in self.actions] or [dict(self.action)],
             "off_action": dict(self.off_action) if self.off_action is not None else None,
+            "time_plan": dict(self.time_plan) if self.time_plan is not None else None,
+            "manual_auto_off_minutes": self.manual_auto_off_minutes,
         }
 
     @classmethod
@@ -167,6 +176,7 @@ class Rule:
         overrides allowed, off_action unset).
         """
         raw_off_action = data.get("off_action")
+        raw_time_plan = data.get("time_plan")
         return cls(
             id=data["id"],
             name=data["name"],
@@ -189,6 +199,12 @@ class Rule:
             action=dict(data.get("action", {})),
             actions=[dict(action) for action in data.get("actions", [data.get("action", {})])],
             off_action=dict(raw_off_action) if raw_off_action is not None else None,
+            time_plan=dict(raw_time_plan) if raw_time_plan is not None else None,
+            manual_auto_off_minutes=(
+                int(data["manual_auto_off_minutes"])
+                if data.get("manual_auto_off_minutes") is not None
+                else None
+            ),
         )
 
 

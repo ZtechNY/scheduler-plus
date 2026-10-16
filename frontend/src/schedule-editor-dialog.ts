@@ -61,7 +61,11 @@ function formatRuleTimes(rule: {
   off_time: TimeSpec;
   on_enabled: boolean;
   off_enabled: boolean;
+  time_plan?: { enabled: boolean; on_minutes: number; off_minutes: number } | null;
 }): string {
+  if (rule.time_plan?.enabled) {
+    return `Time plan: ${rule.time_plan.on_minutes}m on / ${rule.time_plan.off_minutes}m off (${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)})`;
+  }
   if (rule.on_enabled && rule.off_enabled) {
     return `${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}`;
   }
