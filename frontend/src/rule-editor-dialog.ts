@@ -145,9 +145,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _timePlanEnabled = false;
 
-  @state() private _timePlanOnMinutes = 60;
-
-  @state() private _timePlanOffMinutes = 60;
+  @state() private _timePlanPeriods: { start: string; end: string }[] = [];
 
   @state() private _manualAutoOffMinutes: number | null = null;
 
@@ -229,8 +227,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
     this._timePlanEnabled = rule?.time_plan?.enabled ?? false;
-    this._timePlanOnMinutes = rule?.time_plan?.on_minutes ?? 60;
-    this._timePlanOffMinutes = rule?.time_plan?.off_minutes ?? 60;
+    this._timePlanPeriods = rule?.time_plan?.periods?.map((period) => ({ ...period })) ?? [
+      {
+        start: (rule?.on_time.params.time as string | undefined) ?? "06:00",
+        end: (rule?.off_time.params.time as string | undefined) ?? "21:00",
+      },
+    ];
     this._manualAutoOffMinutes = rule?.manual_auto_off_minutes ?? null;
     this._allowOverride = rule?.allow_override ?? true;
     this._overrideGraceMinutes = rule?.override_grace_minutes ?? 15;
@@ -387,6 +389,24 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._additionalActions = this._additionalActions.filter((_, i) => i !== index);
   };
 
+  private _addTimePlanPeriod = (): void => {
+    this._timePlanPeriods = [...this._timePlanPeriods, { start: "06:00", end: "06:20" }];
+  };
+
+  private _removeTimePlanPeriod = (index: number): void => {
+    this._timePlanPeriods = this._timePlanPeriods.filter((_, i) => i !== index);
+  };
+
+  private _updateTimePlanPeriod = (
+    index: number,
+    side: "start" | "end",
+    value: string,
+  ): void => {
+    this._timePlanPeriods = this._timePlanPeriods.map((period, i) =>
+      i === index ? { ...period, [side]: value } : period,
+    );
+  };
+
   private _updateAdditionalAction = (index: number, value: string): void => {
     try {
       const parsed = JSON.parse(value);
@@ -469,11 +489,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
     if (this._timePlanEnabled && (!this._onEnabled || !this._offEnabled)) {
       return "A Time plan requires both On time and Off time.";
     }
+    if (this._timePlanEnabled && this._timePlanPeriods.length === 0) {
+      return "Add at least one Time plan period.";
+    }
+    if (
+      this._timePlanEnabled &&
+      this._timePlanPeriods.some((period) => !period.start || !period.end)
+    ) {
+      return "Every Time plan period needs a start and end time.";
+    }
     if (this._manualAutoOffMinutes !== null && (!this._onEnabled || !this._offEnabled)) {
       return "Manual auto-off requires both On time and Off time.";
-    }
-    if (this._timePlanEnabled && (this._timePlanOnMinutes < 1 || this._timePlanOffMinutes < 1)) {
-      return "Time plan durations must be at least one minute.";
     }
     return null;
   }
@@ -500,6 +526,16 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     // Switches have no action - action stays {} and offAction stays null.
 
+    const planOnTime = this._timePlanEnabled && this._timePlanPeriods.length
+      ? { provider: "fixed" as const, params: { time: this._timePlanPeriods[0].start } }
+      : this._onTime;
+    const planOffTime = this._timePlanEnabled && this._timePlanPeriods.length
+      ? {
+          provider: "fixed" as const,
+          params: { time: this._timePlanPeriods[this._timePlanPeriods.length - 1].end },
+        }
+      : this._offTime;
+
     return {
       id: this._rule?.id,
       name: this._name.trim(),
@@ -509,14 +545,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
       dates: this._dates,
       date_ranges: this._dateRanges,
       day_conditions: this._dayConditions,
-      on_time: this._onTime,
-      off_time: this._offTime,
+      on_time: planOnTime,
+      off_time: planOffTime,
       on_enabled: this._onEnabled,
       off_enabled: this._offEnabled,
       time_plan: {
         enabled: this._timePlanEnabled,
-        on_minutes: this._timePlanOnMinutes,
-        off_minutes: this._timePlanOffMinutes,
+        periods: this._timePlanPeriods,
       },
       manual_auto_off_minutes: this._manualAutoOffMinutes,
       allow_override: this._allowOverride,
@@ -743,22 +778,26 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
           <section class="section">
             <h3 class="section-title">Time</h3>
-            <div class="time-columns">
-              ${this._renderTimeFields(
-                "On time",
-                this._onTime,
-                (spec) => (this._onTime = spec),
-                this._onEnabled,
-                (enabled) => (this._onEnabled = enabled),
-              )}
-              ${this._renderTimeFields(
-                "Off time",
-                this._offTime,
-                (spec) => (this._offTime = spec),
-                this._offEnabled,
-                (enabled) => (this._offEnabled = enabled),
-              )}
-            </div>
+            ${!this._timePlanEnabled
+              ? html`
+                  <div class="time-columns">
+                    ${this._renderTimeFields(
+                      "On time",
+                      this._onTime,
+                      (spec) => (this._onTime = spec),
+                      this._onEnabled,
+                      (enabled) => (this._onEnabled = enabled),
+                    )}
+                    ${this._renderTimeFields(
+                      "Off time",
+                      this._offTime,
+                      (spec) => (this._offTime = spec),
+                      this._offEnabled,
+                      (enabled) => (this._offEnabled = enabled),
+                    )}
+                  </div>
+                `
+              : nothing}
             <div class="time-plan-box">
               <ha-formfield label="Time plan">
                 <ha-switch
@@ -773,28 +812,28 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 ></ha-switch>
               </ha-formfield>
               <span class="hint">
-                Repeat the light on and off between the On time and Off time above.
+                Add each separate period when the device should be on.
               </span>
               ${this._timePlanEnabled
                 ? html`
-                    <div class="duration-row">
-                      <label class="field-label" for="time-plan-on">On for</label>
-                      <input id="time-plan-on" type="number" min="1" max="1440" class="native-input duration-input"
-                        .value=${String(this._timePlanOnMinutes)}
-                        @input=${(e: Event) => {
-                          this._timePlanOnMinutes = Math.max(1, Number((e.target as HTMLInputElement).value) || 1);
-                        }} />
-                      <span class="hint">minutes</span>
-                    </div>
-                    <div class="duration-row">
-                      <label class="field-label" for="time-plan-off">Off for</label>
-                      <input id="time-plan-off" type="number" min="1" max="1440" class="native-input duration-input"
-                        .value=${String(this._timePlanOffMinutes)}
-                        @input=${(e: Event) => {
-                          this._timePlanOffMinutes = Math.max(1, Number((e.target as HTMLInputElement).value) || 1);
-                        }} />
-                      <span class="hint">minutes</span>
-                    </div>
+                    ${this._timePlanPeriods.map(
+                      (period, index) => html`
+                        <div class="time-plan-period">
+                          <span class="period-label">${index + 1}</span>
+                          <input type="time" class="native-input"
+                            .value=${period.start}
+                            @input=${(e: Event) => this._updateTimePlanPeriod(index, "start", (e.target as HTMLInputElement).value)} />
+                          <span class="hint">to</span>
+                          <input type="time" class="native-input"
+                            .value=${period.end}
+                            @input=${(e: Event) => this._updateTimePlanPeriod(index, "end", (e.target as HTMLInputElement).value)} />
+                          <button type="button" class="btn" @click=${() => this._removeTimePlanPeriod(index)}>Remove</button>
+                        </div>
+                      `,
+                    )}
+                    <button type="button" class="btn" @click=${this._addTimePlanPeriod}>
+                      Add time period
+                    </button>
                   `
                 : nothing}
             </div>
@@ -1356,6 +1395,16 @@ export class SchedulerPlusRuleEditor extends LitElement {
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+    .time-plan-period {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .period-label {
+      width: 20px;
+      color: var(--secondary-text-color);
     }
     .duration-input {
       width: 96px;

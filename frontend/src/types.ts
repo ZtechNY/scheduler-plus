@@ -217,8 +217,11 @@ export interface Rule {
   /** Optional minute-based repeating timing inside the rule's on/off window. */
   time_plan?: {
     enabled: boolean;
-    on_minutes: number;
-    off_minutes: number;
+    /** Separate fixed-clock start/end windows. */
+    periods?: { start: string; end: string }[];
+    /** Legacy duration fields retained so older saved plans still load. */
+    on_minutes?: number;
+    off_minutes?: number;
   } | null;
   /** Turn off a manually activated light after this many minutes. */
   manual_auto_off_minutes?: number | null;

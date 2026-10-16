@@ -289,6 +289,21 @@ class SchedulerEngine:
         for rule in schedule.rules:
             if not rule.enabled:
                 continue
+            if rule.time_plan and rule.time_plan.get("enabled") and rule.time_plan.get(
+                "periods"
+            ):
+                windows = await self._async_resolve_time_plan_windows(
+                    rule, reference_date
+                )
+                for on_at, off_at in windows or []:
+                    events.append(
+                        (
+                            rule,
+                            on_at if rule.on_enabled else None,
+                            off_at if rule.off_enabled else None,
+                        )
+                    )
+                continue
             occurrence = await self._async_resolve_occurrence(rule, reference_date)
             if occurrence is not None:
                 on_at, off_at = occurrence
@@ -770,12 +785,10 @@ class SchedulerEngine:
                 schedule.id, reference_date
             ):
                 continue
+            windows = await self._async_resolve_time_plan_windows(rule, reference_date)
             transitions = await self._async_resolve_time_plan(rule, reference_date)
-            if not transitions or transitions[-1][0] <= now:
+            if not windows or not transitions or max(end for _, end in windows) <= now:
                 continue
-
-            start_at = transitions[0][0]
-            end_at = transitions[-1][0]
             for entity_id in schedule.entities:
                 device_handler = self._handler_for_entity(entity_id)
                 if device_handler is None:
@@ -835,17 +848,19 @@ class SchedulerEngine:
                         )
 
                 if rule.manual_auto_off_minutes:
-                    unsub_list.append(
-                        self._schedule_manual_auto_off_window(
-                            device_handler,
-                            entity_id,
-                            rule,
-                            schedule.name,
-                            start_at,
-                            end_at,
-                            rule.manual_auto_off_minutes,
-                        )
-                    )
+                    for start_at, end_at in windows:
+                        if end_at > now:
+                            unsub_list.append(
+                                self._schedule_manual_auto_off_window(
+                                    device_handler,
+                                    entity_id,
+                                    rule,
+                                    schedule.name,
+                                    start_at,
+                                    end_at,
+                                    rule.manual_auto_off_minutes,
+                                )
+                            )
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list
@@ -906,15 +921,21 @@ class SchedulerEngine:
     ) -> list[tuple[datetime, str]] | None:
         """Resolve a Time plan into (moment, action) transitions.
 
-        The existing on_time/off_time providers define the outer window. The
-        Time plan then alternates on/off for the configured minute durations,
-        ending with an off transition at the outer window's end.
+        New plans contain separate fixed-clock periods. The old duration
+        shape is still understood for plans saved by v0.5.0.
         """
-        occurrence = await self._async_resolve_occurrence(rule, reference_date)
-        if occurrence is None:
+        windows = await self._async_resolve_time_plan_windows(rule, reference_date)
+        if windows is None:
             return None
-        start_at, end_at = occurrence
         plan = rule.time_plan or {}
+
+        if plan.get("periods"):
+            transitions: list[tuple[datetime, str]] = []
+            for start_at, end_at in windows:
+                transitions.extend(((start_at, "on"), (end_at, "off")))
+            return sorted(transitions)
+
+        start_at, end_at = windows[0]
         try:
             on_minutes = max(1, int(plan.get("on_minutes", 60)))
             off_minutes = max(1, int(plan.get("off_minutes", 60)))
@@ -940,6 +961,49 @@ class SchedulerEngine:
             transitions.append((next_at, action))
             cursor = next_at
         return transitions
+
+    async def _async_resolve_time_plan_windows(
+        self, rule: Rule, reference_date: date
+    ) -> list[tuple[datetime, datetime]] | None:
+        """Resolve a Time plan into independent start/end windows."""
+        if not rule.time_plan or not rule.time_plan.get("enabled"):
+            return None
+
+        if rule.date_mode is RuleDateMode.INCLUDE:
+            if not await self._matches_date_filter(rule, reference_date):
+                return None
+        elif _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days:
+            return None
+        elif rule.date_mode is RuleDateMode.EXCLUDE and await self._matches_date_filter(
+            rule, reference_date
+        ):
+            return None
+
+        raw_periods = rule.time_plan.get("periods") or []
+        if raw_periods:
+            windows: list[tuple[datetime, datetime]] = []
+            for period in raw_periods:
+                try:
+                    start_time = datetime.strptime(
+                        str(period["start"]), "%H:%M"
+                    ).time()
+                    end_time = datetime.strptime(str(period["end"]), "%H:%M").time()
+                except (KeyError, TypeError, ValueError):
+                    _LOGGER.error("Rule '%s' has an invalid Time plan period", rule.name)
+                    return None
+                start_at = datetime.combine(
+                    reference_date, start_time, tzinfo=dt_util.DEFAULT_TIME_ZONE
+                )
+                end_at = datetime.combine(
+                    reference_date, end_time, tzinfo=dt_util.DEFAULT_TIME_ZONE
+                )
+                if end_at <= start_at:
+                    end_at += timedelta(days=1)
+                windows.append((start_at, end_at))
+            return sorted(windows)
+
+        occurrence = await self._async_resolve_occurrence(rule, reference_date)
+        return [occurrence] if occurrence is not None else None
 
     async def _matches_date_filter(self, rule: Rule, reference_date: date) -> bool:
         """Return whether `reference_date` matches rule.dates/date_ranges/day_conditions.

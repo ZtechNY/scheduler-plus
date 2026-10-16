@@ -87,6 +87,26 @@ def test_rule_round_trip_with_time_plan_and_manual_auto_off() -> None:
     assert restored == rule
 
 
+def test_rule_round_trip_with_separate_time_plan_periods() -> None:
+    """Independent Time plan periods survive persistence unchanged."""
+    rule = Rule(
+        id="rule-1",
+        name="Short morning windows",
+        days=frozenset(Weekday),
+        on_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "08:00"}),
+        off_time=TimeSpec(provider=TimeProviderType.FIXED, params={"time": "10:55"}),
+        time_plan={
+            "enabled": True,
+            "periods": [
+                {"start": "08:00", "end": "08:20"},
+                {"start": "10:32", "end": "10:55"},
+            ],
+        },
+    )
+
+    assert Rule.from_dict(rule.to_dict()) == rule
+
+
 def test_rule_from_dict_defaults_on_off_enabled_for_legacy_data() -> None:
     """A stored rule from before this field existed loads as both enabled."""
     legacy_data = {

@@ -431,6 +431,33 @@ async def test_resolve_time_plan_uses_minute_durations_and_exact_boundaries(
     ]
 
 
+async def test_resolve_time_plan_supports_separate_periods(
+    engine: SchedulerEngine,
+) -> None:
+    """A Time plan can contain unrelated start/end pairs."""
+    rule = _make_rule(
+        on_time="08:00",
+        off_time="10:55",
+        time_plan={
+            "enabled": True,
+            "periods": [
+                {"start": "08:00", "end": "08:20"},
+                {"start": "10:32", "end": "10:55"},
+            ],
+        },
+    )
+
+    transitions = await engine._async_resolve_time_plan(rule, _MONDAY)
+
+    assert transitions is not None
+    assert [(at.strftime("%H:%M"), action) for at, action in transitions] == [
+        ("08:00", "on"),
+        ("08:20", "off"),
+        ("10:32", "on"),
+        ("10:55", "off"),
+    ]
+
+
 async def test_resolve_occurrence_exclude_mode_skips_listed_date(
     engine: SchedulerEngine,
 ) -> None:

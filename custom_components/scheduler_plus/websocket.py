@@ -56,6 +56,13 @@ from .storage import SchedulerPlusStoreData
 _DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
 _TIME_RE = r"^\d{2}:\d{2}$"
 
+_TIME_PLAN_PERIOD_SCHEMA = vol.Schema(
+    {
+        vol.Required("start"): vol.Match(_TIME_RE),
+        vol.Required("end"): vol.Match(_TIME_RE),
+    }
+)
+
 
 def _validate_date_range(value: Any) -> tuple[str, str]:
     """Validate a [start, end] pair of "YYYY-MM-DD" strings, start <= end."""
@@ -88,6 +95,10 @@ def _validate_time_enabled(value: dict[str, Any]) -> dict[str, Any]:
         not value.get("on_enabled", True) or not value.get("off_enabled", True)
     ):
         raise vol.Invalid("A Time plan requires both On time and Off time")
+    if time_plan.get("enabled") and not time_plan.get("periods") and not (
+        time_plan.get("on_minutes") and time_plan.get("off_minutes")
+    ):
+        raise vol.Invalid("A Time plan requires at least one time period")
     if value.get("manual_auto_off_minutes") is not None and (
         not value.get("on_enabled", True) or not value.get("off_enabled", True)
     ):
@@ -171,6 +182,7 @@ _RULE_SCHEMA = vol.All(
                         vol.Optional("off_minutes", default=60): vol.All(
                             vol.Coerce(int), vol.Range(min=1)
                         ),
+                        vol.Optional("periods", default=list): [_TIME_PLAN_PERIOD_SCHEMA],
                     }
                 ),
             ),

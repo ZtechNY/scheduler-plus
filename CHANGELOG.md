@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-10-16
+
+### Fixed
+
+- Time plans now support multiple independent start/end periods, such as
+  8:00–8:20 AM and 10:32–10:55 AM, instead of assuming one repeating duration.
+
 ## [0.5.0] - 2026-10-16
 
 ### Added
