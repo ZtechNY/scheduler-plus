@@ -641,6 +641,9 @@ export class SchedulerPlusScheduleEditor extends LitElement {
           <span class="rule-meta">
             ${days} · ${formatRuleTimes(rule)}${dateNote}
           </span>
+          ${rule.manual_auto_off_minutes != null
+            ? html`<span class="rule-meta manual-auto-off">Manual off after ${rule.manual_auto_off_minutes} min if turned on manually</span>`
+            : nothing}
         </div>
         <div class="row-actions">
           <ha-icon-button

@@ -2772,6 +2772,7 @@ var o5=Object.defineProperty;var A5=Object.getOwnPropertyDescriptor;var t=(L,V,C
           <span class="rule-meta">
             ${e} · ${Q5(C)}${i}
           </span>
+          ${C.manual_auto_off_minutes!=null?r`<span class="rule-meta manual-auto-off">Manual off after ${C.manual_auto_off_minutes} min if turned on manually</span>`:o}
         </div>
         <div class="row-actions">
           <ha-icon-button

@@ -1529,6 +1529,48 @@ async def test_refresh_all_cancels_pending_callbacks_when_overridden(
     assert fake_device_handler.turn_on_calls == []
 
 
+async def test_refresh_all_cancels_callbacks_for_deleted_schedule(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """Deleting a schedule must cancel callbacks that were already queued."""
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(engine._unsub_rules[rule.id]) == 2
+
+    # The schedule is gone from persistent data. There is no schedule loop
+    # iteration that could call _cancel_rule for it, so _async_refresh_all
+    # must explicitly remove orphaned rule callback entries.
+    engine._coordinator.async_set_updated_data({"version": 1, "schedules": []})
+    await engine._async_refresh_all()
+
+    assert engine._unsub_rules == {}
+    assert fake_device_handler.turn_on_calls == []
+
+
+async def test_refresh_all_cancels_callbacks_for_deleted_rule(
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+) -> None:
+    """Removing a rule from an existing schedule must cancel its callbacks."""
+    now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    rule = _make_rule(on_time="06:00", off_time="21:00")
+    schedule = _make_schedule(rule)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    assert len(engine._unsub_rules[rule.id]) == 2
+
+    schedule.rules = []
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [schedule.to_dict()]}
+    )
+    await engine._async_refresh_all()
+
+    assert engine._unsub_rules == {}
+    assert fake_device_handler.turn_on_calls == []
+
+
 async def test_refresh_all_skips_overridden_schedule(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:

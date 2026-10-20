@@ -622,12 +622,30 @@ class SchedulerEngine:
         cancelled explicitly here instead - _async_refresh_rule's own
         _cancel_rule call never runs for them otherwise, which would
         silently leave an already-scheduled on/off pending even though the
-        schedule was just disabled or paused.
+        schedule was just disabled or paused. The same applies to a schedule
+        or rule removed from storage: it is not present in the loop below at
+        all, so clean up any callback entry that is no longer represented by
+        the coordinator data before refreshing the remaining rules.
         """
         now = dt_util.now()
         today = now.date()
-        for raw_schedule in self._coordinator.data["schedules"]:
-            schedule = Schedule.from_dict(raw_schedule)
+        schedules = [
+            Schedule.from_dict(raw_schedule)
+            for raw_schedule in self._coordinator.data["schedules"]
+        ]
+        current_rule_ids = {
+            rule.id for schedule in schedules for rule in schedule.rules
+        }
+        orphaned_rule_ids = set(self._unsub_rules) - current_rule_ids
+        if orphaned_rule_ids:
+            _LOGGER.debug(
+                "Canceling callbacks for removed Scheduler+ rules: %s",
+                sorted(orphaned_rule_ids),
+            )
+        for rule_id in orphaned_rule_ids:
+            self._cancel_rule(rule_id)
+
+        for schedule in schedules:
             if not schedule.enabled or schedule.is_overridden(today):
                 for rule in schedule.rules:
                     self._cancel_rule(rule.id)

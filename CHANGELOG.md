@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-10-20
+
+### Fixed
+
+- Pending callbacks are now canceled when a schedule or one of its rules is deleted,
+  so removed schedules cannot trigger later.
+
 ## [0.5.1] - 2026-10-16
 
 ### Fixed
