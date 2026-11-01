@@ -18,6 +18,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -139,6 +140,9 @@ def test_orphaned_run_schedules_detects_lost_last_owner() -> None:
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Set up a bare Scheduler+ config entry - no host/credentials required."""
+    # A real HA instance always loads http before custom integrations;
+    # async_setup registers a view on hass.http, so load it here too.
+    assert await async_setup_component(hass, "http", {})
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -490,4 +494,9 @@ async def test_deleting_a_mode_removes_its_binary_sensor(
     assert (await client.receive_json())["success"]
     await hass.async_block_till_done()
 
-    assert hass.states.get(entity_id) is None
+    # Current HA keeps a registry-backed entity's state as "unavailable"
+    # (restored) once its platform removes it, rather than deleting it.
+    state = hass.states.get(entity_id)
+    assert state is None or (
+        state.state == "unavailable" and state.attributes.get("restored")
+    )

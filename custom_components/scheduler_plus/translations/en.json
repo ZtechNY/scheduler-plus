@@ -57,5 +57,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "missing_entity": {
+      "title": "Scheduler+ entity {entity_id} not found",
+      "description": "{entity_id} is used by {used_by}, but Home Assistant has no entity with that ID. Scheduler+ cannot control or read it until the entity is restored or removed from Scheduler+. This issue clears itself once the entity exists again."
+    }
   }
 }

@@ -4,6 +4,30 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-11-01
+
+### Fixed
+
+- Off-only rules timed before 6:00 AM now fire that morning instead of the next day,
+  and on-only rules no longer fail because their unused off time can't be resolved.
+- After a restart or outage, each device is set to the state of its most recent
+  scheduled on *or* off today, so a missed off is no longer skipped. The catch-up
+  waits until Home Assistant has fully started, runs again a minute later for slow
+  devices, and runs each device in the background with a 15-second limit per call.
+- Rescans (edits, midnight) no longer re-send actions already sent, so manual
+  changes are kept; editing a rule still brings its devices up to date.
+- Shabbos and Yom Tov are decided per date from the Hebrew calendar, with Friday or
+  Erev Yom Tov evening counting from candle lighting. Friday-night Shabbos rules now
+  run, Shabbos windows past midnight keep their off, and "skip Yom Tov" overnight
+  rules stay off on the second day. Rules also re-evaluate when YidCal's zman
+  sensors change.
+- Missing devices and YidCal sensors are logged and shown in Repairs instead of
+  being ignored silently.
+- Overlapping rescans can no longer leave a deleted or disabled rule's timers behind,
+  and one unreadable stored schedule no longer stops the others from running.
+- Times skipped by the spring DST change now fire once, right after the jump; times
+  repeated in the fall fire once.
+
 ## [0.5.2] - 2026-10-20
 
 ### Fixed

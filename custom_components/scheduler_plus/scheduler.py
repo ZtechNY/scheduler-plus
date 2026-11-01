@@ -17,6 +17,8 @@ based on its actual domain.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -32,6 +34,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_change,
 )
+from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
 
 from .modes import schedule_allowed
@@ -43,6 +46,7 @@ from .device_handlers import (
     DeviceHandler,
     DeviceHandlerRegistry,
 )
+from .issues import async_clear_missing_entity, async_report_missing_entity
 from .models import Rule, RuleDateMode, Schedule, Weekday
 from .time_providers import DEFAULT_TIME_PROVIDERS, TimeProviderRegistry
 
@@ -69,6 +73,34 @@ _DEFAULT_CONFLICT_LOOKAHEAD_DAYS = 14
 # _conflict_check_dates), so a long-running range (e.g. a 90-day summer
 # window) doesn't resolve an unbounded number of dates in one pass.
 _MAX_INCLUDE_RANGE_CHECK_DAYS = 31
+
+# Upper bound on one device service call, so an unresponsive device can't
+# hold up the action (or catch-up) behind it.
+_SERVICE_CALL_TIMEOUT_SECONDS = 15
+
+# The startup catch-up runs once Home Assistant has started and again this
+# long after, for devices whose integrations finish loading late.
+_SECOND_STARTUP_PASS_DELAY_SECONDS = 60
+
+# How long a fired event is remembered (see SchedulerEngine._fired). Only
+# yesterday's and today's events are ever compared against it.
+_FIRED_EVENT_RETENTION = timedelta(days=2)
+
+
+@dataclass(slots=True, kw_only=True, frozen=True)
+class _DueEvent:
+    """One scheduled on/off for one entity whose moment has already passed.
+
+    Collected by a refresh so the entity can be caught up to its most
+    recent scheduled state - see SchedulerEngine._async_refresh_all.
+    """
+
+    when: datetime
+    turning_on: bool
+    rule: Rule
+    schedule_name: str
+    entity_id: str
+    device_handler: DeviceHandler
 
 
 @dataclass(slots=True, kw_only=True, frozen=True)
@@ -111,7 +143,9 @@ class SchedulerEngine:
     async_track_point_in_time callbacks - plus, for climate rules with
     override enforcement active, a per-entity state-change subscription
     and the context id of our own last service call to that entity - is
-    engine-local state, so a refresh can safely cancel and replace it.
+    engine-local state, so a refresh can safely cancel and replace it. The
+    record of which scheduled events were already sent (for catch-up) is
+    in-memory too, so a restart catches every device up again.
     """
 
     def __init__(
@@ -153,12 +187,32 @@ class SchedulerEngine:
         # revert" without reaching into that closure. Populated/cleared
         # alongside the real timer; see _arm_override_enforcement.
         self._pending_reapply_at: dict[str, datetime] = {}
+        # Serializes refreshes: each one cancels and re-creates rule
+        # callbacks across awaits, so two interleaved refreshes could leave
+        # callbacks behind for a rule that has since been deleted.
+        self._refresh_lock = asyncio.Lock()
+        # (rule_id, entity_id, timestamp, turning_on) -> when, for every
+        # scheduled event already sent, so a rescan never re-sends one.
+        self._fired: dict[tuple[str, str, int, bool], datetime] = {}
+        # rule_id -> serialized rule as last refreshed; a change re-arms
+        # that rule's catch-up.
+        self._rule_fingerprints: dict[str, str] = {}
+        self._started = False
+        self._unsub_started: CALLBACK_TYPE | None = None
+        self._unsub_second_pass: CALLBACK_TYPE | None = None
+        self._unsub_watched: CALLBACK_TYPE | None = None
+        self._catch_up_tasks: set[asyncio.Task[None]] = set()
 
     async def async_start(self) -> None:
-        """Start the engine: scan now, then rescan at every local midnight.
+        """Start the engine once Home Assistant has started.
 
-        Also rescans whenever the coordinator's data changes, so schedule
-        edits made through the websocket API take effect immediately.
+        The first scan waits for EVENT_HOMEASSISTANT_STARTED (or runs now if
+        Home Assistant is already running), so the devices it catches up
+        exist by then, and runs once more a minute later for late ones.
+        After that it rescans at every local midnight, whenever the
+        coordinator's data changes (so websocket edits apply immediately),
+        and whenever an entity a time provider or day condition reads
+        changes state.
         """
         self._unsub_midnight = async_track_time_change(
             self.hass, self._async_handle_midnight, hour=0, minute=0, second=0
@@ -166,17 +220,48 @@ class SchedulerEngine:
         self._unsub_coordinator = self._coordinator.async_add_listener(
             self._handle_coordinator_update
         )
-        await self._async_refresh_all()
+        watched = (
+            self._time_providers.watched_entity_ids
+            | self._day_conditions.watched_entity_ids
+        )
+        if watched:
+            self._unsub_watched = async_track_state_change_event(
+                self.hass, sorted(watched), self._handle_watched_entity_change
+            )
+        self._unsub_started = async_at_started(self.hass, self._async_handle_started)
+
+    async def _async_handle_started(self, _hass: HomeAssistant) -> None:
+        """Run the startup catch-up, then schedule the second one."""
+        self._unsub_started = None
+        self._started = True
+        await self._async_refresh_all(startup=True)
+        if self._started:  # not stopped while that ran
+            self._unsub_second_pass = async_call_later(
+                self.hass, _SECOND_STARTUP_PASS_DELAY_SECONDS, self._async_second_pass
+            )
+
+    async def _async_second_pass(self, _now: datetime) -> None:
+        """Repeat the startup catch-up for devices that appeared late."""
+        self._unsub_second_pass = None
+        await self._async_refresh_all(startup=True)
 
     @callback
     def async_stop(self) -> None:
         """Stop the engine, cancelling all pending callbacks."""
-        if self._unsub_midnight is not None:
-            self._unsub_midnight()
-            self._unsub_midnight = None
-        if self._unsub_coordinator is not None:
-            self._unsub_coordinator()
-            self._unsub_coordinator = None
+        self._started = False
+        for unsub_attr in (
+            "_unsub_midnight",
+            "_unsub_coordinator",
+            "_unsub_started",
+            "_unsub_second_pass",
+            "_unsub_watched",
+        ):
+            if (unsub := getattr(self, unsub_attr)) is not None:
+                unsub()
+                setattr(self, unsub_attr, None)
+        for task in self._catch_up_tasks:
+            task.cancel()
+        self._catch_up_tasks.clear()
         for unsub_list in self._unsub_rules.values():
             for unsub in unsub_list:
                 unsub()
@@ -607,15 +692,38 @@ class SchedulerEngine:
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Re-scan schedules whenever the coordinator's data changes."""
+        """Re-scan schedules whenever the coordinator's data changes.
+
+        Changes before the startup scan are left to that scan.
+        """
+        if self._started:
+            self.hass.async_create_task(self._async_refresh_all())
+
+    @callback
+    def _handle_watched_entity_change(self, event: Event[EventStateChangedData]) -> None:
+        """Re-scan when a zman or calendar sensor changes value."""
+        old_state = event.data["old_state"]
+        new_state = event.data["new_state"]
+        if not self._started or (
+            old_state is not None
+            and new_state is not None
+            and old_state.state == new_state.state
+        ):
+            return
         self.hass.async_create_task(self._async_refresh_all())
 
     async def _async_handle_midnight(self, _now: datetime) -> None:
         """Re-scan schedules at local midnight, when daily times shift."""
-        await self._async_refresh_all()
+        if self._started:
+            await self._async_refresh_all()
 
-    async def _async_refresh_all(self) -> None:
+    async def _async_refresh_all(self, *, startup: bool = False) -> None:
         """Recompute and reschedule every enabled, non-overridden rule in every schedule.
+
+        Runs under _refresh_lock, so overlapping triggers (a burst of edits,
+        an edit landing during the midnight scan) queue up rather than
+        interleave - each pass then sees the latest data and cancels
+        whatever the previous one scheduled.
 
         A schedule that's disabled or paused (Schedule.is_overridden) is
         never handed to _async_refresh_rule, so its rules' callbacks are
@@ -625,14 +733,35 @@ class SchedulerEngine:
         schedule was just disabled or paused. The same applies to a schedule
         or rule removed from storage: it is not present in the loop below at
         all, so clean up any callback entry that is no longer represented by
-        the coordinator data before refreshing the remaining rules.
+        the coordinator data before refreshing the remaining rules. A stored
+        schedule that fails to parse is logged and skipped, without stopping
+        the others.
+
+        Each entity is then caught up to its most recent scheduled event
+        (on or off) - on `startup` unconditionally, otherwise only if that
+        event hasn't already been sent. So a rescan never repeats an action
+        and undoes a manual change, but an edited rule (whose fired events
+        are forgotten), or an event that came due without its callback
+        firing, still takes effect.
         """
+        async with self._refresh_lock:
+            await self._async_refresh_all_locked(startup)
+
+    async def _async_refresh_all_locked(self, startup: bool) -> None:
+        """Body of _async_refresh_all, run while holding _refresh_lock."""
         now = dt_util.now()
         today = now.date()
-        schedules = [
-            Schedule.from_dict(raw_schedule)
-            for raw_schedule in self._coordinator.data["schedules"]
-        ]
+        schedules: list[Schedule] = []
+        for raw_schedule in self._coordinator.data["schedules"]:
+            try:
+                schedules.append(Schedule.from_dict(raw_schedule))
+            except Exception:  # noqa: BLE001 - isolate one bad stored schedule
+                _LOGGER.exception(
+                    "Skipping stored Scheduler+ schedule that could not be read: %r",
+                    raw_schedule.get("name")
+                    if isinstance(raw_schedule, dict)
+                    else raw_schedule,
+                )
         current_rule_ids = {
             rule.id for schedule in schedules for rule in schedule.rules
         }
@@ -644,22 +773,143 @@ class SchedulerEngine:
             )
         for rule_id in orphaned_rule_ids:
             self._cancel_rule(rule_id)
+        for rule_id in set(self._rule_fingerprints) - current_rule_ids:
+            del self._rule_fingerprints[rule_id]
+            self._forget_fired(rule_id)
+        self._fired = {
+            key: when
+            for key, when in self._fired.items()
+            if when > now - _FIRED_EVENT_RETENTION
+        }
 
+        due_by_entity: dict[str, list[_DueEvent]] = {}
         for schedule in schedules:
             if not schedule.enabled or schedule.is_overridden(today):
                 for rule in schedule.rules:
                     self._cancel_rule(rule.id)
                 continue
 
+            for entity_id in schedule.entities:
+                if self.hass.states.get(entity_id) is None:
+                    async_report_missing_entity(
+                        self.hass, entity_id, f"schedule '{schedule.name}'"
+                    )
+                else:
+                    async_clear_missing_entity(self.hass, entity_id)
+
             for rule in schedule.rules:
+                fingerprint = json.dumps(
+                    [rule.to_dict(), schedule.entities], sort_keys=True, default=str
+                )
+                if self._rule_fingerprints.get(rule.id) != fingerprint:
+                    self._rule_fingerprints[rule.id] = fingerprint
+                    self._forget_fired(rule.id)
                 try:
-                    await self._async_refresh_rule(schedule, rule, now)
+                    due = await self._async_refresh_rule(
+                        schedule, rule, now, catch_up=False
+                    )
                 except Exception:  # noqa: BLE001 - isolate one rule's failure
                     _LOGGER.exception(
                         "Failed to refresh rule '%s' in schedule '%s'",
                         rule.name,
                         schedule.name,
                     )
+                    continue
+                for event in due:
+                    due_by_entity.setdefault(event.entity_id, []).append(event)
+
+        for events in due_by_entity.values():
+            latest = max(events, key=lambda event: event.when)
+            if startup or not self._is_fired(latest):
+                self._start_catch_up(latest)
+
+    @staticmethod
+    def _fired_key(
+        rule_id: str, entity_id: str, when: datetime, turning_on: bool
+    ) -> tuple[str, str, int, bool]:
+        return (rule_id, entity_id, int(when.timestamp()), turning_on)
+
+    def _mark_fired(
+        self, rule_id: str, entity_id: str, when: datetime, turning_on: bool
+    ) -> None:
+        """Remember that a scheduled event was sent - see _async_refresh_all."""
+        self._fired[self._fired_key(rule_id, entity_id, when, turning_on)] = when
+
+    def _is_fired(self, event: _DueEvent) -> bool:
+        return (
+            self._fired_key(
+                event.rule.id, event.entity_id, event.when, event.turning_on
+            )
+            in self._fired
+        )
+
+    def _forget_fired(self, rule_id: str) -> None:
+        self._fired = {
+            key: when for key, when in self._fired.items() if key[0] != rule_id
+        }
+
+    def _start_catch_up(self, event: _DueEvent) -> None:
+        """Send a due event in the background, so a slow device holds up nothing else."""
+        self._mark_fired(event.rule.id, event.entity_id, event.when, event.turning_on)
+        task = self.hass.async_create_background_task(
+            self._async_apply_due(event),
+            name=f"Scheduler+ catch-up {event.entity_id}",
+        )
+        if not task.done():
+            self._catch_up_tasks.add(task)
+            task.add_done_callback(self._catch_up_tasks.discard)
+
+    async def _async_apply_due(self, event: _DueEvent) -> None:
+        """Bring one entity to the state its due event would have set."""
+        rule = event.rule
+        if event.turning_on:
+            await self._issue_turn_on(
+                event.device_handler,
+                event.entity_id,
+                rule.action,
+                rule=rule,
+                schedule_name=event.schedule_name,
+            )
+        elif rule.off_action is not None:
+            await self._issue_turn_on(
+                event.device_handler,
+                event.entity_id,
+                rule.off_action,
+                rule=rule,
+                schedule_name=event.schedule_name,
+            )
+        else:
+            await self._issue_turn_off(
+                event.device_handler,
+                event.entity_id,
+                rule=rule,
+                schedule_name=event.schedule_name,
+            )
+
+    @staticmethod
+    def _is_relevant_due(
+        when: datetime, now: datetime, window_end: datetime | None
+    ) -> bool:
+        """Whether a past event still defines its entity's state for catch-up.
+
+        Today's events count, plus earlier events inside a window that is
+        still open (an overnight window that began yesterday).
+        """
+        return dt_util.as_local(when).date() == now.date() or (
+            window_end is not None and window_end > dt_util.as_utc(now)
+        )
+
+    def _catch_up_latest(self, due: list[_DueEvent]) -> None:
+        """Send each entity's most recent event out of `due`."""
+        latest: dict[str, _DueEvent] = {}
+        for event in due:
+            if (
+                event.entity_id not in latest
+                or event.when > latest[event.entity_id].when
+            ):
+                latest[event.entity_id] = event
+        for event in latest.values():
+            self._start_catch_up(event)
 
     def _handler_for_entity(self, entity_id: str) -> DeviceHandler | None:
         """Return the device handler for `entity_id`, based on its own domain.
@@ -687,18 +937,28 @@ class SchedulerEngine:
         schedule: Schedule,
         rule: Rule,
         now: datetime,
-    ) -> None:
-        """Cancel a rule's pending callbacks and reschedule its next occurrence(s)."""
+        *,
+        catch_up: bool = True,
+    ) -> list[_DueEvent]:
+        """Cancel a rule's pending callbacks and reschedule its next occurrence(s).
+
+        Returns the rule's events that are already due (see _is_relevant_due).
+        With `catch_up`, each entity is also sent its latest one right away;
+        _async_refresh_all passes False and decides across all rules itself.
+        """
         self._cancel_rule(rule.id)
 
         if not rule.enabled:
-            return
+            return []
 
         if rule.time_plan and rule.time_plan.get("enabled"):
-            await self._async_refresh_time_plan_rule(schedule, rule, now)
-            return
+            due = await self._async_refresh_time_plan_rule(schedule, rule, now)
+            if catch_up:
+                self._catch_up_latest(due)
+            return due
 
         unsub_list: list[CALLBACK_TYPE] = []
+        due: list[_DueEvent] = []
 
         # An overnight rule that started yesterday can still be active right
         # now, so both yesterday's and today's occurrences are candidates -
@@ -708,6 +968,9 @@ class SchedulerEngine:
         # also avoids re-firing off a stale "yesterday" occurrence on every
         # refresh, since there's no off/on boundary to close it out).
         both_enabled = rule.on_enabled and rule.off_enabled
+        # Moments are compared in UTC: two local times sharing a tzinfo
+        # compare by wall clock, which misorders the repeated DST hour.
+        now_utc = dt_util.as_utc(now)
         for days_ago in (1, 0) if both_enabled else (0,):
             reference_date = (now - timedelta(days=days_ago)).date()
             if not schedule.is_active_on(reference_date) or not self.mode_allows(schedule.id, reference_date):
@@ -717,8 +980,7 @@ class SchedulerEngine:
                 continue
 
             on_at, off_at = occurrence
-            if rule.off_enabled and off_at <= now:
-                continue
+            window_end = off_at if both_enabled else None
 
             for entity_id in schedule.entities:
                 device_handler = self._handler_for_entity(entity_id)
@@ -730,35 +992,13 @@ class SchedulerEngine:
                     )
                     continue
 
-                if rule.on_enabled:
-                    if on_at <= now:
-                        # Restarted/reloaded mid-window: catch the device up now.
-                        # Caught broadly and isolated per entity (e.g. an entity
-                        # still unavailable right after HA startup) so one
-                        # failure can't abort scheduling for other entities,
-                        # rules, or schedules in the same refresh pass.
-                        try:
-                            await self._issue_turn_on(
-                                device_handler,
-                                entity_id,
-                                rule.action,
-                                rule=rule,
-                                schedule_name=schedule.name,
-                            )
-                        except Exception:  # noqa: BLE001
-                            _LOGGER.exception(
-                                "Failed to catch up '%s' to on for rule '%s'",
-                                entity_id,
-                                rule.name,
-                            )
-                        else:
-                            if both_enabled and not rule.allow_override:
-                                unsub_list.append(
-                                    self._arm_override_enforcement(
-                                        rule, entity_id, device_handler, schedule.name
-                                    )
-                                )
-                    else:
+                for enabled, turning_on, when in (
+                    (rule.on_enabled, True, on_at),
+                    (rule.off_enabled, False, off_at),
+                ):
+                    if not enabled:
+                        continue
+                    if when > now_utc:
                         unsub_list.append(
                             self._schedule_turn_on(
                                 rule,
@@ -766,17 +1006,35 @@ class SchedulerEngine:
                                 device_handler,
                                 entity_id,
                                 rule.action,
-                                on_at,
+                                when,
                                 schedule.name,
                             )
+                            if turning_on
+                            else self._schedule_turn_off(
+                                device_handler, entity_id, when, rule, schedule.name
+                            )
                         )
-                if rule.off_enabled:
+                    elif self._is_relevant_due(when, now, window_end):
+                        due.append(
+                            _DueEvent(
+                                when=when,
+                                turning_on=turning_on,
+                                rule=rule,
+                                schedule_name=schedule.name,
+                                entity_id=entity_id,
+                                device_handler=device_handler,
+                            )
+                        )
+
+                window_open = both_enabled and on_at <= now_utc < off_at
+                if window_open and not rule.allow_override:
+                    # Restarted/rescanned mid-window: keep enforcing it.
                     unsub_list.append(
-                        self._schedule_turn_off(
-                            device_handler, entity_id, off_at, rule, schedule.name
+                        self._arm_override_enforcement(
+                            rule, entity_id, device_handler, schedule.name
                         )
                     )
-                if rule.manual_auto_off_minutes and both_enabled:
+                if rule.manual_auto_off_minutes and both_enabled and off_at > now_utc:
                     unsub_list.append(
                         self._schedule_manual_auto_off_window(
                             device_handler,
@@ -791,12 +1049,20 @@ class SchedulerEngine:
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list
+        if catch_up:
+            self._catch_up_latest(due)
+        return due
 
     async def _async_refresh_time_plan_rule(
         self, schedule: Schedule, rule: Rule, now: datetime
-    ) -> None:
-        """Schedule all transitions for a minute-based Time plan window."""
+    ) -> list[_DueEvent]:
+        """Schedule all transitions for a minute-based Time plan window.
+
+        Returns the transitions already due, like _async_refresh_rule.
+        """
         unsub_list: list[CALLBACK_TYPE] = []
+        due: list[_DueEvent] = []
+        now_utc = dt_util.as_utc(now)  # see _async_refresh_rule
         for days_ago in (1, 0):
             reference_date = (now - timedelta(days=days_ago)).date()
             if not schedule.is_active_on(reference_date) or not self.mode_allows(
@@ -805,7 +1071,7 @@ class SchedulerEngine:
                 continue
             windows = await self._async_resolve_time_plan_windows(rule, reference_date)
             transitions = await self._async_resolve_time_plan(rule, reference_date)
-            if not windows or not transitions or max(end for _, end in windows) <= now:
+            if not windows or not transitions:
                 continue
             for entity_id in schedule.entities:
                 device_handler = self._handler_for_entity(entity_id)
@@ -817,34 +1083,23 @@ class SchedulerEngine:
                     )
                     continue
 
-                past = [(when, action) for when, action in transitions if when <= now]
-                if past:
-                    _, action = past[-1]
-                    try:
-                        if action == "on":
-                            await self._issue_turn_on(
-                                device_handler,
-                                entity_id,
-                                rule.action,
-                                rule=rule,
-                                schedule_name=schedule.name,
-                            )
-                        else:
-                            await self._issue_turn_off(
-                                device_handler,
-                                entity_id,
-                                rule=rule,
-                                schedule_name=schedule.name,
-                            )
-                    except Exception:  # noqa: BLE001 - isolate each entity
-                        _LOGGER.exception(
-                            "Failed to catch up '%s' to Time plan state for rule '%s'",
-                            entity_id,
-                            rule.name,
-                        )
-
                 for when, action in transitions:
-                    if when <= now:
+                    if when <= now_utc:
+                        window_end = max(
+                            (end for start, end in windows if start <= when),
+                            default=None,
+                        )
+                        if self._is_relevant_due(when, now, window_end):
+                            due.append(
+                                _DueEvent(
+                                    when=when,
+                                    turning_on=action == "on",
+                                    rule=rule,
+                                    schedule_name=schedule.name,
+                                    entity_id=entity_id,
+                                    device_handler=device_handler,
+                                )
+                            )
                         continue
                     if action == "on":
                         unsub_list.append(
@@ -867,7 +1122,7 @@ class SchedulerEngine:
 
                 if rule.manual_auto_off_minutes:
                     for start_at, end_at in windows:
-                        if end_at > now:
+                        if end_at > now_utc:
                             unsub_list.append(
                                 self._schedule_manual_auto_off_window(
                                     device_handler,
@@ -882,55 +1137,80 @@ class SchedulerEngine:
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list
+        return due
 
     async def _async_resolve_occurrence(
-        self, rule: Rule, reference_date: date
+        self, rule: Rule, reference_date: date, *, both_sides: bool = False
     ) -> tuple[datetime, datetime] | None:
         """Resolve a rule's on/off datetimes for `reference_date`.
 
-        Returns None if the rule does not apply on that date, either time
-        could not be resolved, or a referenced plugin is not registered. If
-        off resolves to a clock time at or before on, this is an overnight
-        rule and off is shifted to the following day.
+        Returns None if the rule does not apply on that date, an enabled
+        side's time could not be resolved, or a referenced plugin is not
+        registered. Only enabled sides are resolved (unless `both_sides`):
+        a disabled side's slot is filled with the enabled side's time, so an
+        on-only rule never fails on an off time it doesn't use. If both
+        sides are enabled and off resolves at or before on, this is an
+        overnight rule and off is shifted to the following day.
 
         RuleDateMode.INCLUDE rules ignore `days` entirely - they fire only
-        when _matches_date_filter matches (a listed date, or a currently-
-        true day condition, e.g. "only on Shabbos"). ALWAYS/EXCLUDE rules
-        follow `days` as always; EXCLUDE additionally skips a date matched
-        by _matches_date_filter, letting a normally-recurring rule be
-        overridden for a one-off date - or every Yom Tov - without
-        touching the rule's regular days/times.
+        when _matches_date_filter matches (a listed date, or a day
+        condition, e.g. "only on Shabbos"). ALWAYS/EXCLUDE rules follow
+        `days` as always; EXCLUDE additionally skips a date matched by
+        _matches_date_filter, letting a normally-recurring rule be
+        overridden for a one-off date - or every Yom Tov - without touching
+        the rule's regular days/times. Day conditions are judged at the
+        occurrence's start (its on time, or off time for an off-only rule),
+        and that one decision covers the whole occurrence, off included.
         """
-        if rule.date_mode is RuleDateMode.INCLUDE:
-            if not await self._matches_date_filter(rule, reference_date):
-                return None
-        else:
-            if _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days:
-                return None
-            if rule.date_mode is RuleDateMode.EXCLUDE and await self._matches_date_filter(
-                rule, reference_date
-            ):
-                return None
+        if rule.date_mode is not RuleDateMode.INCLUDE and (
+            _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days
+        ):
+            return None
 
+        resolve_on = rule.on_enabled or both_sides or not rule.off_enabled
+        resolve_off = rule.off_enabled or both_sides or not rule.on_enabled
         try:
-            on_provider = self._time_providers.get(rule.on_time.provider)
-            off_provider = self._time_providers.get(rule.off_time.provider)
+            on_provider = (
+                self._time_providers.get(rule.on_time.provider) if resolve_on else None
+            )
+            off_provider = (
+                self._time_providers.get(rule.off_time.provider) if resolve_off else None
+            )
         except LookupError:
             _LOGGER.error("Rule '%s' uses an unsupported time provider", rule.name)
             return None
 
-        on_at = await on_provider.async_resolve(
-            self.hass, reference_date, rule.on_time.params
+        on_at = (
+            await on_provider.async_resolve(
+                self.hass, reference_date, rule.on_time.params
+            )
+            if on_provider is not None
+            else None
         )
-        off_at = await off_provider.async_resolve(
-            self.hass, reference_date, rule.off_time.params
+        off_at = (
+            await off_provider.async_resolve(
+                self.hass, reference_date, rule.off_time.params
+            )
+            if off_provider is not None
+            else None
         )
 
-        if on_at is None or off_at is None:
+        if (resolve_on and on_at is None) or (resolve_off and off_at is None):
             return None
+        on_at = on_at or off_at
+        off_at = off_at or on_at
 
-        if off_at <= on_at:
+        if resolve_on and resolve_off and off_at <= on_at:
             off_at += timedelta(days=1)
+
+        start = on_at if rule.on_enabled or not rule.off_enabled else off_at
+        if rule.date_mode is RuleDateMode.INCLUDE:
+            if not await self._matches_date_filter(rule, reference_date, start):
+                return None
+        elif rule.date_mode is RuleDateMode.EXCLUDE and await self._matches_date_filter(
+            rule, reference_date, start
+        ):
+            return None
 
         return on_at, off_at
 
@@ -987,16 +1267,6 @@ class SchedulerEngine:
         if not rule.time_plan or not rule.time_plan.get("enabled"):
             return None
 
-        if rule.date_mode is RuleDateMode.INCLUDE:
-            if not await self._matches_date_filter(rule, reference_date):
-                return None
-        elif _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days:
-            return None
-        elif rule.date_mode is RuleDateMode.EXCLUDE and await self._matches_date_filter(
-            rule, reference_date
-        ):
-            return None
-
         raw_periods = rule.time_plan.get("periods") or []
         if raw_periods:
             windows: list[tuple[datetime, datetime]] = []
@@ -1018,13 +1288,33 @@ class SchedulerEngine:
                 if end_at <= start_at:
                     end_at += timedelta(days=1)
                 windows.append((start_at, end_at))
-            return sorted(windows)
+            windows.sort()
+            if rule.date_mode is not RuleDateMode.INCLUDE and (
+                _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days
+            ):
+                return None
+            # Like _async_resolve_occurrence: judged once, at the plan's start.
+            matches = await self._matches_date_filter(
+                rule, reference_date, windows[0][0] if windows else None
+            )
+            if (rule.date_mode is RuleDateMode.INCLUDE and not matches) or (
+                rule.date_mode is RuleDateMode.EXCLUDE and matches
+            ):
+                return None
+            return windows
 
-        occurrence = await self._async_resolve_occurrence(rule, reference_date)
+        occurrence = await self._async_resolve_occurrence(
+            rule, reference_date, both_sides=True
+        )
         return [occurrence] if occurrence is not None else None
 
-    async def _matches_date_filter(self, rule: Rule, reference_date: date) -> bool:
+    async def _matches_date_filter(
+        self, rule: Rule, reference_date: date, start: datetime | None = None
+    ) -> bool:
         """Return whether `reference_date` matches rule.dates/date_ranges/day_conditions.
+
+        `start` is the occurrence's start, for day conditions that depend on
+        the time of day (see DayCondition.async_check_at).
 
         All three are combined with OR: a rule can mix a literal blackout
         date, a vacation date range, and e.g. "every Yom Tov", and any one
@@ -1051,7 +1341,7 @@ class SchedulerEngine:
                     condition_type.value,
                 )
                 continue
-            if await condition.async_check(self.hass, reference_date):
+            if await condition.async_check_at(self.hass, reference_date, start):
                 return True
 
         return False
@@ -1067,6 +1357,9 @@ class SchedulerEngine:
     ) -> None:
         """Call async_turn_on with a fresh Context, remembered for override detection.
 
+        Each service call is bounded by _SERVICE_CALL_TIMEOUT_SECONDS; a
+        timeout is reported like any other failure.
+
         Every turn-on the engine itself performs goes through here (never
         device_handler.async_turn_on directly), so _arm_override_enforcement
         can always recognize a resulting state_changed event as "us" via
@@ -1081,9 +1374,10 @@ class SchedulerEngine:
         )
         try:
             for action_item in (rule.actions or [action]):
-                await device_handler.async_turn_on(
-                    self.hass, entity_id, action_item, context=context
-                )
+                async with asyncio.timeout(_SERVICE_CALL_TIMEOUT_SECONDS):
+                    await device_handler.async_turn_on(
+                        self.hass, entity_id, action_item, context=context
+                    )
         except Exception as err:
             self._notify_action_failure(entity_id, rule, schedule_name, "on", err)
 
@@ -1102,7 +1396,10 @@ class SchedulerEngine:
             entity_id, rule, schedule_name, turning_on=False, context=context
         )
         try:
-            await device_handler.async_turn_off(self.hass, entity_id, context=context)
+            async with asyncio.timeout(_SERVICE_CALL_TIMEOUT_SECONDS):
+                await device_handler.async_turn_off(
+                    self.hass, entity_id, context=context
+                )
         except Exception as err:
             self._notify_action_failure(entity_id, rule, schedule_name, "off", err)
 
@@ -1190,6 +1487,7 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
+            self._mark_fired(rule.id, entity_id, when, True)
             await self._issue_turn_on(
                 device_handler, entity_id, action, rule=rule, schedule_name=schedule_name
             )
@@ -1225,6 +1523,7 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
+            self._mark_fired(rule.id, entity_id, when, False)
             if rule.off_action is not None:
                 await self._issue_turn_on(
                     device_handler,

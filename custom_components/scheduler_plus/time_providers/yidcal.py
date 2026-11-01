@@ -15,6 +15,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ..issues import async_clear_missing_entity, async_report_missing_entity
 from .base import TimeProvider
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,11 @@ class YidCalTimeProvider(TimeProvider):
         """Initialize with a mapping of zman key -> YidCal entity_id."""
         self._entities = entities
 
+    @property
+    def watched_entity_ids(self) -> tuple[str, ...]:
+        """Each zman sensor; a new value moves the rules that use it."""
+        return tuple(self._entities.values())
+
     async def async_resolve(
         self, hass: HomeAssistant, reference_date: date, params: dict[str, Any]
     ) -> datetime | None:
@@ -49,7 +55,11 @@ class YidCalTimeProvider(TimeProvider):
             return None
 
         state = hass.states.get(entity_id)
-        if state is None or state.state in ("unknown", "unavailable"):
+        if state is None:
+            async_report_missing_entity(hass, entity_id, f"YidCal zman '{zman_key}'")
+            return None
+        async_clear_missing_entity(hass, entity_id)
+        if state.state in ("unknown", "unavailable"):
             return None
 
         zman = dt_util.parse_datetime(state.state)

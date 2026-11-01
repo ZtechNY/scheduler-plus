@@ -21,6 +21,14 @@ from ..const import TimeProviderType
 class TimeProvider(ABC):
     """A plugin that resolves a rule's time parameters to a concrete datetime."""
 
+    @property
+    def watched_entity_ids(self) -> tuple[str, ...]:
+        """Entities whose changes can move this provider's times.
+
+        The engine rescans when any of them changes state.
+        """
+        return ()
+
     @abstractmethod
     async def async_resolve(
         self, hass: HomeAssistant, reference_date: date, params: dict[str, Any]
@@ -56,3 +64,12 @@ class TimeProviderRegistry:
             raise LookupError(
                 f"No time provider registered for '{provider_type.value}'"
             ) from err
+
+    @property
+    def watched_entity_ids(self) -> set[str]:
+        """Every entity any registered provider watches."""
+        return {
+            entity_id
+            for provider in self._providers.values()
+            for entity_id in provider.watched_entity_ids
+        }

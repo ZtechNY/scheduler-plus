@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
@@ -23,7 +24,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.scheduler_plus.const import EVENT_RULE_TRIGGERED
+from custom_components.scheduler_plus.const import DOMAIN, EVENT_RULE_TRIGGERED
 from custom_components.scheduler_plus.report import (
     MAX_REPORT_ENTITIES,
     MAX_REPORT_RANGE_DAYS,
@@ -188,7 +189,7 @@ async def test_async_build_report_no_data_for_unknown_entity(
 
 
 async def test_async_build_report_annotates_rule_triggered_changes(
-    recorder_mock, hass: HomeAssistant
+    recorder_mock, hass: HomeAssistant, freezer: FrozenDateTimeFactory
 ) -> None:
     """A state change whose EVENT_RULE_TRIGGERED shares its moment is annotated "rule".
 
@@ -198,6 +199,10 @@ async def test_async_build_report_annotates_rule_triggered_changes(
     query path instead of hand-built State objects, since that query path
     (not the compaction math) is what actually needed verifying.
     """
+    # Logbook only picks up the EVENT_RULE_TRIGGERED describer (logbook.py)
+    # from loaded integrations, so load Scheduler+ itself (no config entry).
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, DOMAIN, {})
     assert await async_setup_component(hass, "logbook", {})
     await hass.async_block_till_done()
 
@@ -222,7 +227,9 @@ async def test_async_build_report_annotates_rule_triggered_changes(
     hass.states.async_set(entity_id, "on", {"brightness": 200}, context=context)
     await hass.async_block_till_done()
 
-    # An unrelated manual change a while later, no Scheduler+ event nearby.
+    # An unrelated manual change a while later, no Scheduler+ event nearby -
+    # actually move the clock past report.py's match tolerance.
+    freezer.tick(timedelta(seconds=30))
     hass.states.async_set(entity_id, "off", {}, context=Context())
     await hass.async_block_till_done()
 

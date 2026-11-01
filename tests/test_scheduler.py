@@ -22,18 +22,22 @@ from unittest.mock import AsyncMock, patch
 import asyncio
 
 import pytest
-from homeassistant.const import ATTR_TEMPERATURE
-from homeassistant.core import Context, Event, HomeAssistant
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import ATTR_TEMPERATURE, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import Context, CoreState, Event, HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.scheduler_plus.const import (
+    DOMAIN,
     DayConditionType,
     DeviceType,
     EVENT_RULE_TRIGGERED,
     TimeProviderType,
 )
 from custom_components.scheduler_plus.coordinator import SchedulerPlusCoordinator
+from custom_components.scheduler_plus.day_conditions import DEFAULT_DAY_CONDITIONS
 from custom_components.scheduler_plus.day_conditions.base import (
     DayCondition,
     DayConditionRegistry,
@@ -333,7 +337,9 @@ async def engine(
     """
     store = SchedulerPlusStore(hass)
     coordinator = SchedulerPlusCoordinator(hass, store)
-    await coordinator.async_config_entry_first_refresh()
+    # async_config_entry_first_refresh() requires a config entry in current
+    # HA; this bare coordinator has none, so load it with a plain refresh.
+    await coordinator.async_refresh()
 
     time_providers = TimeProviderRegistry(
         {
@@ -779,13 +785,12 @@ async def test_refresh_rule_off_only_schedules_future_off_only(
     assert len(engine._unsub_rules[rule.id]) == 1
 
 
-async def test_refresh_rule_off_only_skips_when_already_past(
+async def test_refresh_rule_off_only_catches_up_missed_off(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:
-    """An off-only rule does not catch up a missed off - it just skips it.
+    """An off-only rule whose off already passed today is caught up to off.
 
-    Mirrors a BOTH-mode rule's existing off-side behavior: off is only ever
-    scheduled forward, never fired as an immediate catch-up.
+    Nothing is left to schedule for today, so no callback stays pending.
     """
     rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
     schedule = _make_schedule(rule)
@@ -793,7 +798,7 @@ async def test_refresh_rule_off_only_skips_when_already_past(
 
     await engine._async_refresh_rule(schedule, rule, now)
 
-    assert fake_device_handler.turn_off_calls == []
+    assert fake_device_handler.turn_off_calls == ["light.test"]
     assert rule.id not in engine._unsub_rules
 
 
@@ -848,7 +853,8 @@ async def test_refresh_rule_on_only_never_arms_enforcement(
 
 
 async def test_catchup_turn_on_fires_rule_triggered_event(
-    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """Catching up a rule's on-action fires EVENT_RULE_TRIGGERED.
 
@@ -862,6 +868,7 @@ async def test_catchup_turn_on_fires_rule_triggered_event(
         rule, name="Kitchen heat", entities=["climate.test"], device_type=DeviceType.CLIMATE
     )
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
 
     events: list[Event] = []
     hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
@@ -916,7 +923,8 @@ async def test_scheduled_turn_off_fires_rule_triggered_event(
 
 
 async def test_override_enforcement_reapplies_after_grace_period(
-    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """A genuine external mismatch reapplies the rule's action after the grace period."""
     rule = _make_climate_rule(
@@ -924,6 +932,7 @@ async def test_override_enforcement_reapplies_after_grace_period(
     )
     schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
 
     events: list[Event] = []
     hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
@@ -951,7 +960,8 @@ async def test_override_enforcement_reapplies_after_grace_period(
 
 
 async def test_override_enforcement_debounce_resets_on_further_change(
-    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """A second override before the grace period elapses resets the countdown."""
     rule = _make_climate_rule(
@@ -959,29 +969,32 @@ async def test_override_enforcement_debounce_resets_on_further_change(
     )
     schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
     now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
 
     await engine._async_refresh_rule(schedule, rule, now)
     assert len(fake_climate_handler.turn_on_calls) == 1
-
-    start = dt_util.utcnow()
 
     hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 75})
     await hass.async_block_till_done()
 
     # A second override before the first 2-minute countdown would elapse.
-    async_fire_time_changed(hass, start + timedelta(minutes=1))
+    # Time moves with the frozen clock, so timers set later are set later.
+    freezer.tick(timedelta(minutes=1))
+    async_fire_time_changed(hass)
     await hass.async_block_till_done()
     hass.states.async_set("climate.test", "heat", {ATTR_TEMPERATURE: 80})
     await hass.async_block_till_done()
 
     # Just past the FIRST change's original deadline (t=2min) - if the
     # countdown hadn't reset, this would already have reapplied.
-    async_fire_time_changed(hass, start + timedelta(minutes=2, seconds=30))
+    freezer.tick(timedelta(minutes=1, seconds=30))
+    async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert len(fake_climate_handler.turn_on_calls) == 1
 
     # Past the SECOND change's deadline (t=1min + 2min = t=3min).
-    async_fire_time_changed(hass, start + timedelta(minutes=3, seconds=30))
+    freezer.tick(timedelta(minutes=1))
+    async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert len(fake_climate_handler.turn_on_calls) == 2
 
@@ -1499,7 +1512,8 @@ async def test_get_day_events_skips_seasonally_inactive_date(
 
 
 async def test_refresh_all_cancels_pending_callbacks_when_overridden(
-    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """Pausing a schedule cancels its already-scheduled callbacks, not just future refreshes.
 
@@ -1510,6 +1524,7 @@ async def test_refresh_all_cancels_pending_callbacks_when_overridden(
     paused in the meantime.
     """
     now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
     rule = _make_rule(on_time="06:00", off_time="21:00")
     schedule = _make_schedule(rule)
     engine._coordinator.async_set_updated_data(
@@ -1572,9 +1587,12 @@ async def test_refresh_all_cancels_callbacks_for_deleted_rule(
 
 
 async def test_refresh_all_skips_overridden_schedule(
-    engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """An overridden schedule's rules are never evaluated, like a disabled one."""
+    freezer.move_to(datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE))
     rule = _make_rule()
     schedule = _make_schedule(rule, override_until="2024-01-02")
     engine._coordinator.async_set_updated_data(
@@ -2073,12 +2091,13 @@ def test_is_exclusion_fixable_include_with_day_conditions() -> None:
 
     assert SchedulerEngine._is_exclusion_fixable(rule, _MONDAY) is False
 
-async def test_mode_gates_live_execution_and_preview(engine, fake_device_handler):
+async def test_mode_gates_live_execution_and_preview(engine, fake_device_handler, freezer):
     """A Run assignment makes the schedule exclusive to that mode's dates."""
     rule = _make_rule()
     schedule = _make_schedule(rule)
     engine._coordinator.data["modes"] = [{"weekdays": [], "dates": {}, "run_schedules": [schedule.id]}]
-    now = dt_util.as_local(datetime(2026, 7, 27, 12, tzinfo=dt_util.UTC))
+    now = datetime(2026, 7, 27, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
     await engine._async_refresh_rule(schedule, rule, now)
     assert not fake_device_handler.turn_on_calls
     assert not await engine.async_get_day_events(schedule, now.date())
@@ -2088,7 +2107,7 @@ async def test_mode_gates_live_execution_and_preview(engine, fake_device_handler
     assert await engine.async_get_day_events(schedule, now.date())
 
 
-async def test_overnight_mode_keeps_next_morning_off(engine, fake_device_handler):
+async def test_overnight_mode_keeps_next_morning_off(engine, fake_device_handler, freezer):
     """Gating is by the occurrence's START date, so the off action survives.
 
     This is the whole reason modes gate on the starting date rather than on
@@ -2097,7 +2116,8 @@ async def test_overnight_mode_keeps_next_morning_off(engine, fake_device_handler
     """
     rule = _make_rule(on_time="20:00", off_time="05:00")
     schedule = _make_schedule(rule)
-    now = dt_util.as_local(datetime(2026, 7, 28, 1, tzinfo=dt_util.UTC))
+    now = datetime(2026, 7, 28, 1, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
     yesterday = (now - timedelta(days=1)).date()
     engine._coordinator.data["modes"] = [{"weekdays": [], "dates": {yesterday.isoformat(): True}, "run_schedules": [schedule.id]}]
     with patch.object(engine, "_schedule_turn_off", return_value=lambda: None) as off:
@@ -2144,3 +2164,423 @@ async def test_mode_blocked_schedule_is_not_reported_as_conflicting(engine):
     engine._coordinator.data["modes"] = []
 
     assert await engine.async_find_conflicts(candidate)
+
+
+# --- v0.5.3 reliability fixes -------------------------------------------------
+
+
+def _set_schedules(engine: SchedulerEngine, *schedules: Schedule) -> None:
+    """Store `schedules` in the engine's coordinator, as the websocket API would."""
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [schedule.to_dict() for schedule in schedules]}
+    )
+
+
+def _at(day: date, hour: int, minute: int = 0, second: int = 0) -> datetime:
+    return datetime(
+        day.year, day.month, day.day, hour, minute, second,
+        tzinfo=dt_util.DEFAULT_TIME_ZONE,
+    )
+
+
+async def _advance_to(hass: HomeAssistant, freezer: FrozenDateTimeFactory, when: datetime) -> None:
+    """Move the frozen clock to `when` and run every callback now due."""
+    freezer.move_to(when)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+
+async def test_off_only_rule_before_default_on_time_fires_same_day(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 1: an off-only 05:00 rule isn't pushed past its hidden 06:00 on time."""
+    rule = _make_rule(on_time="06:00", off_time="05:00", on_enabled=False)
+    schedule = _make_schedule(rule)
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+    assert occurrence is not None
+    assert occurrence[1] == _at(_MONDAY, 5)
+
+    freezer.move_to(_at(_MONDAY, 3))
+    await engine._async_refresh_rule(schedule, rule, _at(_MONDAY, 3))
+    await _advance_to(hass, freezer, _at(_MONDAY, 5, 0, 1))
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+
+@pytest.mark.parametrize(
+    "off_provider",
+    [TimeProviderType.SUNRISE, TimeProviderType.SUNSET],
+    ids=["unresolvable", "unregistered"],
+)
+async def test_on_only_rule_ignores_its_unused_off_time(
+    engine: SchedulerEngine, off_provider: TimeProviderType
+) -> None:
+    """Fix 1: an on-only rule resolves even if its unused off time can't."""
+    rule = _make_rule(on_time="06:00", off_provider=off_provider, off_enabled=False)
+
+    occurrence = await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert occurrence is not None
+    assert occurrence[0] == _at(_MONDAY, 6)
+
+
+async def test_startup_catches_up_off_for_window_that_already_ended(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: after an outage spanning a window's off, startup turns it off."""
+    freezer.move_to(_at(_MONDAY, 12))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="06:00", off_time="09:00")))
+
+    await engine.async_start()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+    assert fake_device_handler.turn_on_calls == []
+
+
+async def test_startup_applies_latest_event_across_rules(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: each target ends up in the state of its last scheduled event today."""
+    freezer.move_to(_at(_MONDAY, 12))
+    schedule = _make_schedule(
+        _make_rule(id="morning-on", on_time="06:00", off_enabled=False)
+    )
+    schedule.rules.append(
+        _make_rule(id="mid-morning-off", off_time="09:00", on_enabled=False)
+    )
+    _set_schedules(engine, schedule)
+
+    await engine.async_start()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_on_calls == []
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+
+async def test_startup_pass_waits_for_home_assistant_started(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 3: no catch-up until other integrations' entities exist, then again 60s on."""
+    freezer.move_to(_at(_MONDAY, 12))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="06:00", off_time="21:00")))
+    hass.set_state(CoreState.starting)
+
+    await engine.async_start()
+    await hass.async_block_till_done()
+    assert fake_device_handler.turn_on_calls == []
+
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+    await _advance_to(hass, freezer, _at(_MONDAY, 12, 1, 1))
+    assert len(fake_device_handler.turn_on_calls) == 2
+
+
+@pytest.fixture
+def calendar_engine(engine: SchedulerEngine) -> SchedulerEngine:
+    """The fake-plugin engine, but with the real Shabbos/Yom Tov day conditions."""
+    engine._day_conditions = DEFAULT_DAY_CONDITIONS
+    return engine
+
+
+# A plain week: Friday 2026-11-06, Shabbos 2026-11-07.
+_FRIDAY = date(2026, 11, 6)
+_SATURDAY = date(2026, 11, 7)
+
+
+async def test_shabbos_rule_fires_on_friday_night(
+    calendar_engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 4: Friday night counts as Shabbos, though it isn't yet at midnight."""
+    hass.states.async_set("sensor.yidcal_zman_erev", _at(_FRIDAY, 16, 25).isoformat())
+    hass.states.async_set("binary_sensor.yidcal_no_melucha_regular_shabbos", "off")
+    rule = _make_rule(
+        on_time="19:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+    freezer.move_to(_at(_FRIDAY, 0, 0, 30))
+    _set_schedules(calendar_engine, _make_schedule(rule))
+
+    await calendar_engine._async_refresh_all()
+    await _advance_to(hass, freezer, _at(_FRIDAY, 19, 0, 1))
+
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+
+async def test_shabbos_window_crossing_midnight_keeps_its_off(
+    calendar_engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 4: the midnight rescan keeps Friday night's 01:00 off - the end follows the start."""
+    hass.states.async_set("sensor.yidcal_zman_erev", _at(_FRIDAY, 16, 25).isoformat())
+    hass.states.async_set("binary_sensor.yidcal_no_melucha_regular_shabbos", "on")
+    rule = _make_rule(
+        on_time="20:00",
+        off_time="01:00",
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+    freezer.move_to(_at(_SATURDAY, 0, 0, 30))
+    _set_schedules(calendar_engine, _make_schedule(rule))
+
+    await calendar_engine._async_refresh_all()
+    await _advance_to(hass, freezer, _at(_SATURDAY, 1, 0, 1))
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+
+async def test_skip_yom_tov_overnight_rule_stays_off_on_second_day(
+    calendar_engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 4: midnight into Pesach's second day doesn't revive day one's skipped window."""
+    hass.states.async_set("binary_sensor.yidcal_no_melucha_yomtov", "on")
+    rule = _make_rule(
+        on_time="18:00",
+        off_time="02:00",
+        date_mode=RuleDateMode.EXCLUDE,
+        day_conditions=frozenset({DayConditionType.YOM_TOV}),
+    )
+    freezer.move_to(_at(date(2027, 4, 23), 0, 0, 30))
+    _set_schedules(calendar_engine, _make_schedule(rule))
+
+    await calendar_engine._async_refresh_all()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_on_calls == []
+
+
+async def test_yidcal_sensor_change_triggers_rescan(
+    calendar_engine: SchedulerEngine, hass: HomeAssistant
+) -> None:
+    """Fix 4: a new zman value re-evaluates rules without waiting for midnight."""
+    await calendar_engine.async_start()
+    await hass.async_block_till_done()
+
+    with patch.object(calendar_engine, "_async_refresh_all", new=AsyncMock()) as refresh:
+        hass.states.async_set(
+            "sensor.yidcal_zman_erev", _at(_FRIDAY, 16, 25).isoformat()
+        )
+        await hass.async_block_till_done()
+
+    refresh.assert_called_once()
+
+
+async def test_missing_schedule_entity_raises_repairs_issue(
+    engine: SchedulerEngine,
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 5: a scheduled light that doesn't exist is surfaced, then cleared."""
+    freezer.move_to(_at(_MONDAY, 3))
+    _set_schedules(engine, _make_schedule(_make_rule(), entities=["light.gone"]))
+
+    await engine._async_refresh_all()
+    assert issue_registry.async_get_issue(DOMAIN, "missing_entity_light.gone") is not None
+
+    hass.states.async_set("light.gone", "off")
+    await engine._async_refresh_all()
+    assert issue_registry.async_get_issue(DOMAIN, "missing_entity_light.gone") is None
+
+
+class GatedTimeProvider(TimeProvider):
+    """A fixed-time provider that waits for `gate`, to interleave refreshes."""
+
+    def __init__(self) -> None:
+        """Initialize closed."""
+        self.gate = asyncio.Event()
+
+    async def async_resolve(
+        self, hass: HomeAssistant, reference_date: date, params: dict[str, Any]
+    ) -> datetime | None:
+        """Resolve like FixedTimeProvider once the gate opens."""
+        await self.gate.wait()
+        return await FixedTimeProvider().async_resolve(hass, reference_date, params)
+
+
+async def test_overlapping_refreshes_leave_no_timers_for_deleted_rule(
+    engine: SchedulerEngine, hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Fix 6: a rule deleted mid-refresh can't keep the timers that refresh creates."""
+    provider = GatedTimeProvider()
+    engine._time_providers = TimeProviderRegistry({TimeProviderType.FIXED: provider})
+    freezer.move_to(_at(_MONDAY, 3))
+    _set_schedules(engine, _make_schedule(_make_rule()))
+
+    first = hass.async_create_task(engine._async_refresh_all())
+    await asyncio.sleep(0)
+    engine._coordinator.async_set_updated_data({"version": 1, "schedules": []})
+    second = hass.async_create_task(engine._async_refresh_all())
+    await asyncio.sleep(0)
+    provider.gate.set()
+    await first
+    await second
+
+    assert engine._unsub_rules == {}
+
+
+async def test_rescan_does_not_resend_until_that_rule_changes(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 7: rescans keep manual changes; editing the rule catches up again."""
+    freezer.move_to(_at(_MONDAY, 12))
+    other = _make_schedule(_make_rule(id="other-rule"), id="other", entities=["light.other"])
+    _set_schedules(engine, _make_schedule(_make_rule()), other)
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    assert [call[0] for call in fake_device_handler.turn_on_calls] == ["light.test", "light.other"]
+
+    # Midnight-style rescan, then an edit to a different schedule.
+    await engine._async_refresh_all()
+    other.name = "Renamed"
+    _set_schedules(engine, _make_schedule(_make_rule()), other)
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    assert len(fake_device_handler.turn_on_calls) == 2
+
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="07:00")), other)
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    assert [call[0] for call in fake_device_handler.turn_on_calls[2:]] == ["light.test"]
+
+
+async def test_unreadable_stored_schedule_does_not_block_the_rest(
+    engine: SchedulerEngine, freezer: FrozenDateTimeFactory
+) -> None:
+    """Fix 8: one corrupt schedule is skipped; the others are still scheduled."""
+    freezer.move_to(_at(_MONDAY, 3))
+    good = _make_schedule(_make_rule())
+    engine._coordinator.async_set_updated_data(
+        {"version": 1, "schedules": [{"id": "broken"}, good.to_dict()]}
+    )
+
+    await engine._async_refresh_all()
+
+    assert len(engine._unsub_rules["rule-1"]) == 2
+
+
+async def _hang(*_args: Any, **_kwargs: Any) -> None:
+    """A device call that never returns."""
+    await asyncio.Event().wait()
+
+
+async def test_service_call_times_out_and_is_reported(engine: SchedulerEngine) -> None:
+    """Fix 9: an unresponsive device call is abandoned and reported as a failure."""
+    handler = FakeDeviceHandler()
+    with (
+        patch.object(handler, "async_turn_on", new=AsyncMock(side_effect=_hang)),
+        patch(
+            "custom_components.scheduler_plus.scheduler._SERVICE_CALL_TIMEOUT_SECONDS",
+            0.05,
+            create=True,
+        ),
+        patch(
+            "custom_components.scheduler_plus.scheduler.persistent_notification.async_create"
+        ) as notify,
+    ):
+        await asyncio.wait_for(
+            engine._issue_turn_on(
+                handler, "light.test", {}, rule=_make_rule(), schedule_name="Morning"
+            ),
+            timeout=5,
+        )
+
+    notify.assert_called_once()
+
+
+async def test_slow_device_does_not_block_other_catch_ups(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    fake_switch_handler: FakeDeviceHandler,
+) -> None:
+    """Fix 9: catch-ups run concurrently in the background, not one after another."""
+    # On-only at midnight: due at any time of day the test runs.
+    rule = _make_rule(on_time="00:00", off_enabled=False)
+    _set_schedules(
+        engine,
+        _make_schedule(
+            rule,
+            entities=["light.slow", "switch.fast"],
+            device_type=DeviceType.LIGHT_SWITCH,
+        ),
+    )
+
+    with patch.object(fake_device_handler, "async_turn_on", new=AsyncMock(side_effect=_hang)):
+        await asyncio.wait_for(engine._async_refresh_all(), timeout=5)
+
+    assert [call[0] for call in fake_switch_handler.turn_on_calls] == ["switch.fast"]
+
+
+async def test_dst_fall_back_repeated_time_fires_once(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Nov 1 2026: 01:30 happens twice on the wall clock but fires once."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to(_at(date(2026, 11, 1), 0, 0, 30))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="01:30", off_enabled=False)))
+    await engine._async_refresh_all()
+
+    first_0130 = datetime(2026, 11, 1, 5, 30, tzinfo=dt_util.UTC)  # 01:30 EDT
+    await _advance_to(hass, freezer, first_0130 + timedelta(seconds=1))
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+    # A rescan during the repeated hour, then the second 01:30 (EST).
+    freezer.move_to(first_0130 + timedelta(minutes=45))
+    await engine._async_refresh_all()
+    await _advance_to(hass, freezer, first_0130 + timedelta(hours=1, seconds=1))
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+
+async def test_dst_spring_forward_skipped_time_fires_once_after_jump(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Mar 14 2027: 02:30 never happens; it fires once, at 03:00 right after the jump."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to(_at(date(2027, 3, 14), 0, 0, 30))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="02:30", off_enabled=False)))
+    await engine._async_refresh_all()
+
+    jump = datetime(2027, 3, 14, 7, 0, tzinfo=dt_util.UTC)  # 02:00 EST -> 03:00 EDT
+    await _advance_to(hass, freezer, jump - timedelta(minutes=1))
+    assert fake_device_handler.turn_on_calls == []
+
+    await _advance_to(hass, freezer, jump + timedelta(seconds=1))
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+    await _advance_to(hass, freezer, jump + timedelta(hours=1))
+    assert len(fake_device_handler.turn_on_calls) == 1

@@ -21,6 +21,9 @@ from custom_components.scheduler_plus.const import DOMAIN
 
 async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Set up a bare Scheduler+ config entry - no host/credentials required."""
+    # A real HA instance always loads http before custom integrations;
+    # async_setup registers a view on hass.http, so load it here too.
+    assert await async_setup_component(hass, "http", {})
     entry = MockConfigEntry(domain=DOMAIN, data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -31,6 +34,9 @@ async def _setup_entry(hass: HomeAssistant) -> MockConfigEntry:
 async def test_generate_report_not_set_up(hass, hass_ws_client) -> None:
     """Without any Scheduler+ config entry, the command reports not_found."""
     assert await async_setup_component(hass, "websocket_api", {})
+    # Commands are registered by the integration's async_setup, so load the
+    # integration itself - just with no config entry.
+    assert await async_setup_component(hass, DOMAIN, {})
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id(

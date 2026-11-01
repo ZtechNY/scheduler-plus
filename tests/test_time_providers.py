@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 
+from custom_components.scheduler_plus.const import DOMAIN
 from custom_components.scheduler_plus.time_providers.yidcal import YidCalTimeProvider
 
 _ZMAN_ENTITY = "sensor.yidcal_zman_erev"
@@ -94,3 +97,26 @@ async def test_yidcal_resolves_motzei_shabbos(hass: HomeAssistant) -> None:
 
     assert resolved is not None
     assert resolved == zman + timedelta(minutes=25)
+
+
+async def test_yidcal_missing_entity_raises_repairs_issue(
+    hass: HomeAssistant, issue_registry: ir.IssueRegistry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A zman sensor that doesn't exist is warned about and surfaced in Repairs.
+
+    The issue clears itself once the sensor exists again.
+    """
+    issue_id = f"missing_entity_{_ZMAN_ENTITY}"
+
+    resolved = await _PROVIDER.async_resolve(
+        hass, date(2026, 7, 24), {"zman": "candle_lighting"}
+    )
+
+    assert resolved is None
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is not None
+    assert _ZMAN_ENTITY in caplog.text
+
+    hass.states.async_set(_ZMAN_ENTITY, "unknown")
+    await _PROVIDER.async_resolve(hass, date(2026, 7, 24), {"zman": "candle_lighting"})
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
