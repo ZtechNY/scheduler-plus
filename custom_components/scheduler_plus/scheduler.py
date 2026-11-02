@@ -47,8 +47,12 @@ from .device_handlers import (
     DeviceHandlerRegistry,
 )
 from .issues import async_clear_missing_entity, async_report_missing_entity
-from .models import Rule, RuleDateMode, Schedule, Weekday
-from .time_providers import DEFAULT_TIME_PROVIDERS, TimeProviderRegistry
+from .models import Rule, RuleDateMode, Schedule, TimeSpec, Weekday
+from .time_providers import (
+    DEFAULT_TIME_PROVIDERS,
+    TimeProvider,
+    TimeProviderRegistry,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,9 +86,28 @@ _SERVICE_CALL_TIMEOUT_SECONDS = 15
 # long after, for devices whose integrations finish loading late.
 _SECOND_STARTUP_PASS_DELAY_SECONDS = 60
 
-# How long a fired event is remembered (see SchedulerEngine._fired). Only
-# yesterday's and today's events are ever compared against it.
-_FIRED_EVENT_RETENTION = timedelta(days=2)
+# How far back a missed event still sets its entity's state on catch-up.
+_CATCH_UP_HORIZON = timedelta(hours=24)
+
+# How many days after its on time a window's off may be found, for an off
+# time that doesn't exist on the on day itself (e.g. candle lighting to
+# motzei Shabbos, up to a three-day Yom Tov + Shabbos block). Refreshes
+# look back as far, so a window still open from then is caught up.
+_MAX_WINDOW_DAYS = 3
+
+# How long a fired event is remembered (see SchedulerEngine._fired); longer
+# than any event a refresh compares against it.
+_FIRED_EVENT_RETENTION = timedelta(days=_MAX_WINDOW_DAYS + 1)
+
+# A failed on/off is retried after these many minutes, the last one
+# repeating, until it succeeds, a newer event for its entity is sent, or
+# _RETRY_GIVE_UP_AFTER has passed since the first failure.
+_RETRY_DELAYS_MINUTES = (1, 2, 5, 10)
+_RETRY_GIVE_UP_AFTER = timedelta(hours=6)
+
+# How long a "time could not be resolved" warning is remembered, so each
+# rule warns once per day.
+_UNRESOLVED_WARNING_RETENTION = timedelta(days=_MAX_WINDOW_DAYS + 7)
 
 
 @dataclass(slots=True, kw_only=True, frozen=True)
@@ -101,6 +124,18 @@ class _DueEvent:
     schedule_name: str
     entity_id: str
     device_handler: DeviceHandler
+
+
+@dataclass(slots=True, kw_only=True)
+class _Retry:
+    """An event being sent, or waiting to be sent again after a failure.
+
+    `unsub` cancels the pending retry timer; it is None while an attempt
+    is in flight.
+    """
+
+    event: _DueEvent
+    unsub: CALLBACK_TYPE | None = None
 
 
 @dataclass(slots=True, kw_only=True, frozen=True)
@@ -202,6 +237,11 @@ class SchedulerEngine:
         self._unsub_second_pass: CALLBACK_TYPE | None = None
         self._unsub_watched: CALLBACK_TYPE | None = None
         self._catch_up_tasks: set[asyncio.Task[None]] = set()
+        # entity_id -> the event being sent to it until it succeeds; at most
+        # one per entity, since a newer event supersedes it.
+        self._retries: dict[str, _Retry] = {}
+        # (rule_id, date) already warned about as unresolvable.
+        self._unresolved_warned: set[tuple[str, date]] = set()
 
     async def async_start(self) -> None:
         """Start the engine once Home Assistant has started.
@@ -262,6 +302,8 @@ class SchedulerEngine:
         for task in self._catch_up_tasks:
             task.cancel()
         self._catch_up_tasks.clear()
+        for entity_id in list(self._retries):
+            self._cancel_retry(entity_id)
         for unsub_list in self._unsub_rules.values():
             for unsub in unsub_list:
                 unsub()
@@ -776,10 +818,16 @@ class SchedulerEngine:
         for rule_id in set(self._rule_fingerprints) - current_rule_ids:
             del self._rule_fingerprints[rule_id]
             self._forget_fired(rule_id)
+            self._cancel_retries(rule_id)
         self._fired = {
             key: when
             for key, when in self._fired.items()
             if when > now - _FIRED_EVENT_RETENTION
+        }
+        self._unresolved_warned = {
+            (rule_id, day)
+            for rule_id, day in self._unresolved_warned
+            if day > today - _UNRESOLVED_WARNING_RETENTION
         }
 
         due_by_entity: dict[str, list[_DueEvent]] = {}
@@ -804,6 +852,7 @@ class SchedulerEngine:
                 if self._rule_fingerprints.get(rule.id) != fingerprint:
                     self._rule_fingerprints[rule.id] = fingerprint
                     self._forget_fired(rule.id)
+                    self._cancel_retries(rule.id)
                 try:
                     due = await self._async_refresh_rule(
                         schedule, rule, now, catch_up=False
@@ -836,11 +885,20 @@ class SchedulerEngine:
         self._fired[self._fired_key(rule_id, entity_id, when, turning_on)] = when
 
     def _is_fired(self, event: _DueEvent) -> bool:
-        return (
-            self._fired_key(
-                event.rule.id, event.entity_id, event.when, event.turning_on
+        """Whether `event` was sent, or is still being sent (see _async_send)."""
+        key = self._fired_key(
+            event.rule.id, event.entity_id, event.when, event.turning_on
+        )
+        retry = self._retries.get(event.entity_id)
+        return key in self._fired or (
+            retry is not None
+            and self._fired_key(
+                retry.event.rule.id,
+                retry.event.entity_id,
+                retry.event.when,
+                retry.event.turning_on,
             )
-            in self._fired
+            == key
         )
 
     def _forget_fired(self, rule_id: str) -> None:
@@ -850,41 +908,101 @@ class SchedulerEngine:
 
     def _start_catch_up(self, event: _DueEvent) -> None:
         """Send a due event in the background, so a slow device holds up nothing else."""
-        self._mark_fired(event.rule.id, event.entity_id, event.when, event.turning_on)
         task = self.hass.async_create_background_task(
-            self._async_apply_due(event),
+            self._async_send(event),
             name=f"Scheduler+ catch-up {event.entity_id}",
         )
         if not task.done():
             self._catch_up_tasks.add(task)
             task.add_done_callback(self._catch_up_tasks.discard)
 
-    async def _async_apply_due(self, event: _DueEvent) -> None:
-        """Bring one entity to the state its due event would have set."""
+    async def _async_send(
+        self, event: _DueEvent, attempt: int = 0, first_failed: datetime | None = None
+    ) -> None:
+        """Send `event`, marking it fired once it succeeds or retrying it later.
+
+        Sending supersedes any event still being retried for the same
+        entity. A failure is retried after each of _RETRY_DELAYS_MINUTES
+        (the last repeating) until _RETRY_GIVE_UP_AFTER has passed since
+        the first failure. _cancel_retry stops it at any point.
+        """
+        self._cancel_retry(event.entity_id)
+        retry = _Retry(event=event)
+        self._retries[event.entity_id] = retry
+        succeeded = await self._async_apply_due(event)
+        if self._retries.get(event.entity_id) is not retry:
+            return  # cancelled or superseded while sending
+        if succeeded:
+            del self._retries[event.entity_id]
+            self._mark_fired(
+                event.rule.id, event.entity_id, event.when, event.turning_on
+            )
+            return
+
+        now = dt_util.utcnow()
+        first_failed = first_failed or now
+        if now - first_failed >= _RETRY_GIVE_UP_AFTER:
+            del self._retries[event.entity_id]
+            self._mark_fired(
+                event.rule.id, event.entity_id, event.when, event.turning_on
+            )
+            _LOGGER.error(
+                "Giving up on rule '%s' turning %s %s after %s of failures",
+                event.rule.name,
+                "on" if event.turning_on else "off",
+                event.entity_id,
+                _RETRY_GIVE_UP_AFTER,
+            )
+            return
+
+        delay = _RETRY_DELAYS_MINUTES[min(attempt, len(_RETRY_DELAYS_MINUTES) - 1)]
+
+        async def _retry_now(_now: datetime) -> None:
+            retry.unsub = None
+            await self._async_send(event, attempt + 1, first_failed)
+
+        retry.unsub = async_call_later(self.hass, delay * 60, _retry_now)
+
+    def _cancel_retry(self, entity_id: str) -> None:
+        """Stop sending (or retrying) the pending event for `entity_id`."""
+        retry = self._retries.pop(entity_id, None)
+        if retry is not None and retry.unsub is not None:
+            retry.unsub()
+
+    def _cancel_retries(self, rule_id: str) -> None:
+        """Stop retrying every event of `rule_id`."""
+        for entity_id, retry in list(self._retries.items()):
+            if retry.event.rule.id == rule_id:
+                self._cancel_retry(entity_id)
+
+    async def _async_apply_due(self, event: _DueEvent) -> bool:
+        """Bring one entity to the state its due event would have set.
+
+        Returns whether the device call succeeded.
+        """
         rule = event.rule
         if event.turning_on:
-            await self._issue_turn_on(
+            return await self._issue_turn_on(
                 event.device_handler,
                 event.entity_id,
                 rule.action,
                 rule=rule,
                 schedule_name=event.schedule_name,
             )
-        elif rule.off_action is not None:
-            await self._issue_turn_on(
+        if rule.off_action is not None:
+            return await self._issue_turn_on(
                 event.device_handler,
                 event.entity_id,
                 rule.off_action,
                 rule=rule,
                 schedule_name=event.schedule_name,
             )
-        else:
-            await self._issue_turn_off(
-                event.device_handler,
-                event.entity_id,
-                rule=rule,
-                schedule_name=event.schedule_name,
-            )
+        return await self._issue_turn_off(
+            event.device_handler,
+            event.entity_id,
+            rule=rule,
+            schedule_name=event.schedule_name,
+        )
 
     @staticmethod
     def _is_relevant_due(
@@ -892,11 +1010,13 @@ class SchedulerEngine:
     ) -> bool:
         """Whether a past event still defines its entity's state for catch-up.
 
-        Today's events count, plus earlier events inside a window that is
-        still open (an overnight window that began yesterday).
+        Events in the last _CATCH_UP_HORIZON count - so an outage across
+        midnight still catches up the evening's off - plus earlier events
+        inside a window that is still open.
         """
-        return dt_util.as_local(when).date() == now.date() or (
-            window_end is not None and window_end > dt_util.as_utc(now)
+        now_utc = dt_util.as_utc(now)
+        return when > now_utc - _CATCH_UP_HORIZON or (
+            window_end is not None and window_end > now_utc
         )
 
     def _catch_up_latest(self, due: list[_DueEvent]) -> None:
@@ -946,7 +1066,7 @@ class SchedulerEngine:
         With `catch_up`, each entity is also sent its latest one right away;
         _async_refresh_all passes False and decides across all rules itself.
         """
-        self._cancel_rule(rule.id)
+        self._cancel_rule(rule.id, retries=not rule.enabled)
 
         if not rule.enabled:
             return []
@@ -960,18 +1080,18 @@ class SchedulerEngine:
         unsub_list: list[CALLBACK_TYPE] = []
         due: list[_DueEvent] = []
 
-        # An overnight rule that started yesterday can still be active right
-        # now, so both yesterday's and today's occurrences are candidates -
-        # but only when the rule has a genuine on->off window. An on-only
-        # or off-only rule has no window to carry over: it's a same-day
-        # fire-and-forget action, so only today is ever considered (this
-        # also avoids re-firing off a stale "yesterday" occurrence on every
-        # refresh, since there's no off/on boundary to close it out).
+        # Yesterday's occurrence can still matter: its events may be the
+        # latest an entity missed (an outage across midnight), and an
+        # overnight window may still be open. A window can run up to
+        # _MAX_WINDOW_DAYS, so a rule with one looks back that far. Only
+        # future events are ever scheduled, and _fired keeps rescans from
+        # re-sending an older one.
         both_enabled = rule.on_enabled and rule.off_enabled
         # Moments are compared in UTC: two local times sharing a tzinfo
         # compare by wall clock, which misorders the repeated DST hour.
         now_utc = dt_util.as_utc(now)
-        for days_ago in (1, 0) if both_enabled else (0,):
+        lookback = _MAX_WINDOW_DAYS if both_enabled else 1
+        for days_ago in range(lookback, -1, -1):
             reference_date = (now - timedelta(days=days_ago)).date()
             if not schedule.is_active_on(reference_date) or not self.mode_allows(schedule.id, reference_date):
                 continue
@@ -1195,12 +1315,45 @@ class SchedulerEngine:
             else None
         )
 
+        shift_overnight = True
+        if (
+            rule.on_enabled
+            and rule.off_enabled
+            and on_at is not None
+            and off_at is None
+            and off_provider is not None
+        ):
+            # An off time that only exists on a later day (candle lighting
+            # to motzei Shabbos): the window ends at its next occurrence.
+            for days_ahead in range(1, _MAX_WINDOW_DAYS + 1):
+                later = await off_provider.async_resolve(
+                    self.hass,
+                    reference_date + timedelta(days=days_ahead),
+                    rule.off_time.params,
+                )
+                if later is not None and later > on_at:
+                    off_at = later
+                    shift_overnight = False
+                    break
+
         if (resolve_on and on_at is None) or (resolve_off and off_at is None):
+            await self._async_warn_unresolved(
+                rule,
+                reference_date,
+                [
+                    (side, provider, spec)
+                    for side, provider, spec, resolved in (
+                        ("on", on_provider, rule.on_time, on_at),
+                        ("off", off_provider, rule.off_time, off_at),
+                    )
+                    if provider is not None and resolved is None
+                ],
+            )
             return None
         on_at = on_at or off_at
         off_at = off_at or on_at
 
-        if resolve_on and resolve_off and off_at <= on_at:
+        if shift_overnight and resolve_on and resolve_off and off_at <= on_at:
             off_at += timedelta(days=1)
 
         start = on_at if rule.on_enabled or not rule.off_enabled else off_at
@@ -1213,6 +1366,39 @@ class SchedulerEngine:
             return None
 
         return on_at, off_at
+
+    async def _async_warn_unresolved(
+        self,
+        rule: Rule,
+        reference_date: date,
+        failed: list[tuple[str, TimeProvider, TimeSpec]],
+    ) -> None:
+        """Warn, once per rule per day, that a day the rule should run is skipped.
+
+        Quiet when the time isn't expected that day anyway (see
+        TimeProvider.expects_time) or the rule's date filter excludes it.
+        """
+        if not rule.enabled or (rule.id, reference_date) in self._unresolved_warned:
+            return
+        sides = [
+            side
+            for side, provider, spec in failed
+            if provider.expects_time(self.hass, reference_date, spec.params)
+        ]
+        if not sides:
+            return
+        if rule.date_mode is not RuleDateMode.ALWAYS:
+            matches = await self._matches_date_filter(rule, reference_date)
+            if matches is (rule.date_mode is RuleDateMode.EXCLUDE):
+                return
+        self._unresolved_warned.add((rule.id, reference_date))
+        _LOGGER.warning(
+            "Rule '%s' should run on %s but its %s time could not be resolved; "
+            "it will not run that day",
+            rule.name,
+            reference_date.isoformat(),
+            " and ".join(sides),
+        )
 
     async def _async_resolve_time_plan(
         self, rule: Rule, reference_date: date
@@ -1354,11 +1540,12 @@ class SchedulerEngine:
         *,
         rule: Rule,
         schedule_name: str,
-    ) -> None:
+    ) -> bool:
         """Call async_turn_on with a fresh Context, remembered for override detection.
 
         Each service call is bounded by _SERVICE_CALL_TIMEOUT_SECONDS; a
-        timeout is reported like any other failure.
+        timeout is reported like any other failure. Returns whether every
+        call succeeded.
 
         Every turn-on the engine itself performs goes through here (never
         device_handler.async_turn_on directly), so _arm_override_enforcement
@@ -1380,6 +1567,8 @@ class SchedulerEngine:
                     )
         except Exception as err:
             self._notify_action_failure(entity_id, rule, schedule_name, "on", err)
+            return False
+        return True
 
     async def _issue_turn_off(
         self,
@@ -1388,7 +1577,7 @@ class SchedulerEngine:
         *,
         rule: Rule,
         schedule_name: str,
-    ) -> None:
+    ) -> bool:
         """Call async_turn_off with a fresh Context - see _issue_turn_on."""
         context = Context()
         self._last_self_context[entity_id] = context.id
@@ -1402,6 +1591,8 @@ class SchedulerEngine:
                 )
         except Exception as err:
             self._notify_action_failure(entity_id, rule, schedule_name, "off", err)
+            return False
+        return True
 
     def _notify_action_failure(
         self,
@@ -1487,9 +1678,16 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
-            self._mark_fired(rule.id, entity_id, when, True)
-            await self._issue_turn_on(
-                device_handler, entity_id, action, rule=rule, schedule_name=schedule_name
+            # `action` is always rule.action, which _async_apply_due sends.
+            await self._async_send(
+                _DueEvent(
+                    when=when,
+                    turning_on=True,
+                    rule=rule,
+                    schedule_name=schedule_name,
+                    entity_id=entity_id,
+                    device_handler=device_handler,
+                )
             )
             if both_enabled and not rule.allow_override:
                 teardown = self._arm_override_enforcement(
@@ -1523,19 +1721,16 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
-            self._mark_fired(rule.id, entity_id, when, False)
-            if rule.off_action is not None:
-                await self._issue_turn_on(
-                    device_handler,
-                    entity_id,
-                    rule.off_action,
+            await self._async_send(
+                _DueEvent(
+                    when=when,
+                    turning_on=False,
                     rule=rule,
                     schedule_name=schedule_name,
+                    entity_id=entity_id,
+                    device_handler=device_handler,
                 )
-            else:
-                await self._issue_turn_off(
-                    device_handler, entity_id, rule=rule, schedule_name=schedule_name
-                )
+            )
             teardown = self._active_enforcement.get(entity_id)
             if teardown is not None:
                 teardown()
@@ -1740,7 +1935,14 @@ class SchedulerEngine:
         self._active_enforcement[entity_id] = _teardown
         return _teardown
 
-    def _cancel_rule(self, rule_id: str) -> None:
-        """Cancel any callbacks previously scheduled for `rule_id`."""
+    def _cancel_rule(self, rule_id: str, *, retries: bool = True) -> None:
+        """Cancel any callbacks previously scheduled for `rule_id`.
+
+        Pending retries go too, unless `retries` is False - as when a
+        refresh merely reschedules the rule, which must not drop a failed
+        event still being retried.
+        """
         for unsub in self._unsub_rules.pop(rule_id, []):
             unsub()
+        if retries:
+            self._cancel_retries(rule_id)

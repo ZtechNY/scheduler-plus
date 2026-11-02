@@ -29,6 +29,17 @@ class TimeProvider(ABC):
         """
         return ()
 
+    def expects_time(
+        self, hass: HomeAssistant, reference_date: date, params: dict[str, Any]
+    ) -> bool:
+        """Whether `params` should resolve on `reference_date` at all.
+
+        The engine warns about an unresolved time only when this is True,
+        so a provider whose time exists only on some days (e.g. candle
+        lighting) isn't reported for the rest.
+        """
+        return True
+
     @abstractmethod
     async def async_resolve(
         self, hass: HomeAssistant, reference_date: date, params: dict[str, Any]

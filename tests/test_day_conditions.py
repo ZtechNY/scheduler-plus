@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import issue_registry as ir, sun
 from homeassistant.util import dt as dt_util
 
 from custom_components.scheduler_plus.const import DOMAIN, DayConditionType
@@ -17,6 +17,7 @@ from custom_components.scheduler_plus.day_conditions.hebrew_calendar import (
 )
 
 _CANDLE_LIGHTING_ENTITY = "sensor.yidcal_zman_erev"
+_HAVDALAH_ENTITY = "sensor.yidcal_zman_motzi"
 # A plain week: Friday 2026-11-06, Shabbos 2026-11-07.
 _FRIDAY = date(2026, 11, 6)
 _SATURDAY = date(2026, 11, 7)
@@ -67,15 +68,20 @@ def test_israel_has_one_day_yom_tov() -> None:
 
 
 async def test_shabbos_matches_friday_from_candle_lighting(hass: HomeAssistant) -> None:
-    """Friday counts as Shabbos from candle lighting on, and all of Saturday does."""
+    """Shabbos runs from Friday's candle lighting until Saturday's havdalah."""
     hass.states.async_set(_CANDLE_LIGHTING_ENTITY, _local(_FRIDAY, 16, 25).isoformat())
+    hass.states.async_set(_HAVDALAH_ENTITY, _local(_SATURDAY, 17, 33).isoformat())
     shabbos = DEFAULT_DAY_CONDITIONS.get(DayConditionType.SHABBOS)
 
     assert not await shabbos.async_check_at(hass, _FRIDAY, _local(_FRIDAY, 8))
     assert not await shabbos.async_check_at(hass, _FRIDAY, _local(_FRIDAY, 16, 24))
     assert await shabbos.async_check_at(hass, _FRIDAY, _local(_FRIDAY, 16, 25))
     assert await shabbos.async_check_at(hass, _SATURDAY, _local(_SATURDAY, 8))
-    assert await shabbos.async_check_at(hass, _SATURDAY, _local(_SATURDAY, 21))
+    assert await shabbos.async_check_at(hass, _SATURDAY, _local(_SATURDAY, 17, 32))
+    assert not await shabbos.async_check_at(hass, _SATURDAY, _local(_SATURDAY, 17, 33))
+    assert not await shabbos.async_check_at(hass, _SATURDAY, _local(_SATURDAY, 21))
+    # A whole-date question (no start time) still answers for all of Saturday.
+    assert await shabbos.async_check_at(hass, _SATURDAY, None)
     # Answers don't depend on what today is.
     assert await shabbos.async_check(hass, date(2030, 1, 5))
 
@@ -103,3 +109,33 @@ async def test_missing_candle_lighting_sensor_raises_issue_and_uses_sunset(
     issue = issue_registry.async_get_issue(DOMAIN, f"missing_entity_{_CANDLE_LIGHTING_ENTITY}")
     assert issue is not None
     assert issue.translation_key == "missing_entity"
+
+
+async def test_shabbos_after_yom_tov_lights_before_sunset(hass: HomeAssistant) -> None:
+    """Friday 2027-04-23 is Yom Tov, but Shabbos candles are still lit before sunset."""
+    friday = date(2027, 4, 23)
+    sunset = dt_util.as_local(sun.get_astral_event_date(hass, "sunset", friday))
+    shabbos = DEFAULT_DAY_CONDITIONS.get(DayConditionType.SHABBOS)
+
+    assert await shabbos.async_check_at(hass, friday, sunset)
+    assert not await shabbos.async_check_at(hass, friday, sunset - timedelta(minutes=30))
+
+
+async def test_havdalah_fallback_uses_yidcal_offset(hass: HomeAssistant) -> None:
+    """Without the motzi sensor, Shabbos ends YidCal's havdalah offset after sunset."""
+    hass.data["yidcal"] = {"config": {"havdalah_offset": 50}}
+    sunset = dt_util.as_local(sun.get_astral_event_date(hass, "sunset", _SATURDAY))
+    shabbos = DEFAULT_DAY_CONDITIONS.get(DayConditionType.SHABBOS)
+
+    assert await shabbos.async_check_at(hass, _SATURDAY, sunset + timedelta(minutes=49))
+    assert not await shabbos.async_check_at(hass, _SATURDAY, sunset + timedelta(minutes=51))
+
+
+async def test_candle_lighting_fallback_uses_yidcal_offset(hass: HomeAssistant) -> None:
+    """Without the erev sensor, Shabbos starts YidCal's candle-lighting offset before sunset."""
+    hass.data["yidcal"] = {"config": {"candlelighting_offset": 40}}
+    sunset = dt_util.as_local(sun.get_astral_event_date(hass, "sunset", _FRIDAY))
+    shabbos = DEFAULT_DAY_CONDITIONS.get(DayConditionType.SHABBOS)
+
+    assert await shabbos.async_check_at(hass, _FRIDAY, sunset - timedelta(minutes=39))
+    assert not await shabbos.async_check_at(hass, _FRIDAY, sunset - timedelta(minutes=42))

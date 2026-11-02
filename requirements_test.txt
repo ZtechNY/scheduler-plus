@@ -14,3 +14,8 @@ pytest-homeassistant-custom-component
 # requirements, which is how a real Home Assistant install gets it - listed
 # here too so the test environment has it as well).
 fpdf2>=2.7,<3
+
+# The logbook integration (used by test_report.py) sets up the frontend,
+# which pytest-homeassistant-custom-component doesn't install. Keep it on
+# the release matching Home Assistant's own pin for the version under test.
+home-assistant-frontend

@@ -4,6 +4,27 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.4] - 2026-11-02
+
+### Fixed
+
+- A missed off is no longer lost when an outage crosses midnight: catch-up now
+  considers every rule's events from the last 24 hours (plus any window still
+  open), and each device gets its most recent one. As a result, a restart can
+  re-send yesterday's last on/off, as it already did for today's.
+- A failed on/off is retried after 1, 2 and 5 minutes, then every 10 minutes, until
+  it succeeds, a newer event for that device is sent, or 6 hours pass. Rescans no
+  longer treat a failed action as done.
+- Shabbos and the last day of Yom Tov now end at havdalah (YidCal's motzi sensor, or
+  sunset plus YidCal's havdalah offset), so "skip Shabbos" rules run on Saturday
+  night. The candle-lighting fallback uses YidCal's configured offset too.
+- A rule from candle lighting to motzei Shabbos now works, including across a
+  multi-day Yom Tov and Shabbos block. When YidCal's sensors don't report the day
+  needed, candle lighting and motzei Shabbos are computed from the calendar and
+  sunset (before sunset on the eve of Shabbos, after nightfall from one holy day
+  into the next). A rule that should run but whose time can't be resolved is now
+  logged once per day.
+
 ## [0.5.3] - 2026-11-01
 
 ### Fixed

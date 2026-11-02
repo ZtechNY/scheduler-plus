@@ -14,6 +14,7 @@ without mocking the global clock.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -25,7 +26,7 @@ import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import ATTR_TEMPERATURE, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import Context, CoreState, Event, HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import issue_registry as ir, sun
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -55,6 +56,7 @@ from custom_components.scheduler_plus.models import (
 )
 from custom_components.scheduler_plus.scheduler import SchedulerEngine
 from custom_components.scheduler_plus.storage import SchedulerPlusStore
+from custom_components.scheduler_plus.time_providers import DEFAULT_TIME_PROVIDERS
 from custom_components.scheduler_plus.time_providers.base import (
     TimeProvider,
     TimeProviderRegistry,
@@ -668,7 +670,10 @@ async def test_refresh_rule_catches_up_when_inside_window(
 async def test_refresh_rule_schedules_future_on_and_off(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:
-    """If `now` is before on_time, both on and off are scheduled, not fired."""
+    """If `now` is before on_time, both on and off are scheduled, not fired.
+
+    Only yesterday's 21:00 off - the latest event - is caught up.
+    """
     rule = _make_rule(on_time="06:00", off_time="21:00")
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
@@ -676,7 +681,7 @@ async def test_refresh_rule_schedules_future_on_and_off(
     await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
-    assert fake_device_handler.turn_off_calls == []
+    assert fake_device_handler.turn_off_calls == ["light.test"]
     assert len(engine._unsub_rules[rule.id]) == 2
 
 
@@ -723,14 +728,17 @@ async def test_refresh_rule_disabled_rule_schedules_nothing(
 async def test_refresh_rule_on_only_schedules_future_on_only(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:
-    """An on-only rule schedules a future on and never touches off."""
+    """An on-only rule schedules a future on and never touches off.
+
+    Yesterday's 06:00 on, within the last 24 hours, is caught up.
+    """
     rule = _make_rule(on_time="06:00", off_time="21:00", off_enabled=False)
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
     await engine._async_refresh_rule(schedule, rule, now)
 
-    assert fake_device_handler.turn_on_calls == []
+    assert fake_device_handler.turn_on_calls == [("light.test", rule.action)]
     assert fake_device_handler.turn_off_calls == []
     assert len(engine._unsub_rules[rule.id]) == 1
 
@@ -773,7 +781,10 @@ async def test_refresh_rule_on_only_ignores_stale_yesterday_occurrence(
 async def test_refresh_rule_off_only_schedules_future_off_only(
     engine: SchedulerEngine, fake_device_handler: FakeDeviceHandler
 ) -> None:
-    """An off-only rule schedules a future off and never touches on."""
+    """An off-only rule schedules a future off and never touches on.
+
+    Yesterday's 21:00 off, within the last 24 hours, is caught up.
+    """
     rule = _make_rule(on_time="06:00", off_time="21:00", on_enabled=False)
     schedule = _make_schedule(rule)
     now = datetime(2024, 1, 1, 15, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
@@ -781,7 +792,7 @@ async def test_refresh_rule_off_only_schedules_future_off_only(
     await engine._async_refresh_rule(schedule, rule, now)
 
     assert fake_device_handler.turn_on_calls == []
-    assert fake_device_handler.turn_off_calls == []
+    assert fake_device_handler.turn_off_calls == ["light.test"]
     assert len(engine._unsub_rules[rule.id]) == 1
 
 
@@ -891,17 +902,19 @@ async def test_catchup_turn_on_fires_rule_triggered_event(
 
 
 async def test_scheduled_turn_off_fires_rule_triggered_event(
-    engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler, hass: HomeAssistant
+    engine: SchedulerEngine,
+    fake_climate_handler: FakeClimateDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """The scheduled (point-in-time) turn-off also fires the event, with turning_on=False.
 
-    Uses real current time (like test_scheduled_turn_on_arms_enforcement_and_
-    lands_in_unsub_rules) since it needs the real scheduled callback to
-    actually fire, via async_fire_time_changed.
+    Runs on a frozen clock, firing the real scheduled callback via
+    async_fire_time_changed.
     """
-    real_now = dt_util.now()
-    off_time = (real_now + timedelta(minutes=2)).strftime("%H:%M")
-    rule = _make_climate_rule(on_time="00:00", off_time=off_time)
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
+    rule = _make_climate_rule(on_time="06:00", off_time="12:02")
     schedule = _make_schedule(
         rule, name="Kitchen heat", entities=["climate.test"], device_type=DeviceType.CLIMATE
     )
@@ -909,10 +922,12 @@ async def test_scheduled_turn_off_fires_rule_triggered_event(
     events: list[Event] = []
     hass.bus.async_listen(EVENT_RULE_TRIGGERED, events.append)
 
-    await engine._async_refresh_rule(schedule, rule, real_now)
+    await engine._async_refresh_rule(schedule, rule, now)
+    await hass.async_block_till_done()  # the catch-up runs as a background task
     assert [event.data["turning_on"] for event in events] == [True]  # the on-catch-up
 
-    async_fire_time_changed(hass, real_now + timedelta(minutes=3))
+    freezer.move_to(now + timedelta(minutes=3))
+    async_fire_time_changed(hass)
     await hass.async_block_till_done()
 
     assert [event.data["turning_on"] for event in events] == [True, False]
@@ -2206,6 +2221,8 @@ async def test_off_only_rule_before_default_on_time_fires_same_day(
 
     freezer.move_to(_at(_MONDAY, 3))
     await engine._async_refresh_rule(schedule, rule, _at(_MONDAY, 3))
+    await hass.async_block_till_done()
+    fake_device_handler.turn_off_calls.clear()  # yesterday's 05:00, caught up
     await _advance_to(hass, freezer, _at(_MONDAY, 5, 0, 1))
 
     assert fake_device_handler.turn_off_calls == ["light.test"]
@@ -2551,6 +2568,8 @@ async def test_dst_fall_back_repeated_time_fires_once(
     freezer.move_to(_at(date(2026, 11, 1), 0, 0, 30))
     _set_schedules(engine, _make_schedule(_make_rule(on_time="01:30", off_enabled=False)))
     await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    fake_device_handler.turn_on_calls.clear()  # yesterday's 01:30, caught up
 
     first_0130 = datetime(2026, 11, 1, 5, 30, tzinfo=dt_util.UTC)  # 01:30 EDT
     await _advance_to(hass, freezer, first_0130 + timedelta(seconds=1))
@@ -2574,6 +2593,8 @@ async def test_dst_spring_forward_skipped_time_fires_once_after_jump(
     freezer.move_to(_at(date(2027, 3, 14), 0, 0, 30))
     _set_schedules(engine, _make_schedule(_make_rule(on_time="02:30", off_enabled=False)))
     await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    fake_device_handler.turn_on_calls.clear()  # yesterday's 02:30, caught up
 
     jump = datetime(2027, 3, 14, 7, 0, tzinfo=dt_util.UTC)  # 02:00 EST -> 03:00 EDT
     await _advance_to(hass, freezer, jump - timedelta(minutes=1))
@@ -2584,3 +2605,346 @@ async def test_dst_spring_forward_skipped_time_fires_once_after_jump(
 
     await _advance_to(hass, freezer, jump + timedelta(hours=1))
     assert len(fake_device_handler.turn_on_calls) == 1
+
+
+# --- v0.5.4 reliability fixes -------------------------------------------------
+
+_TUESDAY = _MONDAY + timedelta(days=1)
+_NOTIFY = "custom_components.scheduler_plus.scheduler.persistent_notification.async_create"
+
+
+async def test_startup_after_outage_across_midnight_sends_missed_off(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 1: down 22:30-00:30 over an 18:00-23:00 window -> startup turns it off."""
+    freezer.move_to(_at(_TUESDAY, 0, 30))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="18:00", off_time="23:00")))
+
+    await engine.async_start()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+    assert fake_device_handler.turn_on_calls == []
+
+
+async def test_startup_after_midnight_sends_missed_off_only_rule(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 1: an off-only 23:30 missed before midnight is still sent at 00:30."""
+    freezer.move_to(_at(_TUESDAY, 0, 30))
+    _set_schedules(engine, _make_schedule(_make_rule(off_time="23:30", on_enabled=False)))
+
+    await engine.async_start()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+
+async def test_midnight_rescan_does_not_resend_fired_off(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 1: yesterday's events now count, but one already sent isn't sent again."""
+    freezer.move_to(_at(_MONDAY, 22))
+    _set_schedules(engine, _make_schedule(_make_rule(on_time="18:00", off_time="23:00")))
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+    assert len(fake_device_handler.turn_on_calls) == 1  # 18:00, caught up
+
+    await _advance_to(hass, freezer, _at(_MONDAY, 23, 0, 1))
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+    freezer.move_to(_at(_TUESDAY, 0))
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+
+async def _start_with_evening_off(
+    engine: SchedulerEngine, hass: HomeAssistant, freezer: FrozenDateTimeFactory, *rules: Rule
+) -> None:
+    """Schedule a 06:00-21:00 rule (plus `rules`) on light.test at Monday 20:00."""
+    freezer.move_to(_at(_MONDAY, 20))
+    schedule = _make_schedule(_make_rule(on_time="06:00", off_time="21:00"))
+    schedule.rules.extend(rules)
+    _set_schedules(engine, schedule)
+    await engine._async_refresh_all()
+    await hass.async_block_till_done()
+
+
+async def test_failed_off_is_retried_until_it_succeeds(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: a Lutron blip at 21:00 doesn't leave the lights on all night."""
+    await _start_with_evening_off(engine, hass, freezer)
+    turn_off = AsyncMock(side_effect=[RuntimeError("Lutron link down"), None])
+    with patch.object(fake_device_handler, "async_turn_off", new=turn_off), patch(_NOTIFY):
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 0, 1))
+        assert turn_off.await_count == 1
+
+        # A rescan while the retry is pending doesn't send it a second time.
+        await engine._async_refresh_all()
+        await hass.async_block_till_done()
+        assert turn_off.await_count == 1
+
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 1, 2))
+        assert turn_off.await_count == 2
+
+        await _advance_to(hass, freezer, _at(_MONDAY, 22))
+        await engine._async_refresh_all()
+        await hass.async_block_till_done()
+
+    assert turn_off.await_count == 2
+    assert engine._retries == {}
+
+
+async def test_retries_stop_when_next_event_for_entity_fires(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: a device that keeps failing is retried until a newer event replaces it."""
+    late_on = _make_rule(id="late-on", on_time="21:30", off_enabled=False)
+    await _start_with_evening_off(engine, hass, freezer, late_on)
+    turn_off = AsyncMock(side_effect=RuntimeError("Lutron link down"))
+    with patch.object(fake_device_handler, "async_turn_off", new=turn_off), patch(_NOTIFY):
+        for when in (
+            _at(_MONDAY, 21, 0, 1),  # scheduled off
+            _at(_MONDAY, 21, 1, 2),  # +1 minute
+            _at(_MONDAY, 21, 3, 3),  # +2 minutes
+            _at(_MONDAY, 21, 8, 4),  # +5 minutes
+            _at(_MONDAY, 21, 18, 5),  # +10 minutes
+            _at(_MONDAY, 21, 28, 6),  # +10 minutes
+        ):
+            await _advance_to(hass, freezer, when)
+        assert turn_off.await_count == 6
+
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 30, 1))  # late-on fires
+        for minutes in (40, 50, 60, 90):
+            await _advance_to(hass, freezer, _at(_MONDAY, 21) + timedelta(minutes=minutes))
+
+    assert turn_off.await_count == 6
+    assert len(fake_device_handler.turn_on_calls) == 2  # 06:00 catch-up, 21:30
+    assert engine._retries == {}
+
+
+async def test_deleting_rule_cancels_its_retries(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: a deleted rule leaves no retry behind."""
+    await _start_with_evening_off(engine, hass, freezer)
+    turn_off = AsyncMock(side_effect=RuntimeError("Lutron link down"))
+    with patch.object(fake_device_handler, "async_turn_off", new=turn_off), patch(_NOTIFY):
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 0, 1))
+        assert engine._retries
+
+        _set_schedules(engine)
+        await engine._async_refresh_all()
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 30))
+
+    assert turn_off.await_count == 1
+    assert engine._retries == {}
+
+
+async def test_retries_give_up_after_six_hours(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 2: a device that never comes back stops being retried after 6 hours."""
+    await _start_with_evening_off(engine, hass, freezer)
+    turn_off = AsyncMock(side_effect=RuntimeError("Lutron link down"))
+    first = _at(_MONDAY, 21, 0, 1)
+    with patch.object(fake_device_handler, "async_turn_off", new=turn_off), patch(_NOTIFY):
+        await _advance_to(hass, freezer, first)
+        for step in range(1, 40):
+            await _advance_to(hass, freezer, first + timedelta(minutes=10 * step))
+            if step == 37:  # 6h10m in
+                attempts = turn_off.await_count
+
+    assert engine._retries == {}
+    assert turn_off.await_count == attempts
+
+
+def _shabbos_rule(**kwargs: Any) -> Rule:
+    """A rule on from candle lighting until motzei Shabbos."""
+    return replace(
+        _make_rule(**kwargs),
+        on_time=TimeSpec(provider=TimeProviderType.YIDCAL, params={"zman": "candle_lighting"}),
+        off_time=TimeSpec(provider=TimeProviderType.YIDCAL, params={"zman": "motzei_shabbos"}),
+    )
+
+
+def _sunset(hass: HomeAssistant, day: date) -> datetime:
+    return dt_util.as_local(sun.get_astral_event_date(hass, "sunset", day))
+
+
+def _floor_minute(moment: datetime) -> datetime:
+    return moment.replace(second=0, microsecond=0)
+
+
+def _ceil_minute(moment: datetime) -> datetime:
+    floor = _floor_minute(moment)
+    return floor if floor == moment else floor + timedelta(minutes=1)
+
+
+@pytest.fixture
+def zman_engine(calendar_engine: SchedulerEngine) -> SchedulerEngine:
+    """The calendar engine, also with the real YidCal/sun time providers."""
+    calendar_engine._time_providers = DEFAULT_TIME_PROVIDERS
+    return calendar_engine
+
+
+async def test_candle_lighting_to_motzei_shabbos_rule_resolves(
+    zman_engine: SchedulerEngine, hass: HomeAssistant
+) -> None:
+    """Fix 4a: the natural Shabbos rule ends at the next day's motzei Shabbos."""
+    hass.states.async_set("sensor.yidcal_zman_erev", _at(_FRIDAY, 16, 25).isoformat())
+    hass.states.async_set("sensor.yidcal_zman_motzi", _at(_SATURDAY, 17, 33).isoformat())
+
+    occurrence = await zman_engine._async_resolve_occurrence(_shabbos_rule(), _FRIDAY)
+
+    assert occurrence == (_at(_FRIDAY, 16, 25), _at(_SATURDAY, 17, 33))
+
+
+async def test_shabbos_rule_is_caught_up_on_saturday_startup(
+    zman_engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Fix 4a: restarting mid-Shabbos turns the Friday-night window's lights on."""
+    hass.states.async_set("sensor.yidcal_zman_erev", _at(_FRIDAY, 16, 25).isoformat())
+    hass.states.async_set("sensor.yidcal_zman_motzi", _at(_SATURDAY, 17, 33).isoformat())
+    hass.states.async_set("light.test", "off")
+    freezer.move_to(_at(_SATURDAY, 10))
+    _set_schedules(zman_engine, _make_schedule(_shabbos_rule()))
+
+    await zman_engine.async_start()
+    await hass.async_block_till_done()
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+    await _advance_to(hass, freezer, _at(_SATURDAY, 17, 33, 1))
+    assert fake_device_handler.turn_off_calls == ["light.test"]
+
+
+async def test_shabbos_rule_spans_three_day_yom_tov_block(
+    zman_engine: SchedulerEngine, hass: HomeAssistant
+) -> None:
+    """Fix 4a/4b: Pesach Thu-Fri + Shabbos - each night's window ends Saturday night."""
+    wednesday, thursday, friday, saturday = (date(2027, 4, 21 + n) for n in range(4))
+    motzei = _ceil_minute(_sunset(hass, saturday) + timedelta(minutes=72))
+
+    assert await zman_engine._async_resolve_occurrence(_shabbos_rule(), wednesday) == (
+        _floor_minute(_sunset(hass, wednesday) - timedelta(minutes=18)),
+        motzei,
+    )
+    assert await zman_engine._async_resolve_occurrence(_shabbos_rule(), thursday) == (
+        _ceil_minute(_sunset(hass, thursday) + timedelta(minutes=72)),
+        motzei,
+    )
+    assert await zman_engine._async_resolve_occurrence(_shabbos_rule(), friday) == (
+        _floor_minute(_sunset(hass, friday) - timedelta(minutes=18)),
+        motzei,
+    )
+
+
+async def test_unresolvable_time_warns_once_per_day(
+    engine: SchedulerEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Fix 4a: a day the rule should run but can't resolve is logged, once."""
+    rule = _make_rule(on_provider=TimeProviderType.SUNRISE)
+
+    await engine._async_resolve_occurrence(rule, _MONDAY)
+    await engine._async_resolve_occurrence(rule, _MONDAY)
+
+    assert caplog.text.count("could not be resolved") == 1
+    assert _MONDAY.isoformat() in caplog.text
+
+
+async def test_candle_lighting_rule_does_not_warn_on_a_weekday(
+    zman_engine: SchedulerEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Fix 4a: no candle lighting on a Tuesday is expected, not worth a warning."""
+    tuesday = date(2026, 11, 3)
+
+    assert await zman_engine._async_resolve_occurrence(_shabbos_rule(), tuesday) is None
+    assert "could not be resolved" not in caplog.text
+
+
+async def test_skip_shabbos_rule_runs_saturday_night(calendar_engine: SchedulerEngine) -> None:
+    """Fix 3: "every night 19:00-23:00, skip Shabbos" turns on after havdalah."""
+    rule = _make_rule(
+        on_time="19:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.EXCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    assert await calendar_engine._async_resolve_occurrence(rule, _SATURDAY) is not None
+
+
+async def test_only_shabbos_rule_still_runs_saturday_afternoon(
+    calendar_engine: SchedulerEngine,
+) -> None:
+    """Fix 3: an occurrence starting before havdalah is still Shabbos."""
+    rule = _make_rule(
+        on_time="12:00",
+        off_time="14:00",
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    assert await calendar_engine._async_resolve_occurrence(rule, _SATURDAY) is not None
+
+
+async def test_shabbos_after_yom_tov_ends_saturday_night(
+    calendar_engine: SchedulerEngine,
+) -> None:
+    """Fix 3: Saturday 2027-04-24 (Pesach's 2nd day was Friday, no Yom Tov Sunday) ends at havdalah.
+
+    21:00 is after nightfall; in late April 19:00 is still before sunset.
+    """
+    rule = _make_rule(
+        on_time="21:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.SHABBOS}),
+    )
+
+    assert await calendar_engine._async_resolve_occurrence(rule, date(2027, 4, 24)) is None
+
+
+@pytest.mark.parametrize(("hour", "is_yom_tov"), [(12, True), (20, False)])
+async def test_last_day_of_yom_tov_ends_at_havdalah(
+    calendar_engine: SchedulerEngine, hour: int, is_yom_tov: bool
+) -> None:
+    """Fix 3: Simchas Torah 2026-10-04 is Yom Tov at noon but not at 20:00."""
+    rule = _make_rule(
+        on_time=f"{hour:02d}:00",
+        off_time="23:00",
+        date_mode=RuleDateMode.INCLUDE,
+        day_conditions=frozenset({DayConditionType.YOM_TOV}),
+    )
+
+    occurrence = await calendar_engine._async_resolve_occurrence(rule, date(2026, 10, 4))
+
+    assert (occurrence is not None) is is_yom_tov
