@@ -20,6 +20,18 @@ from ..const import DeviceType
 class DeviceHandler(ABC):
     """A plugin that applies a rule's on/off action to entities of one device type."""
 
+    # Seconds the engine waits for one async_turn_on/async_turn_off call
+    # before treating it as failed; None uses the engine's default. Raise
+    # it for device types commonly controlled through slow cloud services.
+    service_call_timeout: float | None = None
+
+    # How many of this handler's calls may run at once per integration;
+    # None uses the engine's default (one at a time). Home Assistant
+    # itself runs most integrations' commands one at a time
+    # (PARALLEL_UPDATES), so sending more would only queue them inside
+    # Home Assistant, where the wait counts against their timeout.
+    max_concurrent_calls: int | None = None
+
     @abstractmethod
     async def async_turn_on(
         self,

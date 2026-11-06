@@ -36,6 +36,15 @@ class ClimateDeviceHandler(DeviceHandler):
     later version.
     """
 
+    # Many thermostats (Honeywell Total Connect Comfort, Nest, ecobee) are
+    # controlled through a cloud service that can take well over 15
+    # seconds to accept a change, and turning on can be two service calls
+    # (mode, then temperature).
+    service_call_timeout = 60
+    # Cloud thermostat integrations accept several changes at once; one at
+    # a time at up to 60 seconds each would take too long for a building.
+    max_concurrent_calls = 4
+
     async def async_turn_on(
         self,
         hass: HomeAssistant,

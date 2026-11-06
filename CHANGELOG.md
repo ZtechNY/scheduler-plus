@@ -4,6 +4,21 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.5] - 2026-11-06
+
+### Fixed
+
+- Many devices switching at the same moment (a startup catch-up, or a busy time
+  like 06:00) no longer time out together. Device calls now go to each integration
+  one at a time (four at a time for thermostats), and the timeout only starts once
+  a call actually runs, not while it waits for its turn.
+- Thermostats get 60 seconds per change instead of 15, since cloud thermostats
+  (Honeywell Total Connect Comfort and similar) are often slow to accept one.
+- A failed on/off no longer creates a notification or an error with a traceback
+  straight away. The first two failed attempts log a one-line warning; the
+  notification appears only if the third attempt (about 3 minutes later) also
+  fails. Failures of override reverts and manual auto-off still notify at once.
+
 ## [0.5.4] - 2026-11-02
 
 ### Fixed

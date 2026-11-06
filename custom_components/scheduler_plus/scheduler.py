@@ -20,13 +20,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
     EventStateChangedData,
     async_call_later,
@@ -79,8 +80,22 @@ _DEFAULT_CONFLICT_LOOKAHEAD_DAYS = 14
 _MAX_INCLUDE_RANGE_CHECK_DAYS = 31
 
 # Upper bound on one device service call, so an unresponsive device can't
-# hold up the action (or catch-up) behind it.
+# hold up the action (or catch-up) behind it. A device handler can set its
+# own (DeviceHandler.service_call_timeout), e.g. for cloud thermostats.
 _SERVICE_CALL_TIMEOUT_SECONDS = 15
+
+# How many device calls run at once per integration, unless the device
+# handler sets its own (DeviceHandler.max_concurrent_calls). A startup
+# catch-up or a busy minute can send dozens of calls together; most
+# integrations only process one at a time (PARALLEL_UPDATES), and cloud
+# services throttle bursts. Waiting for a slot does not count toward the
+# call's timeout, so queued calls no longer time out before they start.
+_MAX_CONCURRENT_CALLS_PER_INTEGRATION = 1
+
+# A scheduled event that fails is retried (see _RETRY_DELAYS_MINUTES);
+# the failure notification and error log wait until this many attempts
+# have failed, so a blip a retry fixes a minute later leaves no notice.
+_NOTIFY_AFTER_FAILED_ATTEMPTS = 3
 
 # The startup catch-up runs once Home Assistant has started and again this
 # long after, for devices whose integrations finish loading late.
@@ -240,6 +255,9 @@ class SchedulerEngine:
         # entity_id -> the event being sent to it until it succeeds; at most
         # one per entity, since a newer event supersedes it.
         self._retries: dict[str, _Retry] = {}
+        # integration (entity platform) -> limit on concurrent device calls;
+        # see _MAX_CONCURRENT_CALLS_PER_INTEGRATION.
+        self._call_slots: dict[str, asyncio.Semaphore] = {}
         # (rule_id, date) already warned about as unresolvable.
         self._unresolved_warned: set[tuple[str, date]] = set()
 
@@ -929,7 +947,9 @@ class SchedulerEngine:
         self._cancel_retry(event.entity_id)
         retry = _Retry(event=event)
         self._retries[event.entity_id] = retry
-        succeeded = await self._async_apply_due(event)
+        succeeded = await self._async_apply_due(
+            event, report_failure=attempt + 1 >= _NOTIFY_AFTER_FAILED_ATTEMPTS
+        )
         if self._retries.get(event.entity_id) is not retry:
             return  # cancelled or superseded while sending
         if succeeded:
@@ -975,10 +995,13 @@ class SchedulerEngine:
             if retry.event.rule.id == rule_id:
                 self._cancel_retry(entity_id)
 
-    async def _async_apply_due(self, event: _DueEvent) -> bool:
+    async def _async_apply_due(
+        self, event: _DueEvent, *, report_failure: bool = True
+    ) -> bool:
         """Bring one entity to the state its due event would have set.
 
-        Returns whether the device call succeeded.
+        Returns whether the device call succeeded. `report_failure` is
+        passed to _issue_turn_on/_issue_turn_off.
         """
         rule = event.rule
         if event.turning_on:
@@ -988,6 +1011,7 @@ class SchedulerEngine:
                 rule.action,
                 rule=rule,
                 schedule_name=event.schedule_name,
+                report_failure=report_failure,
             )
         if rule.off_action is not None:
             return await self._issue_turn_on(
@@ -996,12 +1020,14 @@ class SchedulerEngine:
                 rule.off_action,
                 rule=rule,
                 schedule_name=event.schedule_name,
+                report_failure=report_failure,
             )
         return await self._issue_turn_off(
             event.device_handler,
             event.entity_id,
             rule=rule,
             schedule_name=event.schedule_name,
+            report_failure=report_failure,
         )
 
     @staticmethod
@@ -1540,12 +1566,15 @@ class SchedulerEngine:
         *,
         rule: Rule,
         schedule_name: str,
+        report_failure: bool = True,
     ) -> bool:
         """Call async_turn_on with a fresh Context, remembered for override detection.
 
-        Each service call is bounded by _SERVICE_CALL_TIMEOUT_SECONDS; a
-        timeout is reported like any other failure. Returns whether every
-        call succeeded.
+        Each service call goes through _async_call_device (a per-integration
+        concurrency slot, then a timeout); a timeout is reported like any
+        other failure. Returns whether every call succeeded. With
+        `report_failure` False (an early attempt that will be retried), a
+        failure is only logged as a one-line warning.
 
         Every turn-on the engine itself performs goes through here (never
         device_handler.async_turn_on directly), so _arm_override_enforcement
@@ -1561,12 +1590,17 @@ class SchedulerEngine:
         )
         try:
             for action_item in (rule.actions or [action]):
-                async with asyncio.timeout(_SERVICE_CALL_TIMEOUT_SECONDS):
-                    await device_handler.async_turn_on(
-                        self.hass, entity_id, action_item, context=context
-                    )
+                await self._async_call_device(
+                    device_handler,
+                    entity_id,
+                    lambda item=action_item: device_handler.async_turn_on(
+                        self.hass, entity_id, item, context=context
+                    ),
+                )
         except Exception as err:
-            self._notify_action_failure(entity_id, rule, schedule_name, "on", err)
+            self._report_action_failure(
+                entity_id, rule, schedule_name, "on", err, report_failure
+            )
             return False
         return True
 
@@ -1577,6 +1611,7 @@ class SchedulerEngine:
         *,
         rule: Rule,
         schedule_name: str,
+        report_failure: bool = True,
     ) -> bool:
         """Call async_turn_off with a fresh Context - see _issue_turn_on."""
         context = Context()
@@ -1585,14 +1620,79 @@ class SchedulerEngine:
             entity_id, rule, schedule_name, turning_on=False, context=context
         )
         try:
-            async with asyncio.timeout(_SERVICE_CALL_TIMEOUT_SECONDS):
-                await device_handler.async_turn_off(
+            await self._async_call_device(
+                device_handler,
+                entity_id,
+                lambda: device_handler.async_turn_off(
                     self.hass, entity_id, context=context
-                )
+                ),
+            )
         except Exception as err:
-            self._notify_action_failure(entity_id, rule, schedule_name, "off", err)
+            self._report_action_failure(
+                entity_id, rule, schedule_name, "off", err, report_failure
+            )
             return False
         return True
+
+    def _call_slot(
+        self, device_handler: DeviceHandler, entity_id: str
+    ) -> asyncio.Semaphore:
+        """Return the concurrency limit shared by `entity_id`'s integration.
+
+        Keyed by the entity registry's platform (e.g. "honeywell", "lutron"),
+        so a slow cloud integration never holds up calls to another one;
+        entities not in the registry share a limit per domain.
+        """
+        entry = er.async_get(self.hass).async_get(entity_id)
+        key = entry.platform if entry is not None else entity_id.split(".", 1)[0]
+        slot = self._call_slots.get(key)
+        if slot is None:
+            slot = self._call_slots[key] = asyncio.Semaphore(
+                getattr(device_handler, "max_concurrent_calls", None)
+                or _MAX_CONCURRENT_CALLS_PER_INTEGRATION
+            )
+        return slot
+
+    async def _async_call_device(
+        self,
+        device_handler: DeviceHandler,
+        entity_id: str,
+        call: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Run one device call in its integration's slot, bounded by a timeout.
+
+        The timeout starts once the slot is acquired, so time spent queued
+        behind other calls to the same integration never counts against it.
+        """
+        timeout = (
+            getattr(device_handler, "service_call_timeout", None)
+            or _SERVICE_CALL_TIMEOUT_SECONDS
+        )
+        async with self._call_slot(device_handler, entity_id):
+            async with asyncio.timeout(timeout):
+                await call()
+
+    def _report_action_failure(
+        self,
+        entity_id: str,
+        rule: Rule,
+        schedule_name: str,
+        action: str,
+        error: Exception,
+        report_failure: bool,
+    ) -> None:
+        """Notify about a failure, or just log a warning if it will be retried."""
+        if report_failure:
+            self._notify_action_failure(entity_id, rule, schedule_name, action, error)
+            return
+        _LOGGER.warning(
+            "Schedule '%s', rule '%s': %s action failed for %s (%s); will retry",
+            schedule_name,
+            rule.name,
+            action,
+            entity_id,
+            str(error).strip() or type(error).__name__,
+        )
 
     def _notify_action_failure(
         self,

@@ -2948,3 +2948,180 @@ async def test_last_day_of_yom_tov_ends_at_havdalah(
     occurrence = await calendar_engine._async_resolve_occurrence(rule, date(2026, 10, 4))
 
     assert (occurrence is not None) is is_yom_tov
+
+
+# --- v0.5.5 burst / cloud-device fixes ---------------------------------------
+
+_SCHED = "custom_components.scheduler_plus.scheduler"
+
+
+async def test_device_calls_per_integration_are_limited_and_queue_time_is_free(
+    engine: SchedulerEngine,
+) -> None:
+    """A burst of calls runs a few at a time; waiting for a slot isn't timed."""
+    handler = FakeDeviceHandler()
+    running = 0
+    peak = 0
+
+    async def _slow(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.05)
+        running -= 1
+
+    rule = _make_rule()
+    with (
+        patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=_slow)),
+        patch(f"{_SCHED}._MAX_CONCURRENT_CALLS_PER_INTEGRATION", 2),
+        patch(f"{_SCHED}._SERVICE_CALL_TIMEOUT_SECONDS", 0.2),
+        patch(_NOTIFY) as notify,
+    ):
+        results = await asyncio.gather(
+            *(
+                engine._issue_turn_off(
+                    handler, f"light.l{i}", rule=rule, schedule_name="Morning"
+                )
+                for i in range(10)
+            )
+        )
+
+    # 10 calls of 0.05s, 2 at a time, take ~0.25s - longer than the 0.2s
+    # timeout - yet none times out, since only the call itself is timed.
+    assert all(results)
+    assert peak == 2
+    notify.assert_not_called()
+
+
+async def test_slow_integration_does_not_hold_up_another(
+    engine: SchedulerEngine,
+) -> None:
+    """Each integration has its own slots."""
+    handler = FakeDeviceHandler()
+    rule = _make_rule()
+
+    async def _off(_hass: HomeAssistant, entity_id: str, context: Any = None) -> None:
+        if entity_id.startswith("climate."):
+            await asyncio.Event().wait()
+        handler.turn_off_calls.append(entity_id)
+
+    with (
+        patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=_off)),
+        patch(f"{_SCHED}._MAX_CONCURRENT_CALLS_PER_INTEGRATION", 1),
+        patch(_NOTIFY),
+    ):
+        stuck = asyncio.ensure_future(
+            engine._issue_turn_off(
+                handler, "climate.slow", rule=rule, schedule_name="Morning"
+            )
+        )
+        await asyncio.sleep(0)
+        assert await asyncio.wait_for(
+            engine._issue_turn_off(
+                handler, "light.fast", rule=rule, schedule_name="Morning"
+            ),
+            timeout=1,
+        )
+        stuck.cancel()
+
+    assert handler.turn_off_calls == ["light.fast"]
+
+
+async def test_handler_timeout_overrides_default(engine: SchedulerEngine) -> None:
+    """A handler's own service_call_timeout (e.g. climate's) replaces the default."""
+    handler = FakeDeviceHandler()
+    handler.service_call_timeout = 1.0
+
+    async def _slow(*_args: Any, **_kwargs: Any) -> None:
+        await asyncio.sleep(0.1)
+
+    with (
+        patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=_slow)),
+        patch(f"{_SCHED}._SERVICE_CALL_TIMEOUT_SECONDS", 0.02),
+        patch(_NOTIFY) as notify,
+    ):
+        assert await engine._issue_turn_off(
+            handler, "climate.cloud", rule=_make_rule(), schedule_name="Morning"
+        )
+    notify.assert_not_called()
+
+
+def test_climate_handler_allows_slow_cloud_thermostats() -> None:
+    """Climate calls get longer than the 15-second default."""
+    from custom_components.scheduler_plus.device_handlers.climate import (
+        ClimateDeviceHandler,
+    )
+
+    assert ClimateDeviceHandler.service_call_timeout == 60
+    assert ClimateDeviceHandler.max_concurrent_calls == 4
+
+
+async def test_handler_concurrency_overrides_default(engine: SchedulerEngine) -> None:
+    """Lights go one at a time per integration; a handler can allow more."""
+    for allowed, expected_peak in ((None, 1), (3, 3)):
+        handler = FakeDeviceHandler()
+        handler.max_concurrent_calls = allowed
+        engine._call_slots.clear()
+        running = peak = 0
+
+        async def _slow(*_args: Any, **_kwargs: Any) -> None:
+            nonlocal running, peak
+            running += 1
+            peak = max(peak, running)
+            await asyncio.sleep(0.02)
+            running -= 1
+
+        with patch.object(handler, "async_turn_off", new=AsyncMock(side_effect=_slow)):
+            await asyncio.gather(
+                *(
+                    engine._issue_turn_off(
+                        handler, f"light.l{i}", rule=_make_rule(), schedule_name="M"
+                    )
+                    for i in range(6)
+                )
+            )
+        assert peak == expected_peak
+
+
+async def test_failure_notice_waits_for_third_failed_attempt(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A failure a retry fixes leaves no notice; a persistent one is reported."""
+    await _start_with_evening_off(engine, hass, freezer)
+    turn_off = AsyncMock(side_effect=RuntimeError("Honeywell could not set system mode"))
+    with (
+        patch.object(fake_device_handler, "async_turn_off", new=turn_off),
+        patch(_NOTIFY) as notify,
+    ):
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 0, 1))  # 1st attempt
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 1, 2))  # 2nd
+        assert turn_off.await_count == 2
+        notify.assert_not_called()
+
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 3, 3))  # 3rd
+        assert turn_off.await_count == 3
+        notify.assert_called_once()
+
+
+async def test_failure_fixed_by_retry_leaves_no_notice(
+    engine: SchedulerEngine,
+    fake_device_handler: FakeDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The startup-burst case: first attempt times out, the retry succeeds."""
+    await _start_with_evening_off(engine, hass, freezer)
+    turn_off = AsyncMock(side_effect=[TimeoutError(), None])
+    with (
+        patch.object(fake_device_handler, "async_turn_off", new=turn_off),
+        patch(_NOTIFY) as notify,
+    ):
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 0, 1))
+        await _advance_to(hass, freezer, _at(_MONDAY, 21, 1, 2))
+
+    assert turn_off.await_count == 2
+    assert engine._retries == {}
+    notify.assert_not_called()
