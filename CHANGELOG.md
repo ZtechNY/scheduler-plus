@@ -4,6 +4,27 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-11-15
+
+### Added
+
+- Climate rules with a Time plan can give each period its own temperature, so
+  one rule covers a whole day (e.g. 68° in the morning, 72° during the day, 70°
+  in the evening). A period left blank uses the rule's target temperature. The
+  schedule summary and Day view show each period's temperature.
+
+### Changed
+
+- Time plan periods that meet (one ends at 9:00, the next starts at 9:00) now
+  hand straight over instead of turning the device off and back on at the same
+  moment.
+
+### Fixed
+
+- Eco setback sent the rule's normal action again at the Off time instead of
+  the setback temperature.
+- Switches in the rule and schedule editors were missing their labels.
+
 ## [0.6.0] - 2026-11-15
 
 ### Added

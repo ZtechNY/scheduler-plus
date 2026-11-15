@@ -82,7 +82,7 @@ async def test_device_failure_notifies_and_allows_next_device(
     ):
         for entity_id in ("light.failed", "light.healthy"):
             if turning_on:
-                await engine._issue_turn_on(handler, entity_id, {}, rule=rule, schedule_name="Morning")
+                await engine._issue_turn_on(handler, entity_id, [{}], rule=rule, schedule_name="Morning")
             else:
                 await engine._issue_turn_off(handler, entity_id, rule=rule, schedule_name="Morning")
         notify.assert_called_once()
@@ -2526,7 +2526,7 @@ async def test_service_call_times_out_and_is_reported(engine: SchedulerEngine) -
     ):
         await asyncio.wait_for(
             engine._issue_turn_on(
-                handler, "light.test", {}, rule=_make_rule(), schedule_name="Morning"
+                handler, "light.test", [{}], rule=_make_rule(), schedule_name="Morning"
             ),
             timeout=5,
         )
@@ -3125,3 +3125,104 @@ async def test_failure_fixed_by_retry_leaves_no_notice(
     assert turn_off.await_count == 2
     assert engine._retries == {}
     notify.assert_not_called()
+
+
+async def test_eco_setback_sends_off_action_not_on_action(
+    engine: SchedulerEngine,
+    fake_climate_handler: FakeClimateDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """At off time an eco setback applies off_action - not the rule's on action again."""
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
+    rule = replace(
+        _make_climate_rule(on_time="06:00", off_time="12:02"),
+        off_action={"hvac_mode": "heat", "target_temperature": 62},
+    )
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    await hass.async_block_till_done()
+    freezer.move_to(now + timedelta(minutes=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert [action for _, action in fake_climate_handler.turn_on_calls] == [
+        {"hvac_mode": "heat", "target_temperature": 69},
+        {"hvac_mode": "heat", "target_temperature": 62},
+    ]
+    assert fake_climate_handler.turn_off_calls == []
+
+
+def _make_temperature_plan_rule() -> Rule:
+    """A climate Time plan with back-to-back periods at different temperatures."""
+    return _make_climate_rule(
+        on_time="06:00",
+        off_time="22:00",
+        time_plan={
+            "enabled": True,
+            "periods": [
+                {"start": "06:00", "end": "09:00", "action": {"target_temperature": 68}},
+                {"start": "09:00", "end": "17:00"},
+                {"start": "17:00", "end": "22:00", "action": {"target_temperature": 71}},
+            ],
+        },
+    )
+
+
+async def test_time_plan_back_to_back_periods_skip_the_off_between(
+    engine: SchedulerEngine,
+) -> None:
+    """A period ending as the next begins hands over without an off in between."""
+    transitions = await engine._async_resolve_time_plan(
+        _make_temperature_plan_rule(), _MONDAY
+    )
+
+    assert transitions is not None
+    assert [(at.strftime("%H:%M"), action) for at, action in transitions] == [
+        ("06:00", "on"),
+        ("09:00", "on"),
+        ("17:00", "on"),
+        ("22:00", "off"),
+    ]
+
+
+async def test_time_plan_period_temperature_on_catch_up_and_schedule(
+    engine: SchedulerEngine,
+    fake_climate_handler: FakeClimateDeviceHandler,
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Each period applies its own temperature; a period without one uses the rule's."""
+    now = datetime(2024, 1, 1, 16, 58, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    freezer.move_to(now)
+    rule = _make_temperature_plan_rule()
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+
+    await engine._async_refresh_rule(schedule, rule, now)
+    await hass.async_block_till_done()  # catch-up: the 09:00 period, rule default
+    freezer.move_to(now + timedelta(minutes=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()  # the 17:00 period fires
+
+    assert [action for _, action in fake_climate_handler.turn_on_calls] == [
+        {"hvac_mode": "heat", "target_temperature": 69},
+        {"hvac_mode": "heat", "target_temperature": 71},
+    ]
+    assert fake_climate_handler.turn_off_calls == []
+
+
+async def test_action_at_reports_each_period_temperature(
+    engine: SchedulerEngine,
+) -> None:
+    """The day report shows each Time plan period's own action."""
+    rule = _make_temperature_plan_rule()
+    schedule = _make_schedule(rule, entities=["climate.test"], device_type=DeviceType.CLIMATE)
+
+    events = await engine.async_get_day_events(schedule, _MONDAY)
+
+    assert [
+        engine.action_at(rule, _MONDAY, on_at)["target_temperature"]
+        for _, on_at, _ in events
+    ] == [68, 69, 71]

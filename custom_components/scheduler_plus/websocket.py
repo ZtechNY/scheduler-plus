@@ -61,6 +61,9 @@ _TIME_PLAN_PERIOD_SCHEMA = vol.Schema(
     {
         vol.Required("start"): vol.Match(_TIME_RE),
         vol.Required("end"): vol.Match(_TIME_RE),
+        # This period's own settings, merged over the rule's action when
+        # it starts - e.g. {"target_temperature": 72} for a climate rule.
+        vol.Optional("action"): dict,
     }
 )
 
@@ -863,7 +866,7 @@ async def _collect_day_events(
                     "entities": list(schedule.entities),
                     "rule_id": rule.id,
                     "rule_name": rule.name,
-                    "action": dict(rule.action),
+                    "action": engine.action_at(rule, reference_date, on_at),
                     "off_action": rule.off_action,
                     "outdoor_condition": rule.outdoor_condition,
                     "on_at": on_at.isoformat() if on_at else None,

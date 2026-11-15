@@ -140,6 +140,41 @@ class _DueEvent:
     schedule_name: str
     entity_id: str
     device_handler: DeviceHandler
+    # A Time plan period's own settings (e.g. a climate period's
+    # target_temperature), layered over the rule's first on action. None
+    # for every other event - see _on_actions.
+    action_override: dict[str, Any] | None = None
+
+
+def _period_window(
+    period: Any, reference_date: date
+) -> tuple[datetime, datetime] | None:
+    """A Time plan period's (start, end) on `reference_date`; None if malformed.
+
+    An end at or before the start runs past midnight into the next day.
+    """
+    try:
+        start_time = datetime.strptime(str(period["start"]), "%H:%M").time()
+        end_time = datetime.strptime(str(period["end"]), "%H:%M").time()
+    except (KeyError, TypeError, ValueError):
+        return None
+    start_at = datetime.combine(
+        reference_date, start_time, tzinfo=dt_util.DEFAULT_TIME_ZONE
+    )
+    end_at = datetime.combine(reference_date, end_time, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    if end_at <= start_at:
+        end_at += timedelta(days=1)
+    return (start_at, end_at)
+
+
+def _on_actions(
+    rule: Rule, override: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """The actions a turn-on sends: rule.actions, with `override` merged into the first."""
+    actions = [dict(action) for action in rule.actions] or [dict(rule.action)]
+    if override:
+        actions[0] = {**actions[0], **override}
+    return actions
 
 
 @dataclass(slots=True, kw_only=True)
@@ -1042,7 +1077,7 @@ class SchedulerEngine:
             return await self._issue_turn_on(
                 event.device_handler,
                 event.entity_id,
-                rule.action,
+                _on_actions(rule, event.action_override),
                 rule=rule,
                 schedule_name=event.schedule_name,
                 report_failure=report_failure,
@@ -1051,7 +1086,7 @@ class SchedulerEngine:
             return await self._issue_turn_on(
                 event.device_handler,
                 event.entity_id,
-                rule.off_action,
+                [rule.off_action],
                 rule=rule,
                 schedule_name=event.schedule_name,
                 report_failure=report_failure,
@@ -1185,7 +1220,6 @@ class SchedulerEngine:
                                 both_enabled,
                                 device_handler,
                                 entity_id,
-                                rule.action,
                                 when,
                                 schedule.name,
                             )
@@ -1263,6 +1297,7 @@ class SchedulerEngine:
             transitions = await self._async_resolve_time_plan(rule, reference_date)
             if not windows or not transitions:
                 continue
+            overrides = self._time_plan_overrides(rule, reference_date)
             for entity_id in schedule.entities:
                 device_handler = self._handler_for_entity(entity_id)
                 if device_handler is None:
@@ -1288,6 +1323,9 @@ class SchedulerEngine:
                                     schedule_name=schedule.name,
                                     entity_id=entity_id,
                                     device_handler=device_handler,
+                                    action_override=(
+                                        overrides.get(when) if action == "on" else None
+                                    ),
                                 )
                             )
                         continue
@@ -1298,9 +1336,9 @@ class SchedulerEngine:
                                 False,
                                 device_handler,
                                 entity_id,
-                                rule.action,
                                 when,
                                 schedule.name,
+                                action_override=overrides.get(when),
                             )
                         )
                     else:
@@ -1484,9 +1522,15 @@ class SchedulerEngine:
         plan = rule.time_plan or {}
 
         if plan.get("periods"):
+            # A period ending exactly when another starts hands straight
+            # over (e.g. 68° until 9:00, then 72°) - no off in between,
+            # which would briefly shut the device off and race the on.
+            starts = {start_at for start_at, _ in windows}
             transitions: list[tuple[datetime, str]] = []
             for start_at, end_at in windows:
-                transitions.extend(((start_at, "on"), (end_at, "off")))
+                transitions.append((start_at, "on"))
+                if end_at not in starts:
+                    transitions.append((end_at, "off"))
             return sorted(transitions)
 
         start_at, end_at = windows[0]
@@ -1527,23 +1571,11 @@ class SchedulerEngine:
         if raw_periods:
             windows: list[tuple[datetime, datetime]] = []
             for period in raw_periods:
-                try:
-                    start_time = datetime.strptime(
-                        str(period["start"]), "%H:%M"
-                    ).time()
-                    end_time = datetime.strptime(str(period["end"]), "%H:%M").time()
-                except (KeyError, TypeError, ValueError):
+                window = _period_window(period, reference_date)
+                if window is None:
                     _LOGGER.error("Rule '%s' has an invalid Time plan period", rule.name)
                     return None
-                start_at = datetime.combine(
-                    reference_date, start_time, tzinfo=dt_util.DEFAULT_TIME_ZONE
-                )
-                end_at = datetime.combine(
-                    reference_date, end_time, tzinfo=dt_util.DEFAULT_TIME_ZONE
-                )
-                if end_at <= start_at:
-                    end_at += timedelta(days=1)
-                windows.append((start_at, end_at))
+                windows.append(window)
             windows.sort()
             if rule.date_mode is not RuleDateMode.INCLUDE and (
                 _WEEKDAY_BY_ISO_INDEX[reference_date.weekday()] not in rule.days
@@ -1563,6 +1595,36 @@ class SchedulerEngine:
             rule, reference_date, both_sides=True
         )
         return [occurrence] if occurrence is not None else None
+
+    def action_at(
+        self, rule: Rule, reference_date: date, on_at: datetime | None
+    ) -> dict[str, Any]:
+        """The on action `rule` sends at `on_at` - its own, or a Time plan period's.
+
+        For reports: pairs with async_get_day_events, whose on_at it takes.
+        """
+        override = None
+        if on_at is not None and rule.time_plan and rule.time_plan.get("enabled"):
+            override = self._time_plan_overrides(rule, reference_date).get(on_at)
+        return _on_actions(rule, override)[0]
+
+    @staticmethod
+    def _time_plan_overrides(
+        rule: Rule, reference_date: date
+    ) -> dict[datetime, dict[str, Any]]:
+        """Each Time plan period's own action settings, keyed by its start.
+
+        Only periods that set something (e.g. a climate period's
+        target_temperature) appear. If two periods start together, the
+        later one in the list wins - they would race on the device anyway.
+        """
+        overrides: dict[datetime, dict[str, Any]] = {}
+        for period in (rule.time_plan or {}).get("periods") or []:
+            action = period.get("action") if isinstance(period, dict) else None
+            window = _period_window(period, reference_date)
+            if action and window is not None:
+                overrides[window[0]] = dict(action)
+        return overrides
 
     async def _matches_date_filter(
         self, rule: Rule, reference_date: date, start: datetime | None = None
@@ -1606,13 +1668,16 @@ class SchedulerEngine:
         self,
         device_handler: DeviceHandler,
         entity_id: str,
-        action: dict[str, Any],
+        actions: Sequence[dict[str, Any]],
         *,
         rule: Rule,
         schedule_name: str,
         report_failure: bool = True,
     ) -> bool:
         """Call async_turn_on with a fresh Context, remembered for override detection.
+
+        Sends `actions` in order - the rule's on actions (see _on_actions)
+        or its eco-setback off_action, never both.
 
         Each service call goes through _async_call_device (a per-integration
         concurrency slot, then a timeout); a timeout is reported like any
@@ -1633,7 +1698,7 @@ class SchedulerEngine:
             entity_id, rule, schedule_name, turning_on=True, context=context
         )
         try:
-            for action_item in (rule.actions or [action]):
+            for action_item in actions:
                 await self._async_call_device(
                     device_handler,
                     entity_id,
@@ -1807,11 +1872,15 @@ class SchedulerEngine:
         both_enabled: bool,
         device_handler: DeviceHandler,
         entity_id: str,
-        action: dict[str, Any],
         when: datetime,
         schedule_name: str,
+        *,
+        action_override: dict[str, Any] | None = None,
     ) -> CALLBACK_TYPE:
         """Schedule a single turn-on call at `when`.
+
+        Sends the rule's on actions, with `action_override` (a Time plan
+        period's own settings) merged in - see _on_actions.
 
         If the on-call succeeds and this rule has override enforcement
         active (both_enabled and not rule.allow_override), arms it -
@@ -1822,7 +1891,6 @@ class SchedulerEngine:
         """
 
         async def _fire(_now: datetime) -> None:
-            # `action` is always rule.action, which _async_apply_due sends.
             await self._async_send(
                 _DueEvent(
                     when=when,
@@ -1831,6 +1899,7 @@ class SchedulerEngine:
                     schedule_name=schedule_name,
                     entity_id=entity_id,
                     device_handler=device_handler,
+                    action_override=action_override,
                 )
             )
             if both_enabled and not rule.allow_override:
@@ -2043,7 +2112,7 @@ class SchedulerEngine:
             await self._issue_turn_on(
                 device_handler,
                 entity_id,
-                rule.action,
+                _on_actions(rule),
                 rule=rule,
                 schedule_name=schedule_name,
             )

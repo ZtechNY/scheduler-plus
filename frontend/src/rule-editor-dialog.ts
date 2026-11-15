@@ -7,7 +7,7 @@ import "./rule-template-picker-dialog";
 import type { SchedulerPlusRuleTemplatePicker } from "./rule-template-picker-dialog";
 import "./template-editor-dialog";
 import type { SchedulerPlusTemplateEditor } from "./template-editor-dialog";
-import type { Action, DayConditionType, DeviceType, Rule, RuleDateMode, TimeSpec, Weekday } from "./types";
+import type { Action, DayConditionType, DeviceType, Rule, RuleDateMode, TimePlanPeriod, TimeSpec, Weekday } from "./types";
 import {
   CLIMATE_HVAC_MODES,
   CLIMATE_HVAC_MODE_LABELS,
@@ -145,7 +145,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _timePlanEnabled = false;
 
-  @state() private _timePlanPeriods: { start: string; end: string }[] = [];
+  @state() private _timePlanPeriods: TimePlanPeriod[] = [];
 
   @state() private _manualAutoOffMinutes: number | null = null;
 
@@ -240,7 +240,10 @@ export class SchedulerPlusRuleEditor extends LitElement {
     this._onEnabled = rule?.on_enabled ?? true;
     this._offEnabled = rule?.off_enabled ?? true;
     this._timePlanEnabled = rule?.time_plan?.enabled ?? false;
-    this._timePlanPeriods = rule?.time_plan?.periods?.map((period) => ({ ...period })) ?? [
+    this._timePlanPeriods = rule?.time_plan?.periods?.map((period) => ({
+      ...period,
+      ...(period.action ? { action: { ...period.action } } : {}),
+    })) ?? [
       {
         start: (rule?.on_time.params.time as string | undefined) ?? "06:00",
         end: (rule?.off_time.params.time as string | undefined) ?? "21:00",
@@ -427,6 +430,17 @@ export class SchedulerPlusRuleEditor extends LitElement {
     );
   };
 
+  /** Set (or, with NaN from an emptied field, clear) a period's own temperature. */
+  private _updateTimePlanPeriodTemperature = (index: number, value: number): void => {
+    this._timePlanPeriods = this._timePlanPeriods.map((period, i) => {
+      if (i !== index) return period;
+      const { target_temperature: _previous, ...rest } = period.action ?? {};
+      const action = Number.isNaN(value) ? rest : { ...rest, target_temperature: value };
+      const { action: _old, ...base } = period;
+      return Object.keys(action).length ? { ...base, action } : base;
+    });
+  };
+
   private _updateAdditionalAction = (index: number, value: string): void => {
     try {
       const parsed = JSON.parse(value);
@@ -551,14 +565,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
     }
     // Switches have no action - action stays {} and offAction stays null.
 
-    const planOnTime = this._timePlanEnabled && this._timePlanPeriods.length
-      ? { provider: "fixed" as const, params: { time: this._timePlanPeriods[0].start } }
+    const firstPeriod = this._timePlanPeriods[0];
+    const lastPeriod = this._timePlanPeriods[this._timePlanPeriods.length - 1];
+    const planOnTime = this._timePlanEnabled && firstPeriod
+      ? { provider: "fixed" as const, params: { time: firstPeriod.start } }
       : this._onTime;
-    const planOffTime = this._timePlanEnabled && this._timePlanPeriods.length
-      ? {
-          provider: "fixed" as const,
-          params: { time: this._timePlanPeriods[this._timePlanPeriods.length - 1].end },
-        }
+    const planOffTime = this._timePlanEnabled && lastPeriod
+      ? { provider: "fixed" as const, params: { time: lastPeriod.end } }
       : this._offTime;
 
     return {
@@ -576,7 +589,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
       off_enabled: this._offEnabled,
       time_plan: {
         enabled: this._timePlanEnabled,
-        periods: this._timePlanPeriods,
+        // A period's own settings only mean something for climate rules.
+        periods: this._timePlanPeriods.map(({ start, end, action }) =>
+          this._deviceType === "climate" && action && Object.keys(action).length
+            ? { start, end, action }
+            : { start, end },
+        ),
       },
       manual_auto_off_minutes: this._manualAutoOffMinutes,
       allow_override: this._allowOverride,
@@ -646,14 +664,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
               }}
             />
 
-            <ha-formfield label="Enabled">
+            <label class="switch-row">
               <ha-switch
                 .checked=${this._enabled}
                 @change=${(e: Event) => {
                   this._enabled = (e.target as HTMLInputElement).checked;
                 }}
               ></ha-switch>
-            </ha-formfield>
+            <span>Enabled</span></label>
           </section>
 
           <section class="section">
@@ -838,7 +856,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 `
               : nothing}
             <div class="time-plan-box">
-              <ha-formfield label="Time plan">
+              <label class="switch-row">
                 <ha-switch
                   .checked=${this._timePlanEnabled}
                   @change=${(e: Event) => {
@@ -849,9 +867,11 @@ export class SchedulerPlusRuleEditor extends LitElement {
                     }
                   }}
                 ></ha-switch>
-              </ha-formfield>
+              <span>Time plan</span></label>
               <span class="hint">
-                Add each separate period when the device should be on.
+                ${this._deviceType === "climate"
+                  ? "Add each separate period when the thermostat should run. A period can set its own temperature; leave it blank to use the target temperature under Action. Periods that meet (9:00 to 9:00) switch straight over without turning off."
+                  : "Add each separate period when the device should be on."}
               </span>
               ${this._timePlanEnabled
                 ? html`
@@ -866,6 +886,19 @@ export class SchedulerPlusRuleEditor extends LitElement {
                           <input type="time" class="native-input"
                             .value=${period.end}
                             @input=${(e: Event) => this._updateTimePlanPeriod(index, "end", (e.target as HTMLInputElement).value)} />
+                          ${this._deviceType === "climate"
+                            ? html`
+                                <input type="number" class="native-input period-temperature"
+                                  aria-label="Temperature for period ${index + 1}"
+                                  title="Temperature for this period - blank uses the rule's target temperature"
+                                  placeholder=${this._useTargetTemperature ? `${this._targetTemperature}°` : "Temp"}
+                                  .value=${period.action?.target_temperature !== undefined ? String(period.action.target_temperature) : ""}
+                                  @input=${(e: Event) => {
+                                    const raw = (e.target as HTMLInputElement).value;
+                                    this._updateTimePlanPeriodTemperature(index, raw === "" ? NaN : Number(raw));
+                                  }} />
+                              `
+                            : nothing}
                           <button type="button" class="btn" @click=${() => this._removeTimePlanPeriod(index)}>Remove</button>
                         </div>
                       `,
@@ -879,7 +912,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
             ${this._deviceType === "light" || this._deviceType === "light_switch"
               ? html`
                   <div class="time-plan-box">
-                    <ha-formfield label="Manual auto-off">
+                    <label class="switch-row">
                       <ha-switch
                         .checked=${this._manualAutoOffMinutes !== null}
                         @change=${(e: Event) => {
@@ -888,7 +921,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                             : null;
                         }}
                       ></ha-switch>
-                    </ha-formfield>
+                    <span>Manual auto-off</span></label>
                     <span class="hint">
                       If someone turns the light on during this time window, turn it off automatically.
                     </span>
@@ -961,14 +994,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
     return html`
       <div class="time-field">
-        <ha-formfield label=${label}>
+        <label class="switch-row">
           <ha-switch
             .checked=${enabled}
             @change=${(e: Event) => {
               onToggle((e.target as HTMLInputElement).checked);
             }}
           ></ha-switch>
-        </ha-formfield>
+        <span>${label}</span></label>
         ${enabled
           ? html`
               <div class="time-row">
@@ -1040,14 +1073,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
     return html`
       ${this._preferences.enable_brightness
         ? html`
-            <ha-formfield label="Set brightness">
+            <label class="switch-row">
               <ha-switch
                 .checked=${this._setBrightness}
                 @change=${(e: Event) => {
                   this._setBrightness = (e.target as HTMLInputElement).checked;
                 }}
               ></ha-switch>
-            </ha-formfield>
+            <span>Set brightness</span></label>
             <span class="hint">
               Off by default - the light just turns on at whatever brightness it
               was last set to.
@@ -1071,14 +1104,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
         : nothing}
       ${this._preferences.enable_fade_in
         ? html`
-            <ha-formfield label="Fade in gradually">
+            <label class="switch-row">
               <ha-switch
                 .checked=${this._useTransition}
                 @change=${(e: Event) => {
                   this._useTransition = (e.target as HTMLInputElement).checked;
                 }}
               ></ha-switch>
-            </ha-formfield>
+            <span>Fade in gradually</span></label>
             <span class="hint">
               Instead of snapping on instantly, the light ramps up to its target
               level over the given number of seconds.
@@ -1119,14 +1152,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
         )}
       </select>
 
-      <ha-formfield label="Set target temperature">
+      <label class="switch-row">
         <ha-switch
           .checked=${this._useTargetTemperature}
           @change=${(e: Event) => {
             this._useTargetTemperature = (e.target as HTMLInputElement).checked;
           }}
         ></ha-switch>
-      </ha-formfield>
+      <span>Set target temperature</span></label>
       ${this._useTargetTemperature
         ? html`
             <label class="field-label" for="target-temperature">Target temperature</label>
@@ -1143,14 +1176,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
           `
         : nothing}
 
-      <ha-formfield label="Eco setback instead of turning off">
+      <label class="switch-row">
         <ha-switch
           .checked=${this._useSetback}
           @change=${(e: Event) => {
             this._useSetback = (e.target as HTMLInputElement).checked;
           }}
         ></ha-switch>
-      </ha-formfield>
+      <span>Eco setback instead of turning off</span></label>
       <span class="hint">
         ${this._useSetback
           ? "At the Off time below, the thermostat is set to this instead of being turned off - useful for avoiding humidity or freeze issues in an unoccupied space while still saving energy."
@@ -1188,14 +1221,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
       ${this._renderOutdoorCondition()}
 
-      <ha-formfield label="Allow override">
+      <label class="switch-row">
         <ha-switch
           .checked=${this._allowOverride}
           @change=${(e: Event) => {
             this._allowOverride = (e.target as HTMLInputElement).checked;
           }}
         ></ha-switch>
-      </ha-formfield>
+      <span>Allow override</span></label>
       <span class="hint">
         ${this._allowOverride
           ? "Manual changes made directly on the thermostat stick until the next scheduled event."
@@ -1251,14 +1284,14 @@ export class SchedulerPlusRuleEditor extends LitElement {
     const reading = effective ? this._outdoorReading(effective) : null;
     const watchBlocked = this._timePlanEnabled || !this._onEnabled || !this._offEnabled;
     return html`
-      <ha-formfield label="Depends on outdoor temperature">
+      <label class="switch-row">
         <ha-switch
           .checked=${this._useOutdoor}
           @change=${(e: Event) => {
             this._useOutdoor = (e.target as HTMLInputElement).checked;
           }}
         ></ha-switch>
-      </ha-formfield>
+      <span>Depends on outdoor temperature</span></label>
       <span class="hint">
         ${this._useOutdoor
           ? "The On time only runs if the outdoor temperature matches. The Off time always runs. If the sensor has no reading, the rule runs as scheduled."
@@ -1297,7 +1330,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                 <span class="sep">°F</span>
               </div>
 
-              <ha-formfield label="Keep watching during the On-Off window">
+              <label class="switch-row">
                 <ha-switch
                   .checked=${this._outdoorWatch && !watchBlocked}
                   .disabled=${watchBlocked}
@@ -1305,7 +1338,7 @@ export class SchedulerPlusRuleEditor extends LitElement {
                     this._outdoorWatch = (e.target as HTMLInputElement).checked;
                   }}
                 ></ha-switch>
-              </ha-formfield>
+              <span>Keep watching during the On-Off window</span></label>
               <span class="hint">
                 ${watchBlocked
                   ? "Needs both an On time and an Off time, and no Time plan."
@@ -1366,6 +1399,12 @@ export class SchedulerPlusRuleEditor extends LitElement {
   }
 
   static override styles = css`
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
     .form {
       display: flex;
       flex-direction: column;
@@ -1585,6 +1624,9 @@ export class SchedulerPlusRuleEditor extends LitElement {
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
+    }
+    .period-temperature {
+      width: 80px;
     }
     .period-label {
       width: 20px;

@@ -16,7 +16,7 @@ import "./rule-editor-dialog";
 import type { SchedulerPlusRuleEditor } from "./rule-editor-dialog";
 import "./template-editor-dialog";
 import type { SchedulerPlusTemplateEditor } from "./template-editor-dialog";
-import type { DeviceType, RuleDateMode, Schedule, TimeSpec, YidcalZmanType } from "./types";
+import type { DeviceType, RuleDateMode, Schedule, TimePlanPeriod, TimeSpec, YidcalZmanType } from "./types";
 import {
   DAY_CONDITION_LABELS,
   DEVICE_TYPES,
@@ -63,7 +63,7 @@ function formatRuleTimes(rule: {
   off_enabled: boolean;
   time_plan?: {
     enabled: boolean;
-    periods?: { start: string; end: string }[];
+    periods?: TimePlanPeriod[];
     on_minutes?: number;
     off_minutes?: number;
   } | null;
@@ -71,7 +71,13 @@ function formatRuleTimes(rule: {
   if (rule.time_plan?.enabled) {
     const periods = rule.time_plan.periods ?? [];
     if (periods.length) {
-      return `Time plan: ${periods.map((period) => `${formatFixedTime(period.start)}–${formatFixedTime(period.end)}`).join(", ")}`;
+      return `Time plan: ${periods
+        .map((period) => {
+          const temperature = period.action?.target_temperature;
+          const range = `${formatFixedTime(period.start)}–${formatFixedTime(period.end)}`;
+          return temperature !== undefined ? `${range} ${temperature}°` : range;
+        })
+        .join(", ")}`;
     }
     return `Time plan: ${formatTimeSpec(rule.on_time)} → ${formatTimeSpec(rule.off_time)}`;
   }
@@ -430,14 +436,14 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             )}
           </select>
 
-          <ha-formfield label="Enabled">
+          <label class="switch-row">
             <ha-switch
               .checked=${this._enabled}
               @change=${(e: Event) => {
                 this._enabled = (e.target as HTMLInputElement).checked;
               }}
             ></ha-switch>
-          </ha-formfield>
+          <span>Enabled</span></label>
 
           <label class="field-label" for="active-date-mode">Active period</label>
           <select
@@ -662,6 +668,12 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   }
 
   static override styles = css`
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
     .form {
       display: flex;
       flex-direction: column;

@@ -218,7 +218,7 @@ export interface Rule {
   time_plan?: {
     enabled: boolean;
     /** Separate fixed-clock start/end windows. */
-    periods?: { start: string; end: string }[];
+    periods?: TimePlanPeriod[];
     /** Legacy duration fields retained so older saved plans still load. */
     on_minutes?: number;
     off_minutes?: number;
@@ -294,4 +294,15 @@ export interface Schedule {
    * pending right now, not history.
    */
   override_pending_until: string | null;
+}
+
+/**
+ * One Time plan period. `action` holds this period's own settings, merged
+ * over the rule's action when it starts - e.g. { target_temperature: 72 }
+ * for a climate rule. Omitted means the period uses the rule's action.
+ */
+export interface TimePlanPeriod {
+  start: string;
+  end: string;
+  action?: Action;
 }
