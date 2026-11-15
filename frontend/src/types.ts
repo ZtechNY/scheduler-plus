@@ -225,6 +225,31 @@ export interface Rule {
   } | null;
   /** Turn off a manually activated light after this many minutes. */
   manual_auto_off_minutes?: number | null;
+  /** Climate-only: gate the On side on the outdoor temperature. */
+  outdoor_condition?: OutdoorCondition | null;
+}
+
+/**
+ * Only turn on while the outdoor temperature is below/above `threshold`
+ * (see custom_components/scheduler_plus/outdoor.py). The Off time always
+ * runs. With `watch`, the rule also turns on/off during its window as the
+ * temperature crosses the threshold; once on, it stays on until the
+ * temperature moves `hysteresis` degrees back past it.
+ */
+export interface OutdoorCondition {
+  operator: "below" | "above";
+  threshold: number;
+  hysteresis: number;
+  watch: boolean;
+  /** Null uses the sensor chosen in Scheduler+ > Configure. */
+  entity_id: string | null;
+}
+
+/** e.g. "Only if outside is below 45°". */
+export function describeOutdoorCondition(condition: OutdoorCondition): string {
+  return `Only if outside is ${condition.operator} ${condition.threshold}°${
+    condition.watch ? " (watching)" : ""
+  }`;
 }
 
 export interface Schedule {

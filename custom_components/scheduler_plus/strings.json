@@ -18,7 +18,11 @@
           "working_hours_start": "Working hours start",
           "working_hours_end": "Working hours end",
           "enable_brightness": "Allow brightness control in light rules",
-          "enable_fade_in": "Allow fade-in transitions in light rules"
+          "enable_fade_in": "Allow fade-in transitions in light rules",
+          "outdoor_temperature_entity": "Outdoor temperature sensor"
+        },
+        "data_description": {
+          "outdoor_temperature_entity": "Used by climate rules with an outdoor temperature condition. A temperature sensor (e.g. a thermostat's Outdoor temperature) or a weather entity."
         }
       }
     }

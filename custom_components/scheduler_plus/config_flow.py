@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ENABLE_BRIGHTNESS,
     CONF_ENABLE_FADE_IN,
+    CONF_OUTDOOR_TEMPERATURE_ENTITY,
     CONF_WEEKDAY_DAYS,
     CONF_WEEKEND_DAYS,
     CONF_WORKING_HOURS_END,
@@ -141,6 +142,23 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
                     CONF_ENABLE_FADE_IN,
                     default=options.get(CONF_ENABLE_FADE_IN, DEFAULT_ENABLE_FADE_IN),
                 ): selector.BooleanSelector(),
+                # Optional and without a default, so it can be cleared;
+                # suggested_value pre-fills the current choice.
+                vol.Optional(
+                    CONF_OUTDOOR_TEMPERATURE_ENTITY,
+                    description={
+                        "suggested_value": options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY)
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        filter=[
+                            selector.EntityFilterSelectorConfig(
+                                domain="sensor", device_class="temperature"
+                            ),
+                            selector.EntityFilterSelectorConfig(domain="weather"),
+                        ]
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

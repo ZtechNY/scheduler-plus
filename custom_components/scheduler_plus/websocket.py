@@ -25,6 +25,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ENABLE_BRIGHTNESS,
     CONF_ENABLE_FADE_IN,
+    CONF_OUTDOOR_TEMPERATURE_ENTITY,
     CONF_WEEKDAY_DAYS,
     CONF_WEEKEND_DAYS,
     CONF_WORKING_HOURS_END,
@@ -103,6 +104,16 @@ def _validate_time_enabled(value: dict[str, Any]) -> dict[str, Any]:
         not value.get("on_enabled", True) or not value.get("off_enabled", True)
     ):
         raise vol.Invalid("Manual auto-off requires both On time and Off time")
+    outdoor = value.get("outdoor_condition")
+    if outdoor is not None and outdoor["watch"]:
+        if not value.get("on_enabled", True) or not value.get("off_enabled", True):
+            raise vol.Invalid(
+                "Watching the outdoor temperature requires both On time and Off time"
+            )
+        if time_plan.get("enabled"):
+            raise vol.Invalid(
+                "Watching the outdoor temperature is not available with a Time plan"
+            )
     return value
 
 
@@ -188,6 +199,25 @@ _RULE_SCHEMA = vol.All(
             ),
             vol.Optional("manual_auto_off_minutes", default=None): vol.Any(
                 None, vol.All(vol.Coerce(int), vol.Range(min=1, max=1440))
+            ),
+            # See outdoor.py. Only offered for climate rules by the editor.
+            vol.Optional("outdoor_condition", default=None): vol.Any(
+                None,
+                vol.Schema(
+                    {
+                        vol.Required("operator"): vol.In(["below", "above"]),
+                        vol.Required("threshold"): vol.All(
+                            vol.Coerce(float), vol.Range(min=-100, max=150)
+                        ),
+                        vol.Optional("hysteresis", default=2): vol.All(
+                            vol.Coerce(float), vol.Range(min=0, max=20)
+                        ),
+                        vol.Optional("watch", default=False): bool,
+                        vol.Optional("entity_id", default=None): vol.Any(
+                            None, cv.entity_id
+                        ),
+                    }
+                ),
             ),
         }
     ),
@@ -722,6 +752,7 @@ async def websocket_get_preferences(
     feature_toggles = {
         "enable_brightness": options.get(CONF_ENABLE_BRIGHTNESS, DEFAULT_ENABLE_BRIGHTNESS),
         "enable_fade_in": options.get(CONF_ENABLE_FADE_IN, DEFAULT_ENABLE_FADE_IN),
+        "outdoor_temperature_entity": options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY),
     }
 
     user_preferences = entry.runtime_data.coordinator.data["user_preferences"].get(
@@ -834,6 +865,7 @@ async def _collect_day_events(
                     "rule_name": rule.name,
                     "action": dict(rule.action),
                     "off_action": rule.off_action,
+                    "outdoor_condition": rule.outdoor_condition,
                     "on_at": on_at.isoformat() if on_at else None,
                     "off_at": off_at.isoformat() if off_at else None,
                 }

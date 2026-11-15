@@ -131,6 +131,9 @@ class Rule:
     # When set on a light rule, a manual turn-on during this rule's window is
     # followed by an automatic turn-off after this many minutes.
     manual_auto_off_minutes: int | None = None
+    # Gates the on side on the outdoor temperature - see outdoor.py for the
+    # shape. None (the default) means the rule ignores the weather.
+    outdoor_condition: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Normalize legacy single-action rules to the ordered action list."""
@@ -161,6 +164,11 @@ class Rule:
             "off_action": dict(self.off_action) if self.off_action is not None else None,
             "time_plan": dict(self.time_plan) if self.time_plan is not None else None,
             "manual_auto_off_minutes": self.manual_auto_off_minutes,
+            "outdoor_condition": (
+                dict(self.outdoor_condition)
+                if self.outdoor_condition is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -177,6 +185,7 @@ class Rule:
         """
         raw_off_action = data.get("off_action")
         raw_time_plan = data.get("time_plan")
+        raw_outdoor = data.get("outdoor_condition")
         return cls(
             id=data["id"],
             name=data["name"],
@@ -205,6 +214,7 @@ class Rule:
                 if data.get("manual_auto_off_minutes") is not None
                 else None
             ),
+            outdoor_condition=dict(raw_outdoor) if raw_outdoor is not None else None,
         )
 
 

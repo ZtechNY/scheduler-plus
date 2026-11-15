@@ -49,6 +49,7 @@ from .device_handlers import (
 )
 from .issues import async_clear_missing_entity, async_report_missing_entity
 from .models import Rule, RuleDateMode, Schedule, TimeSpec, Weekday
+from .outdoor import condition_met, describe, read_temperature
 from .time_providers import (
     DEFAULT_TIME_PROVIDERS,
     TimeProvider,
@@ -206,6 +207,7 @@ class SchedulerEngine:
         time_providers: TimeProviderRegistry = DEFAULT_TIME_PROVIDERS,
         device_handlers: DeviceHandlerRegistry = DEFAULT_DEVICE_HANDLERS,
         day_conditions: DayConditionRegistry = DEFAULT_DAY_CONDITIONS,
+        outdoor_temperature_entity: str | None = None,
     ) -> None:
         """Initialize the engine.
 
@@ -260,6 +262,17 @@ class SchedulerEngine:
         self._call_slots: dict[str, asyncio.Semaphore] = {}
         # (rule_id, date) already warned about as unresolvable.
         self._unresolved_warned: set[tuple[str, date]] = set()
+        # Default source for Rule.outdoor_condition - see outdoor.py.
+        self._outdoor_temperature_entity = outdoor_temperature_entity
+        # rule_id -> (window on_at, whether the outdoor condition is met),
+        # for a rule watching the outdoor temperature during its window.
+        # Outlives a rescan's teardown/re-arm of the watch, so a window
+        # keeps its hysteresis state; cleared when the window ends.
+        self._outdoor_state: dict[str, tuple[datetime, bool]] = {}
+        # rule_id -> token of the outdoor watch currently armed for it.
+        self._outdoor_watching: dict[str, object] = {}
+        # Rule ids already warned about having no outdoor temperature source.
+        self._outdoor_unconfigured_warned: set[str] = set()
 
     async def async_start(self) -> None:
         """Start the engine once Home Assistant has started.
@@ -330,6 +343,17 @@ class SchedulerEngine:
         # these dicts, so both should already be empty by this point.
         self._active_enforcement.clear()
         self._pending_reapply_at.clear()
+        self._outdoor_watching.clear()
+
+    @callback
+    def async_set_outdoor_temperature_entity(self, entity_id: str | None) -> None:
+        """Change the default outdoor temperature source, rescanning if it changed."""
+        if entity_id == self._outdoor_temperature_entity:
+            return
+        self._outdoor_temperature_entity = entity_id
+        self._outdoor_unconfigured_warned.clear()
+        if self._started:
+            self.hass.async_create_task(self._async_refresh_all())
 
     async def async_get_next_event(
         self, schedule: Schedule
@@ -837,6 +861,8 @@ class SchedulerEngine:
             del self._rule_fingerprints[rule_id]
             self._forget_fired(rule_id)
             self._cancel_retries(rule_id)
+        for rule_id in set(self._outdoor_state) - current_rule_ids:
+            del self._outdoor_state[rule_id]
         self._fired = {
             key: when
             for key, when in self._fired.items()
@@ -1004,6 +1030,14 @@ class SchedulerEngine:
         passed to _issue_turn_on/_issue_turn_off.
         """
         rule = event.rule
+        if event.turning_on and not self._outdoor_allows(rule):
+            _LOGGER.info(
+                "Skipping rule '%s' turning on %s: %s is not met",
+                rule.name,
+                event.entity_id,
+                describe(rule.outdoor_condition or {}),
+            )
+            return True
         if event.turning_on:
             return await self._issue_turn_on(
                 event.device_handler,
@@ -1192,6 +1226,16 @@ class SchedulerEngine:
                             rule.manual_auto_off_minutes,
                         )
                     )
+
+            if (
+                rule.outdoor_condition
+                and rule.outdoor_condition.get("watch")
+                and both_enabled
+                and off_at > now_utc
+            ):
+                unsub_list.append(
+                    self._schedule_outdoor_watch(schedule, rule, on_at, off_at)
+                )
 
         if unsub_list:
             self._unsub_rules[rule.id] = unsub_list
@@ -1992,6 +2036,8 @@ class SchedulerEngine:
             nonlocal unsub_timer
             unsub_timer = None
             self._pending_reapply_at.pop(entity_id, None)
+            if not self._outdoor_allows(rule):
+                return  # the weather turned the rule off for now
             if device_handler.matches_action(self.hass, entity_id, rule.action):
                 return
             await self._issue_turn_on(
@@ -2007,6 +2053,8 @@ class SchedulerEngine:
             nonlocal unsub_timer
             if event.context.id == self._last_self_context.get(entity_id):
                 return  # our own call, not a manual override
+            if not self._outdoor_allows(rule):
+                return  # the weather turned the rule off for now
             if device_handler.matches_action(self.hass, entity_id, rule.action):
                 return  # already matches - nothing to correct
             _cancel_pending_reapply()
@@ -2033,6 +2081,189 @@ class SchedulerEngine:
                 del self._active_enforcement[entity_id]
 
         self._active_enforcement[entity_id] = _teardown
+        return _teardown
+
+    def _outdoor_entity(self, rule: Rule) -> str | None:
+        """The entity `rule`'s outdoor condition reads: its own, else the default."""
+        condition = rule.outdoor_condition or {}
+        return condition.get("entity_id") or self._outdoor_temperature_entity
+
+    def _evaluate_outdoor(self, rule: Rule, *, active: bool) -> bool | None:
+        """Check `rule`'s outdoor condition now; None if there is no reading.
+
+        `active` is passed to outdoor.condition_met (hysteresis).
+        """
+        entity_id = self._outdoor_entity(rule)
+        if entity_id is None:
+            if rule.id not in self._outdoor_unconfigured_warned:
+                self._outdoor_unconfigured_warned.add(rule.id)
+                _LOGGER.warning(
+                    "Rule '%s' has an outdoor temperature condition, but no "
+                    "outdoor temperature sensor is set (Scheduler+ > Configure); "
+                    "running it as scheduled",
+                    rule.name,
+                )
+            return None
+        temperature = read_temperature(self.hass, entity_id)
+        if temperature is None:
+            return None
+        return condition_met(rule.outdoor_condition or {}, temperature, active=active)
+
+    def _outdoor_allows(self, rule: Rule) -> bool:
+        """Whether `rule`'s on side may run, given the outdoor temperature.
+
+        Rules without an outdoor condition always may. A rule whose window
+        is being watched follows the watch's decision; otherwise the
+        temperature is checked now. With no reading (sensor unavailable or
+        not set) the rule runs as scheduled - a heating schedule must not
+        stop because a weather service is down.
+        """
+        if not rule.outdoor_condition:
+            return True
+        if rule.id in self._outdoor_watching and rule.id in self._outdoor_state:
+            return self._outdoor_state[rule.id][1]
+        met = self._evaluate_outdoor(rule, active=False)
+        if met is None:
+            if self._outdoor_entity(rule) is not None:
+                _LOGGER.warning(
+                    "No outdoor temperature from %s for rule '%s'; running it as scheduled",
+                    self._outdoor_entity(rule),
+                    rule.name,
+                )
+            return True
+        return met
+
+    def _schedule_outdoor_watch(
+        self, schedule: Schedule, rule: Rule, on_at: datetime, off_at: datetime
+    ) -> CALLBACK_TYPE:
+        """Follow the outdoor temperature during one window of `rule`.
+
+        From on_at to off_at, each change in the outdoor temperature that
+        flips the condition (with hysteresis) turns every entity on (the
+        rule's action) or off (its off action, as at off time). Readings
+        while the sensor is unavailable are ignored, keeping the last
+        decision. The scheduled on/off events themselves are untouched: the
+        on event asks _outdoor_allows, which follows this watch's decision.
+        """
+        token = object()
+        torn_down = False
+        start_unsub: CALLBACK_TYPE | None = None
+        end_unsub: CALLBACK_TYPE | None = None
+        state_unsub: CALLBACK_TYPE | None = None
+
+        def _is_current() -> bool:
+            return not torn_down and self._outdoor_watching.get(rule.id) is token
+
+        async def _apply(
+            entity_id: str, device_handler: DeviceHandler, turning_on: bool
+        ) -> None:
+            if not turning_on:
+                teardown = self._active_enforcement.get(entity_id)
+                if teardown is not None:
+                    teardown()
+            await self._async_send(
+                _DueEvent(
+                    when=dt_util.utcnow(),
+                    turning_on=turning_on,
+                    rule=rule,
+                    schedule_name=schedule.name,
+                    entity_id=entity_id,
+                    device_handler=device_handler,
+                )
+            )
+            if turning_on and not rule.allow_override and _is_current():
+                self._unsub_rules.setdefault(rule.id, []).append(
+                    self._arm_override_enforcement(
+                        rule, entity_id, device_handler, schedule.name
+                    )
+                )
+
+        @callback
+        def _on_change(_event: Event[EventStateChangedData]) -> None:
+            if not _is_current():
+                return
+            entity_id = self._outdoor_entity(rule)
+            temperature = (
+                read_temperature(self.hass, entity_id) if entity_id else None
+            )
+            if temperature is None:
+                return
+            was_met = self._outdoor_state[rule.id][1]
+            met = condition_met(
+                rule.outdoor_condition or {}, temperature, active=was_met
+            )
+            if met == was_met:
+                return
+            self._outdoor_state[rule.id] = (on_at, met)
+            _LOGGER.info(
+                "Outside is now %s: rule '%s' (%s) turning %s",
+                temperature,
+                rule.name,
+                describe(rule.outdoor_condition or {}),
+                "on" if met else "off",
+            )
+            for target in schedule.entities:
+                device_handler = self._handler_for_entity(target)
+                if device_handler is None:
+                    continue
+                task = self.hass.async_create_background_task(
+                    _apply(target, device_handler, met),
+                    name=f"Scheduler+ outdoor {target}",
+                )
+                if not task.done():
+                    self._catch_up_tasks.add(task)
+                    task.add_done_callback(self._catch_up_tasks.discard)
+
+        @callback
+        def _arm(_now: datetime | None = None) -> None:
+            nonlocal start_unsub, end_unsub, state_unsub
+            start_unsub = None
+            if torn_down:
+                return
+            previous = self._outdoor_state.get(rule.id)
+            was_met = (
+                previous[1] if previous is not None and previous[0] == on_at else None
+            )
+            met = self._evaluate_outdoor(rule, active=bool(was_met))
+            if met is None:
+                # No reading: keep this window's last decision, else run as
+                # scheduled.
+                met = True if was_met is None else was_met
+            self._outdoor_state[rule.id] = (on_at, met)
+            self._outdoor_watching[rule.id] = token
+            entity_id = self._outdoor_entity(rule)
+            if entity_id is not None:
+                state_unsub = async_track_state_change_event(
+                    self.hass, entity_id, _on_change
+                )
+            end_unsub = async_track_point_in_time(self.hass, _end, off_at)
+
+        @callback
+        def _end(_now: datetime) -> None:
+            nonlocal end_unsub
+            end_unsub = None
+            current = self._outdoor_state.get(rule.id)
+            if current is not None and current[0] == on_at:
+                del self._outdoor_state[rule.id]
+            _teardown()
+
+        @callback
+        def _teardown() -> None:
+            nonlocal torn_down, start_unsub, end_unsub, state_unsub
+            if torn_down:
+                return
+            torn_down = True
+            for unsub in (start_unsub, end_unsub, state_unsub):
+                if unsub is not None:
+                    unsub()
+            start_unsub = end_unsub = state_unsub = None
+            if self._outdoor_watching.get(rule.id) is token:
+                del self._outdoor_watching[rule.id]
+
+        if on_at <= dt_util.utcnow():
+            _arm()
+        else:
+            start_unsub = async_track_point_in_time(self.hass, _arm, on_at)
         return _teardown
 
     def _cancel_rule(self, rule_id: str, *, retries: bool = True) -> None:

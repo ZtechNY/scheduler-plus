@@ -102,3 +102,10 @@ CONF_ENABLE_FADE_IN: Final = "enable_fade_in"
 
 DEFAULT_ENABLE_BRIGHTNESS: Final = True
 DEFAULT_ENABLE_FADE_IN: Final = True
+
+# Org-wide default outdoor temperature source for rules with an outdoor
+# condition (Rule.outdoor_condition) - a temperature sensor, or a weather
+# entity whose `temperature` attribute is read. A rule may name its own
+# entity instead. Unset means only rules naming their own entity can check
+# the outdoor temperature; the rest run as if the condition were met.
+CONF_OUTDOOR_TEMPERATURE_ENTITY: Final = "outdoor_temperature_entity"

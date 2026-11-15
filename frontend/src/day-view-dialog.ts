@@ -5,6 +5,7 @@ import type { DayScheduleEvent, HomeAssistant, WeekScheduleDay } from "./api";
 import { fetchDaySchedule, fetchWeekSchedule } from "./api";
 import { formatAction } from "./format-action";
 import type { DeviceType } from "./types";
+import { describeOutdoorCondition } from "./types";
 
 /** "YYYY-MM-DD" for a Date in local time, not UTC (unlike Date#toISOString). */
 function localDateIso(date: Date): string {
@@ -518,6 +519,9 @@ export class SchedulerPlusDayView extends LitElement {
         </div>
         <span class="event-name">${event.schedule_name} · ${event.rule_name}</span>
         ${action ? html`<span class="event-action">${action}</span>` : nothing}
+        ${event.outdoor_condition
+          ? html`<span class="event-action">${describeOutdoorCondition(event.outdoor_condition)}</span>`
+          : nothing}
         <span class="event-entities" title=${entities.full}>
           ${entities.visible}${entities.overflow > 0
             ? html` <span class="event-entities-more">+${entities.overflow} more</span>`

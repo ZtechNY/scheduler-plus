@@ -7,6 +7,7 @@
 import type {
   Action,
   DeviceType,
+  OutdoorCondition,
   Rule,
   RuleDateMode,
   Schedule,
@@ -210,6 +211,8 @@ export interface Preferences {
   working_hours_end: string;
   enable_brightness: boolean;
   enable_fade_in: boolean;
+  /** Org-wide default sensor for outdoor temperature conditions, if set. */
+  outdoor_temperature_entity?: string | null;
 }
 
 export async function fetchPreferences(hass: HomeAssistant): Promise<Preferences> {
@@ -242,6 +245,7 @@ export interface DayScheduleEvent {
   rule_name: string;
   action: Action;
   off_action?: Action | null;
+  outdoor_condition?: OutdoorCondition | null;
   on_at: string | null;
   off_at: string | null;
 }

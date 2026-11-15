@@ -171,6 +171,19 @@ export class SchedulerPlusRuleEditor extends LitElement {
 
   @state() private _allowOverride = true;
 
+  @state() private _useOutdoor = false;
+
+  @state() private _outdoorOperator: "below" | "above" = "below";
+
+  @state() private _outdoorThreshold = 45;
+
+  @state() private _outdoorHysteresis = 2;
+
+  @state() private _outdoorWatch = true;
+
+  /** "" means the default sensor from Scheduler+ > Configure. */
+  @state() private _outdoorEntity = "";
+
   @state() private _overrideGraceMinutes = 15;
 
   @state() private _additionalActions: Action[] = [];
@@ -252,6 +265,13 @@ export class SchedulerPlusRuleEditor extends LitElement {
       this._setbackHvacMode = (rule?.off_action?.hvac_mode as string | undefined) ?? "heat";
       this._setbackTemperature =
         (rule?.off_action?.target_temperature as number | undefined) ?? 78;
+      const outdoor = rule?.outdoor_condition;
+      this._useOutdoor = !!outdoor;
+      this._outdoorOperator = outdoor?.operator ?? "below";
+      this._outdoorThreshold = outdoor?.threshold ?? 45;
+      this._outdoorHysteresis = outdoor?.hysteresis ?? 2;
+      this._outdoorWatch = outdoor?.watch ?? true;
+      this._outdoorEntity = outdoor?.entity_id ?? "";
     }
     // Switches have no action-specific state to populate - Rule.action is
     // always {} for a switch rule.
@@ -501,6 +521,11 @@ export class SchedulerPlusRuleEditor extends LitElement {
     if (this._manualAutoOffMinutes !== null && (!this._onEnabled || !this._offEnabled)) {
       return "Manual auto-off requires both On time and Off time.";
     }
+    if (this._deviceType === "climate" && this._useOutdoor) {
+      if (!Number.isFinite(this._outdoorThreshold)) {
+        return "Enter the outdoor temperature.";
+      }
+    }
     return null;
   }
 
@@ -559,6 +584,20 @@ export class SchedulerPlusRuleEditor extends LitElement {
       action,
       actions: [action, ...this._additionalActions],
       off_action: offAction,
+      outdoor_condition:
+        this._deviceType === "climate" && this._useOutdoor
+          ? {
+              operator: this._outdoorOperator,
+              threshold: this._outdoorThreshold,
+              hysteresis: this._outdoorHysteresis,
+              watch:
+                this._outdoorWatch &&
+                this._onEnabled &&
+                this._offEnabled &&
+                !this._timePlanEnabled,
+              entity_id: this._outdoorEntity || null,
+            }
+          : null,
     };
   }
 
@@ -1147,6 +1186,8 @@ export class SchedulerPlusRuleEditor extends LitElement {
           `
         : nothing}
 
+      ${this._renderOutdoorCondition()}
+
       <ha-formfield label="Allow override">
         <ha-switch
           .checked=${this._allowOverride}
@@ -1176,6 +1217,149 @@ export class SchedulerPlusRuleEditor extends LitElement {
                   Number((e.target as HTMLInputElement).value) || 1;
               }}
             />
+          `
+        : nothing}
+    `;
+  }
+
+  /** Temperature sensors and weather entities, for the per-rule sensor choice. */
+  private _outdoorEntityOptions(): { id: string; name: string }[] {
+    return Object.entries(this.hass?.states ?? {})
+      .filter(
+        ([id, state]) =>
+          id.startsWith("weather.") ||
+          (id.startsWith("sensor.") && state.attributes.device_class === "temperature"),
+      )
+      .map(([id, state]) => ({
+        id,
+        name: (state.attributes.friendly_name as string | undefined) ?? id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private _outdoorReading(entityId: string): string | null {
+    const state = this.hass?.states[entityId];
+    if (!state) return null;
+    const value = entityId.startsWith("weather.") ? state.attributes.temperature : state.state;
+    const number = Number(value);
+    return Number.isFinite(number) && value !== "" && value !== null ? `${number}°` : null;
+  }
+
+  private _renderOutdoorCondition() {
+    const defaultEntity = this._preferences.outdoor_temperature_entity ?? "";
+    const effective = this._outdoorEntity || defaultEntity;
+    const reading = effective ? this._outdoorReading(effective) : null;
+    const watchBlocked = this._timePlanEnabled || !this._onEnabled || !this._offEnabled;
+    return html`
+      <ha-formfield label="Depends on outdoor temperature">
+        <ha-switch
+          .checked=${this._useOutdoor}
+          @change=${(e: Event) => {
+            this._useOutdoor = (e.target as HTMLInputElement).checked;
+          }}
+        ></ha-switch>
+      </ha-formfield>
+      <span class="hint">
+        ${this._useOutdoor
+          ? "The On time only runs if the outdoor temperature matches. The Off time always runs. If the sensor has no reading, the rule runs as scheduled."
+          : "Off by default - the rule runs whatever the weather."}
+      </span>
+      ${this._useOutdoor
+        ? html`
+            <div class="filter-panel">
+              <label class="field-label" for="outdoor-operator">Only turn on when outside is</label>
+              <div class="range-add-row">
+                <select
+                  id="outdoor-operator"
+                  class="native-select"
+                  @change=${(e: Event) => {
+                    this._outdoorOperator = (e.target as HTMLSelectElement).value as
+                      | "below"
+                      | "above";
+                  }}
+                >
+                  <option value="below" ?selected=${this._outdoorOperator === "below"}>
+                    At or below
+                  </option>
+                  <option value="above" ?selected=${this._outdoorOperator === "above"}>
+                    At or above
+                  </option>
+                </select>
+                <input
+                  type="number"
+                  class="native-input"
+                  aria-label="Outdoor temperature"
+                  .value=${String(this._outdoorThreshold)}
+                  @input=${(e: Event) => {
+                    this._outdoorThreshold = parseFloat((e.target as HTMLInputElement).value);
+                  }}
+                />
+                <span class="sep">°F</span>
+              </div>
+
+              <ha-formfield label="Keep watching during the On-Off window">
+                <ha-switch
+                  .checked=${this._outdoorWatch && !watchBlocked}
+                  .disabled=${watchBlocked}
+                  @change=${(e: Event) => {
+                    this._outdoorWatch = (e.target as HTMLInputElement).checked;
+                  }}
+                ></ha-switch>
+              </ha-formfield>
+              <span class="hint">
+                ${watchBlocked
+                  ? "Needs both an On time and an Off time, and no Time plan."
+                  : this._outdoorWatch
+                    ? `Turns on as soon as it gets ${this._outdoorOperator === "below" ? "cold" : "hot"} enough during the window, and back off once it is ${this._outdoorHysteresis}° past the setting.`
+                    : "Checked once, at the On time only."}
+              </span>
+              ${this._outdoorWatch && !watchBlocked
+                ? html`
+                    <label class="field-label" for="outdoor-hysteresis">Buffer (°F)</label>
+                    <input
+                      id="outdoor-hysteresis"
+                      type="number"
+                      min="0"
+                      max="20"
+                      step="0.5"
+                      class="native-input"
+                      .value=${String(this._outdoorHysteresis)}
+                      @input=${(e: Event) => {
+                        this._outdoorHysteresis = Math.max(
+                          0,
+                          parseFloat((e.target as HTMLInputElement).value) || 0,
+                        );
+                      }}
+                    />
+                  `
+                : nothing}
+
+              <label class="field-label" for="outdoor-entity">Outdoor sensor</label>
+              <select
+                id="outdoor-entity"
+                class="native-select"
+                @change=${(e: Event) => {
+                  this._outdoorEntity = (e.target as HTMLSelectElement).value;
+                }}
+              >
+                <option value="" ?selected=${!this._outdoorEntity}>
+                  ${defaultEntity
+                    ? `Default (${this.hass?.states[defaultEntity]?.attributes.friendly_name ?? defaultEntity})`
+                    : "Default (none set)"}
+                </option>
+                ${this._outdoorEntityOptions().map(
+                  (option) =>
+                    html`<option value=${option.id} ?selected=${option.id === this._outdoorEntity}>${option.name}</option>`,
+                )}
+              </select>
+              <span class="hint">
+                ${effective
+                  ? reading
+                    ? `Currently ${reading} outside.`
+                    : "This sensor has no reading right now."
+                  : "No outdoor sensor is set. Pick one here, or set a default under Settings > Devices & services > Scheduler+ > Configure."}
+              </span>
+            </div>
           `
         : nothing}
     `;

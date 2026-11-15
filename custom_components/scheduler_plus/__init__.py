@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, PLATFORMS
+from .const import CONF_OUTDOOR_TEMPERATURE_ENTITY, DOMAIN, PLATFORMS
 from .coordinator import SchedulerPlusCoordinator
 from .report_view import SchedulerPlusReportPdfView
 from .scheduler import SchedulerEngine
@@ -83,14 +83,31 @@ async def async_setup_entry(
     coordinator = SchedulerPlusCoordinator(hass, store)
     await coordinator.async_config_entry_first_refresh()
 
-    engine = SchedulerEngine(hass, coordinator)
+    engine = SchedulerEngine(
+        hass,
+        coordinator,
+        outdoor_temperature_entity=entry.options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY),
+    )
     await engine.async_start()
 
     entry.runtime_data = SchedulerPlusData(coordinator=coordinator, engine=engine)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
+
+async def _async_options_updated(
+    hass: HomeAssistant, entry: SchedulerPlusConfigEntry
+) -> None:
+    """Apply a changed outdoor temperature sensor without reloading.
+
+    The other options are read fresh by the websocket API on every request.
+    """
+    entry.runtime_data.engine.async_set_outdoor_temperature_entity(
+        entry.options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY)
+    )
 
 
 async def async_unload_entry(

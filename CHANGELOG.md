@@ -4,6 +4,23 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-15
+
+### Added
+
+- Climate rules can depend on the outdoor temperature: "only turn on when outside
+  is at or below 45°F" (or at or above). The On time is skipped when the weather
+  doesn't match; the Off time always runs. With "Keep watching during the On-Off
+  window", the rule also turns on as soon as it gets cold enough during the
+  window and back off once it is a set buffer (default 2°) past the setting.
+- Choose the outdoor temperature sensor under Settings > Devices & services >
+  Scheduler+ > Configure (a temperature sensor, such as a Honeywell thermostat's
+  Outdoor temperature, or a weather entity). A rule can use a different sensor.
+- If the sensor has no reading (unavailable or not set), the rule runs as
+  scheduled. While watching, an unavailable reading is ignored and the last
+  decision stands.
+- Day view shows a rule's outdoor condition.
+
 ## [0.5.5] - 2026-11-06
 
 ### Fixed
