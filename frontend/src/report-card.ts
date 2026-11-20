@@ -19,6 +19,11 @@ import { ALL_DEVICE_DOMAINS } from "./types";
 /** The two attributes climate's numeric chart plots - shared so bounds/paths/hover all agree. */
 const CLIMATE_CHART_ATTRIBUTES = ["current_temperature", "temperature"] as const;
 
+// Match Home Assistant frontend #51299: the Android companion's WebView
+// opens the blob asynchronously. Keep it alive just long enough to be read.
+const ANDROID_BLOB_REVOKE_DELAY_MS = 10_000;
+type CompanionWindow = Window & { externalApp?: unknown; externalAppV2?: unknown };
+
 /** What's currently hovered on one entity's numeric chart, for the tooltip/guide line. */
 interface ChartHover {
   entityId: string;
@@ -261,8 +266,16 @@ export class SchedulerPlusReportCard extends LitElement {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "scheduler-plus-report.pdf";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      anchor.click();
+    } finally {
+      const companion = window as CompanionWindow;
+      if (companion.externalApp || companion.externalAppV2) {
+        window.setTimeout(() => URL.revokeObjectURL(url), ANDROID_BLOB_REVOKE_DELAY_MS);
+      } else {
+        URL.revokeObjectURL(url);
+      }
+    }
   };
 
   protected override render() {
