@@ -543,3 +543,46 @@ def test_pdf_wrapped_device_title_stays_with_first_row_near_page_bottom(monkeypa
         b"Gallery Reception", b"(TIME)", b"(01/12/2026  10:15 PM)", b"(After-hours walkthrough)", b"(Truncated -",
     ))
     assert b"(continued)" not in tables[1]
+
+
+@pytest.mark.parametrize("zone, expected", [
+    ("America/New_York", b"01/12/2026  3:08 PM"),
+    ("Asia/Jerusalem", b"01/12/2026  10:08 PM"),
+])
+async def test_pdf_download_uses_site_timezone(pdf_client, hass, unit_label_report, zone, expected):
+    """The HTTP route passes the configured HA zone, not the reader's zone."""
+    client, _, build, _ = pdf_client
+    hass.config.time_zone = zone
+    actual = datetime(2026, 1, 12, 20, 8, tzinfo=timezone.utc)
+    report = ReportData(start_date=_DAY, end_date=_DAY, entities=[_climate_history([
+        ReportPoint(at=actual, state="off", attributes={}, source="other"),
+    ])])
+    snapshot = report.to_dict()
+    build.return_value = report
+    pdf = await _get_pdf(client, _URL.replace("light.example", "climate.example"))
+    assert expected in pdf and b"01/12/2026  8:08 PM" not in pdf
+    assert report.to_dict() == snapshot
+
+
+@pytest.mark.parametrize("zone, raw_at, expected", [
+    ("America/New_York", "2026-11-20T20:08:30+00:00", b"11/20/2026  3:08 PM"),
+    ("America/New_York", "2026-07-12T20:08:00+00:00", b"07/12/2026  4:08 PM"),
+    ("America/New_York", "2026-11-21T00:11:00+00:00", b"11/20/2026  7:11 PM"),
+    ("America/New_York", "2026-03-08T06:59:00+00:00", b"03/08/2026  1:59 AM"),
+    ("America/New_York", "2026-03-08T07:01:00+00:00", b"03/08/2026  3:01 AM"),
+    ("America/New_York", "2026-11-01T07:00:00+00:00", b"11/01/2026  2:00 AM"),
+    ("Pacific/Kiritimati", "2026-01-12T10:05:00+00:00", b"01/13/2026  12:05 AM"),
+    ("UTC", "2026-11-20T20:08:30+00:00", b"11/20/2026  8:08 PM"),
+    ("Invalid/Timezone", "2026-11-20T20:08:30+00:00", b"11/20/2026  8:08 PM"),
+    ("America/New_York", "2026-11-20T20:08:30", b"11/20/2026  8:08 PM"),
+])
+def test_pdf_site_time_handles_date_and_offset_boundaries(monkeypatch, zone, raw_at, expected):
+    _uncompressed(monkeypatch)
+    at = datetime.fromisoformat(raw_at)
+    report = ReportData(start_date=at.date(), end_date=at.date(), entities=[_climate_history([
+        ReportPoint(at=at, state="off", attributes={}, source="other"),
+    ])])
+    before = report.to_dict()
+    pdf = report_view._render_pdf(report, time_zone=zone)
+    assert expected in pdf
+    assert report.to_dict() == before

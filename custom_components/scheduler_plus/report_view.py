@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
-from datetime import date, datetime
+from datetime import date, datetime, tzinfo
 from math import isfinite
 from typing import Any
 
@@ -23,6 +23,7 @@ from fpdf import FPDF
 from fpdf.enums import MethodReturnValue
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.const import UnitOfTemperature
+from homeassistant.util import dt as dt_util
 from PIL import Image
 
 from .report import (
@@ -159,7 +160,7 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
         # configured HA units, not the device's native unit. Do not reconvert.
         temperature_unit = getattr(hass.config.units, "temperature_unit", None)
         pdf_bytes = await hass.async_add_executor_job(
-            _render_pdf, report, logo, temperature_unit
+            _render_pdf, report, logo, temperature_unit, hass.config.time_zone
         )
 
         filename = (
@@ -233,8 +234,10 @@ def _format_pdf_date(day: date) -> str:
     return f"{day.month:02d}/{day.day:02d}/{day.year:04d}"
 
 
-def _format_pdf_time(at: datetime) -> str:
-    """Keep the recorded wall time and 12-hour clock, e.g. 01/02/2026  3:05 PM."""
+def _format_pdf_time(at: datetime, display_zone: tzinfo | None) -> str:
+    """Use the configured site zone, never the server or viewer's clock."""
+    if display_zone is not None and at.utcoffset() is not None:
+        at = at.astimezone(display_zone)
     return f"{_format_pdf_date(at)}  {at.hour % 12 or 12}:{at:%M %p}"
 
 
@@ -414,11 +417,11 @@ def _draw_entity_heading(
 
 def _layout_row(
     pdf: FPDF, entity: EntityReport, point: ReportPoint, previous: ReportPoint | None,
-    unit: str, display_refs: Callable[[str], str],
+    unit: str, display_refs: Callable[[str], str], display_zone: tzinfo | None,
 ) -> tuple[tuple[str, ...], tuple[str, ...], float]:
     details, target_changed = _describe_attributes(entity.domain, point, previous, unit)
     values = (
-        _format_pdf_time(point.at), _humanize_word(point.state), details,
+        _format_pdf_time(point.at, display_zone), _humanize_word(point.state), details,
         _source_label(point, display_refs),
     )
     styles = ("", "B", "B" if target_changed else "", "")
@@ -430,13 +433,16 @@ def _layout_row(
 
 
 def _render_pdf(
-    report: ReportData, logo: bytes | None = None, temperature_unit: str | None = None
+    report: ReportData, logo: bytes | None = None, temperature_unit: str | None = None,
+    time_zone: str | None = None,
 ) -> bytearray:
     """Render a clean, readable landscape PDF: hairline row separators and
     color-coded text (not colored cell fills - see this module's palette
     comment for why) rather than a busy full grid, one small header/footer
     per page, and a compact title block up front.
     """
+    # This renderer runs in HA's executor, so a cold IANA zone lookup is safe.
+    display_zone = dt_util.get_time_zone(time_zone) if time_zone else None
     pdf = _ReportPdf(decode_report_logo(logo) if logo else None)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(16, 16, 16)
@@ -479,7 +485,10 @@ def _render_pdf(
     total_width = sum(_COLUMN_WIDTHS)
     for entity_index, (entity, rows) in enumerate(sections):
         label = labels[entity.entity_id]
-        first_row = _layout_row(pdf, entity, *rows[0], unit, display_refs) if rows else None
+        first_row = (
+            _layout_row(pdf, entity, *rows[0], unit, display_refs, display_zone)
+            if rows else None
+        )
         content_height = 6 if entity.no_data else _TABLE_HEADER_HEIGHT + (first_row[2] if first_row else 0)
         if entity.truncated and not entity.no_data and len(rows) <= 1:
             content_height += _TRUNCATION_NOTE_HEIGHT
@@ -503,7 +512,7 @@ def _render_pdf(
 
         for index, (point, previous) in enumerate(rows):
             values, styles, row_height = first_row if index == 0 else _layout_row(
-                pdf, entity, point, previous, unit, display_refs,
+                pdf, entity, point, previous, unit, display_refs, display_zone,
             )
             closing_note = _TRUNCATION_NOTE_HEIGHT if entity.truncated and index == len(rows) - 1 else 0
             if pdf.will_page_break(row_height + closing_note):

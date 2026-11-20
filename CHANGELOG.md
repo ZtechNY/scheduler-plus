@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] - 2026-11-20
+
+### Fixed
+
+- Show activity timestamps in PDF reports in the Home Assistant site time
+  zone, including daylight saving time and changes of date at midnight.
+
 ## [0.6.4] - 2026-11-20
 
 ### Added
