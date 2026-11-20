@@ -250,3 +250,52 @@ async def test_two_separate_home_assistant_instances(pdf_client, tmp_path, aioht
             await client_b.close()
         finally:
             await site_b.async_stop(force=True)
+
+
+def test_optional_pdf_recap_and_wrapped_continuation(monkeypatch):
+    """The summary counts shown changes (not raw readings) and labels incomplete history."""
+    report = _report(57)
+    long_name = "Temperature and monitoring on the upper-floor west reception area and the very long south reception corridor entrance beside the meeting-room gallery"
+    report.entities[0].friendly_name = long_name
+    report.entities[0].truncated = True
+    report.entities[0].points[0] = ReportPoint(
+        at=report.entities[0].points[0].at, state="off", attributes={},
+        source="rule", rule_name="Example timer",
+    )
+    report.entities.append(EntityReport(
+        entity_id="light.no_history", domain="light", friendly_name="No-history example", no_data=True,
+    ))
+    # Two identical significant climate points are one displayed row; an
+    # annotation on a hidden duplicate must not increment the PDF recap.
+    start = report.entities[0].points[0].at
+    report.entities.append(EntityReport(
+        entity_id="climate.sample", domain="climate", friendly_name="Example climate",
+        points=[
+            ReportPoint(at=start, state="heat", attributes={"temperature": 20, "current_temperature": 18}, source="other"),
+            ReportPoint(at=start + timedelta(minutes=1), state="heat", attributes={"temperature": 20, "current_temperature": 19}, source="rule", rule_name="Hidden duplicate"),
+        ],
+    ))
+    headings = []
+
+    class InspectPdf(report_view._ReportPdf):
+        def __init__(self, logo):
+            super().__init__(logo)
+            self.set_compression(False)
+
+        def multi_cell(self, w, h, text="", *args, **kwargs):
+            if text.startswith("Temperature and monitoring"):
+                headings.append((self.page_no(), self.get_x(), w, text))
+            return super().multi_cell(w, h, text, *args, **kwargs)
+
+    monkeypatch.setattr(report_view, "_ReportPdf", InspectPdf)
+    before = report.to_dict()
+    pdf = report_view._render_pdf(report, _png(360, 90, "teal"))
+    assert b"Devices: 3" in pdf and b"History rows shown: 58" in pdf
+    assert b"Schedule matches: 1" in pdf
+    assert b"No history found: 1" in pdf and b"Truncated histories: 1" in pdf
+    assert headings[0] == (1, 16, 0, long_name)
+    assert len(headings) >= 3
+    assert all(x == 16 and width == 0 and text == long_name + " (continued)" for _, x, width, text in headings[1:])
+    assert report.to_dict() == before
+    assert b"Hidden duplicate" not in pdf
+    assert pdf.count(_FOOTER) == len(re.findall(rb"/Type /Page\b", pdf))

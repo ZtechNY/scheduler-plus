@@ -22,6 +22,7 @@ from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from PIL import Image
 
 from .report import (
+    EntityReport,
     ReportData,
     ReportError,
     ReportPoint,
@@ -273,6 +274,39 @@ def _draw_table_header(pdf: FPDF) -> None:
     pdf.ln(7.5)
 
 
+def _draw_report_summary(
+    pdf: FPDF, sections: list[tuple[EntityReport, list[ReportPoint]]]
+) -> None:
+    """Summarize displayed rows only; a rule match is not a success check."""
+    shown = sum(len(rows) for _, rows in sections)
+    matched = sum(point.source == "rule" for _, rows in sections for point in rows)
+    pdf.set_text_color(*_TEXT_DARK)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(0, 6, f"Devices: {len(sections)}  ·  History rows shown: {shown}  ·  Schedule matches: {matched}",
+             new_x="LMARGIN", new_y="NEXT")
+    no_history = sum(entity.no_data for entity, _ in sections)
+    truncated = sum(entity.truncated for entity, _ in sections)
+    caveats = []
+    if no_history:
+        caveats.append(f"No history found: {no_history}")
+    if truncated:
+        caveats.append(f"Truncated histories: {truncated}")
+    if caveats:
+        pdf.set_text_color(*_TEXT_MUTED)
+        pdf.set_font("Helvetica", "", 8.5)
+        pdf.cell(0, 5, "  ·  ".join(caveats), new_x="LMARGIN", new_y="NEXT")
+
+
+def _draw_entity_heading(pdf: FPDF, entity: EntityReport, *, continued: bool = False) -> None:
+    """Wrap long device names inside the page margins."""
+    pdf.set_text_color(*_TEXT_DARK)
+    pdf.set_font("Helvetica", "B", 11 if continued else 13)
+    title = _safe_text(entity.friendly_name) + (" (continued)" if continued else "")
+    pdf.multi_cell(0, 6 if continued else 7, title, align="L", new_x="LMARGIN", new_y="NEXT")
+    if continued:
+        pdf.ln(2)
+
+
 def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
     """Render a clean, readable landscape PDF: hairline row separators and
     color-coded text (not colored cell fills - see this module's palette
@@ -295,6 +329,11 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
         else f"{report.start_date.isoformat()} to {report.end_date.isoformat()}"
     )
     pdf.cell(0, 6, date_range, new_x="LMARGIN", new_y="NEXT")
+    sections = [
+        (entity, [] if entity.no_data else _significant_points(entity.points, entity.domain))
+        for entity in report.entities
+    ]
+    _draw_report_summary(pdf, sections)
     pdf.ln(2)
     pdf.set_draw_color(*_ACCENT)
     pdf.set_line_width(0.8)
@@ -302,13 +341,15 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
     pdf.ln(7)
 
     total_width = sum(_COLUMN_WIDTHS)
-    for entity_index, entity in enumerate(report.entities):
+    for entity_index, (entity, rows) in enumerate(sections):
         if entity_index > 0:
-            pdf.ln(7)
+            # Keep a new device heading with a header and its first history row.
+            if pdf.will_page_break(42):
+                pdf.add_page()
+            else:
+                pdf.ln(7)
 
-        pdf.set_text_color(*_TEXT_DARK)
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 7, _safe_text(entity.friendly_name), new_x="LMARGIN", new_y="NEXT")
+        _draw_entity_heading(pdf, entity)
         pdf.set_text_color(*_TEXT_MUTED)
         pdf.set_font("Helvetica", "", 8.5)
         pdf.cell(0, 5, entity.entity_id, new_x="LMARGIN", new_y="NEXT")
@@ -323,7 +364,6 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
 
         _draw_table_header(pdf)
 
-        rows = _significant_points(entity.points, entity.domain)
         for index, point in enumerate(rows):
             details = _describe_attributes(entity.domain, point)
             source_text = point.rule_name if point.source == "rule" else "Other"
@@ -340,6 +380,7 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
 
             if pdf.get_y() + row_height > pdf.page_break_trigger:
                 pdf.add_page()
+                _draw_entity_heading(pdf, entity, continued=True)
                 _draw_table_header(pdf)
 
             x, y = pdf.get_x(), pdf.get_y()
