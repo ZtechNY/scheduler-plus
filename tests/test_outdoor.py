@@ -348,3 +348,18 @@ async def test_changing_default_sensor_rescans(
     await hass.async_block_till_done()
     assert calls == [False]
     engine._started = False
+
+
+async def test_late_start_policy_blocks_weather_reactivation_but_keeps_shutoff(
+    hass: HomeAssistant, engine: SchedulerEngine, fake_climate_handler: FakeClimateDeviceHandler,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    engine.async_set_skip_late_climate_starts(True)
+    engine._outdoor_temperature_entity = _SENSOR
+    await _set_outside(hass, 50)
+    hass.states.async_set(_CLIMATE, "heat")
+    await _refresh_at(hass, engine, freezer, _outdoor_rule(watch=True))
+    await _set_outside(hass, 44)
+    assert fake_climate_handler.turn_on_calls == []
+    await _set_outside(hass, 48)
+    assert fake_climate_handler.turn_off_calls == [_CLIMATE]

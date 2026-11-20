@@ -26,9 +26,11 @@
           "working_hours_end": "Working hours end",
           "enable_brightness": "Allow brightness control in light rules",
           "enable_fade_in": "Allow fade-in transitions in light rules",
+          "skip_late_climate_starts": "Skip late thermostat starts",
           "outdoor_temperature_entity": "Outdoor temperature sensor"
         },
         "data_description": {
+          "skip_late_climate_starts": "This installation only. Skip missed thermostat starts, retries, and late reactivation from overrides or weather changes. Scheduled commands still run. Missed shutoffs catch up and are retried if needed. This does not control manual starts or guarantee compressor spacing.",
           "outdoor_temperature_entity": "Used by climate rules with an outdoor temperature condition. A temperature sensor (e.g. a thermostat's Outdoor temperature) or a weather entity."
         }
       },

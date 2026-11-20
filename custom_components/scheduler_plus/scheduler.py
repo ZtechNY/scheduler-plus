@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components import persistent_notification
+from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN, HVACMode
 from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
@@ -243,6 +244,7 @@ class SchedulerEngine:
         device_handlers: DeviceHandlerRegistry = DEFAULT_DEVICE_HANDLERS,
         day_conditions: DayConditionRegistry = DEFAULT_DAY_CONDITIONS,
         outdoor_temperature_entity: str | None = None,
+        skip_late_climate_starts: bool = False,
     ) -> None:
         """Initialize the engine.
 
@@ -256,6 +258,7 @@ class SchedulerEngine:
         self._time_providers = time_providers
         self._device_handlers = device_handlers
         self._day_conditions = day_conditions
+        self._skip_late_climate_starts = skip_late_climate_starts
         self._unsub_rules: dict[str, list[CALLBACK_TYPE]] = {}
         self._unsub_midnight: CALLBACK_TYPE | None = None
         self._unsub_coordinator: CALLBACK_TYPE | None = None
@@ -985,10 +988,46 @@ class SchedulerEngine:
             key: when for key, when in self._fired.items() if key[0] != rule_id
         }
 
+    @callback
+    def async_set_skip_late_climate_starts(self, enabled: bool) -> None:
+        """Apply the site preference and cancel pending activation retries."""
+        self._skip_late_climate_starts = enabled
+        if enabled:
+            for entity_id, retry in list(self._retries.items()):
+                if retry.unsub is not None and self._blocks_late_start(retry.event):
+                    self._cancel_retry(entity_id)
+
+    def _climate_start_is_blocked(
+        self, entity_id: str, actions: Sequence[dict[str, Any]]
+    ) -> bool:
+        """Allow a late climate action only when it exclusively requests Off."""
+        return (
+            self._skip_late_climate_starts
+            and entity_id.partition(".")[0] == CLIMATE_DOMAIN
+            and any(action.get("hvac_mode") != HVACMode.OFF for action in actions)
+        )
+
+    def _blocks_late_start(self, event: _DueEvent) -> bool:
+        # An off-time action may actually request heating or cooling, and
+        # an on-time action may explicitly request Off. Check the command.
+        if not self._skip_late_climate_starts or not event.entity_id.startswith("climate."):
+            return False
+        if event.turning_on:
+            actions = _on_actions(event.rule, event.action_override)
+        else:
+            actions = [event.rule.off_action] if event.rule.off_action is not None else []
+        return self._climate_start_is_blocked(event.entity_id, actions)
+
+    def _already_off(self, event: _DueEvent) -> bool:
+        if not self._skip_late_climate_starts or not event.entity_id.startswith("climate."):
+            return False
+        state = self.hass.states.get(event.entity_id)
+        return state is not None and state.state == HVACMode.OFF
+
     def _start_catch_up(self, event: _DueEvent) -> None:
         """Send a due event in the background, so a slow device holds up nothing else."""
         task = self.hass.async_create_background_task(
-            self._async_send(event),
+            self._async_send(event, late=True),
             name=f"Scheduler+ catch-up {event.entity_id}",
         )
         if not task.done():
@@ -996,7 +1035,8 @@ class SchedulerEngine:
             task.add_done_callback(self._catch_up_tasks.discard)
 
     async def _async_send(
-        self, event: _DueEvent, attempt: int = 0, first_failed: datetime | None = None
+        self, event: _DueEvent, attempt: int = 0, first_failed: datetime | None = None,
+        *, late: bool = False,
     ) -> None:
         """Send `event`, marking it fired once it succeeds or retrying it later.
 
@@ -1005,11 +1045,24 @@ class SchedulerEngine:
         (the last repeating) until _RETRY_GIVE_UP_AFTER has passed since
         the first failure. _cancel_retry stops it at any point.
         """
+        blocks_start = self._blocks_late_start(event)
+        if late or attempt:
+            if blocks_start:
+                # Select the latest event first, then skip it; never replace
+                # a missed start with an unrelated, older shutoff.
+                return
+            if self._already_off(event):
+                self._cancel_retry(event.entity_id)
+                self._mark_fired(
+                    event.rule.id, event.entity_id, event.when, event.turning_on
+                )
+                return
+
         self._cancel_retry(event.entity_id)
         retry = _Retry(event=event)
         self._retries[event.entity_id] = retry
         succeeded = await self._async_apply_due(
-            event, report_failure=attempt + 1 >= _NOTIFY_AFTER_FAILED_ATTEMPTS
+            event, report_failure=blocks_start or attempt + 1 >= _NOTIFY_AFTER_FAILED_ATTEMPTS
         )
         if self._retries.get(event.entity_id) is not retry:
             return  # cancelled or superseded while sending
@@ -1018,6 +1071,13 @@ class SchedulerEngine:
             self._mark_fired(
                 event.rule.id, event.entity_id, event.when, event.turning_on
             )
+            return
+
+        if self._blocks_late_start(event):
+            del self._retries[event.entity_id]
+            # Treat the failed first attempt as consumed. Don't resend it on
+            # refresh. Other events, including its shutoff, still run.
+            self._mark_fired(event.rule.id, event.entity_id, event.when, event.turning_on)
             return
 
         now = dt_util.utcnow()
@@ -1039,6 +1099,8 @@ class SchedulerEngine:
         delay = _RETRY_DELAYS_MINUTES[min(attempt, len(_RETRY_DELAYS_MINUTES) - 1)]
 
         async def _retry_now(_now: datetime) -> None:
+            if self._retries.get(event.entity_id) is not retry:
+                return
             retry.unsub = None
             await self._async_send(event, attempt + 1, first_failed)
 
@@ -2105,6 +2167,8 @@ class SchedulerEngine:
             nonlocal unsub_timer
             unsub_timer = None
             self._pending_reapply_at.pop(entity_id, None)
+            if self._climate_start_is_blocked(entity_id, _on_actions(rule)):
+                return
             if not self._outdoor_allows(rule):
                 return  # the weather turned the rule off for now
             if device_handler.matches_action(self.hass, entity_id, rule.action):
@@ -2122,6 +2186,8 @@ class SchedulerEngine:
             nonlocal unsub_timer
             if event.context.id == self._last_self_context.get(entity_id):
                 return  # our own call, not a manual override
+            if self._climate_start_is_blocked(entity_id, _on_actions(rule)):
+                return
             if not self._outdoor_allows(rule):
                 return  # the weather turned the rule off for now
             if device_handler.matches_action(self.hass, entity_id, rule.action):
@@ -2238,7 +2304,8 @@ class SchedulerEngine:
                     schedule_name=schedule.name,
                     entity_id=entity_id,
                     device_handler=device_handler,
-                )
+                ),
+                late=True,
             )
             if turning_on and not rule.allow_override and _is_current():
                 self._unsub_rules.setdefault(rule.id, []).append(

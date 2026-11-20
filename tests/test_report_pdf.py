@@ -235,14 +235,18 @@ async def test_scheduling_preferences_still_available_and_save(pdf_client):
     assert form["step_id"] == "scheduling_preferences"
     fields = {field["name"]: field for field in form["data_schema"]}
     assert fields["enable_brightness"]["default"] is False
+    assert fields["skip_late_climate_starts"]["default"] is False
     assert "report_logo_file" not in fields
     response = await client.post(path, json={
         "weekday_days": ["mon"], "weekend_days": ["sun"],
         "working_hours_start": "09:00:00", "working_hours_end": "17:00:00",
         "enable_brightness": True, "enable_fade_in": True,
+        "skip_late_climate_starts": True,
     })
     assert (await response.json())["type"] == "create_entry"
     assert entry.options["enable_brightness"] is True
+    assert entry.options["skip_late_climate_starts"] is True
+    assert entry.runtime_data.engine._skip_late_climate_starts is True
     assert entry.options["working_hours_start"] == "09:00:00"
 
 

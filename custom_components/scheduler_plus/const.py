@@ -109,3 +109,5 @@ DEFAULT_ENABLE_FADE_IN: Final = True
 # entity instead. Unset means only rules naming their own entity can check
 # the outdoor temperature; the rest run as if the condition were met.
 CONF_OUTDOOR_TEMPERATURE_ENTITY: Final = "outdoor_temperature_entity"
+# An opt-in installation preference; an absent value preserves existing behavior.
+CONF_SKIP_LATE_CLIMATE_STARTS: Final = "skip_late_climate_starts"

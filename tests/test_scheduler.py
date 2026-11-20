@@ -3226,3 +3226,149 @@ async def test_action_at_reports_each_period_temperature(
         engine.action_at(rule, _MONDAY, on_at)["target_temperature"]
         for _, on_at, _ in events
     ] == [68, 69, 71]
+
+
+# Installation-scoped recovery choice. These tests run with fake devices;
+# no Home Assistant service or physical compressor timing is assumed.
+def _late_start_schedule(entity_ids, tag, *, on_time="08:30", off_time="13:00", **kwargs):
+    return _make_schedule(
+        _make_climate_rule(id=f"rule-{tag}", on_time=on_time, off_time=off_time, **kwargs),
+        id=f"schedule-{tag}", entities=entity_ids, device_type=DeviceType.CLIMATE,
+    )
+
+
+@pytest.mark.parametrize("restart_at", [(8, 59, 30), (10, 0, 0)])
+async def test_skip_late_climate_starts_both_boot_passes_and_next_timer(
+    engine, fake_climate_handler, fake_device_handler, hass, freezer, restart_at,
+):
+    units = ("climate.example_1", "climate.example_2", "climate.example_3", "climate.example_4")
+    existing = _late_start_schedule([units[1], units[2]], "earlier")
+    ladies = _late_start_schedule([units[0], units[3]], "later", on_time="09:00", off_time="12:30")
+    _set_schedules(engine, existing, ladies, _make_schedule(_make_rule(id="light-rule")))
+    for u in units:
+        hass.states.async_set(u, "off")
+    engine.async_set_skip_late_climate_starts(True)
+    freezer.move_to(_at(_SATURDAY, *restart_at))
+    hass.set_state(CoreState.starting)
+    await engine.async_start()
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert fake_climate_handler.turn_on_calls == []
+    assert len(fake_device_handler.turn_on_calls) == 1
+
+    if restart_at[0] == 8:
+        await _advance_to(hass, freezer, _at(_SATURDAY, 9, 0, 1))
+        assert sorted(e for e, _ in fake_climate_handler.turn_on_calls) == [units[0], units[3]]
+        await _advance_to(hass, freezer, _at(_SATURDAY, 9, 0, 31))
+        assert sorted(e for e, _ in fake_climate_handler.turn_on_calls) == [units[0], units[3]]
+    else:
+        await _advance_to(hass, freezer, _at(_SATURDAY, 10, 1, 1))
+        assert fake_climate_handler.turn_on_calls == []
+    assert len(fake_device_handler.turn_on_calls) == 2
+    await engine._async_refresh_all()  # a rescan must not catch up skipped starts
+    await hass.async_block_till_done()
+    assert all(e in (units[0], units[3]) for e, _ in fake_climate_handler.turn_on_calls)
+    await _advance_to(hass, freezer, _at(_SATURDAY, 12, 30, 1))
+    assert sorted(fake_climate_handler.turn_off_calls) == [units[0], units[3]]
+
+
+@pytest.mark.parametrize("state, expected_calls", [("cool", 1), ("off", 0), ("unavailable", 1)])
+async def test_keep_missed_shutoff_and_skip_redundant_shutoff(
+    engine, fake_climate_handler, hass, freezer, state, expected_calls,
+):
+    freezer.move_to(_at(_SATURDAY, 13, 5))
+    hass.states.async_set("climate.test", state)
+    _set_schedules(engine, _late_start_schedule(["climate.test"], "window"))
+    engine.async_set_skip_late_climate_starts(True)
+    await engine.async_start()
+    await hass.async_block_till_done()
+    assert fake_climate_handler.turn_off_calls == ["climate.test"] * expected_calls
+    await _advance_to(hass, freezer, _at(_SATURDAY, 13, 6, 1))
+    assert fake_climate_handler.turn_off_calls == ["climate.test"] * expected_calls
+    assert not fake_climate_handler.turn_on_calls
+
+
+async def test_skip_late_climate_start_does_not_apply_older_off_or_enforce_override(
+    engine, fake_climate_handler, hass, freezer,
+):
+    freezer.move_to(_at(_SATURDAY, 10))
+    hass.states.async_set("climate.test", "cool")
+    schedule = _late_start_schedule(["climate.test"], "latest", allow_override=False, override_grace_minutes=1)
+    schedule.rules += [_make_climate_rule(id="older-off", on_enabled=False, off_time="08:00")]
+    _set_schedules(engine, schedule)
+    engine.async_set_skip_late_climate_starts(True)
+    await engine.async_start()
+    await hass.async_block_till_done()
+    assert fake_climate_handler.turn_off_calls == []  # 08:30 is newer than 08:00
+    hass.states.async_set("climate.test", "off", context=Context())
+    await hass.async_block_till_done()
+    await _advance_to(hass, freezer, _at(_SATURDAY, 10, 2, 1))
+    assert not fake_climate_handler.turn_on_calls
+    assert not fake_climate_handler.turn_off_calls
+
+
+@pytest.mark.parametrize("off_action, allowed", [(None, True), ({"hvac_mode": "off"}, True), ({"hvac_mode": "cool", "target_temperature": 74}, False)])
+async def test_late_policy_checks_real_shutdown_not_rule_side(
+    engine, fake_climate_handler, hass, freezer, off_action, allowed,
+):
+    freezer.move_to(_at(_SATURDAY, 14))
+    hass.states.async_set("climate.test", "cool")
+    schedule = _late_start_schedule(["climate.test"], "window")
+    schedule.rules[0] = replace(schedule.rules[0], off_action=off_action)
+    _set_schedules(engine, schedule)
+    engine.async_set_skip_late_climate_starts(True)
+    await engine.async_start()
+    await hass.async_block_till_done()
+    assert len(fake_climate_handler.turn_on_calls) + len(fake_climate_handler.turn_off_calls) == int(allowed)
+    assert hass.states.get("climate.test").state == ("off" if allowed else "cool")
+
+
+async def test_explicit_off_as_on_action_still_catches_up(
+    engine, fake_climate_handler, hass, freezer,
+):
+    freezer.move_to(_at(_SATURDAY, 10))
+    hass.states.async_set("climate.test", "heat")
+    _set_schedules(engine, _late_start_schedule(["climate.test"], "turn-off", action={"hvac_mode": "off"}))
+    engine.async_set_skip_late_climate_starts(True)
+    await engine.async_start()
+    await hass.async_block_till_done()
+    assert fake_climate_handler.turn_on_calls == [("climate.test", {"hvac_mode": "off"})]
+    assert hass.states.get("climate.test").state == "off"
+
+
+@pytest.mark.parametrize("enable_after_first_failure", [False, True])
+async def test_skip_climate_start_retry_but_keep_failed_shutoff_retry(
+    engine, fake_climate_handler, hass, freezer, enable_after_first_failure,
+):
+    freezer.move_to(_at(_SATURDAY, 8, 25))
+    hass.states.async_set("climate.test", "off")
+    _set_schedules(engine, _late_start_schedule(["climate.test"], "window"))
+    engine.async_set_skip_late_climate_starts(not enable_after_first_failure)
+    await engine.async_start()
+    await hass.async_block_till_done()
+    # Let the second startup pass run at its own time, before the next event.
+    await _advance_to(hass, freezer, _at(_SATURDAY, 8, 26, 1))
+    with (
+        patch.object(fake_climate_handler, "async_turn_on", new=AsyncMock(side_effect=[TimeoutError(), None])) as start,
+        patch.object(fake_climate_handler, "async_turn_off", new=AsyncMock(side_effect=[TimeoutError(), None])) as stop,
+        patch(_NOTIFY) as notify,
+    ):
+        await _advance_to(hass, freezer, _at(_SATURDAY, 8, 30, 1))
+        assert start.await_count == 1
+        if enable_after_first_failure:
+            assert "climate.test" in engine._retries
+            engine.async_set_skip_late_climate_starts(True)
+        else:
+            notify.assert_called_once()
+        assert "climate.test" not in engine._retries
+        await _advance_to(hass, freezer, _at(_SATURDAY, 8, 33))
+        await engine._async_refresh_all()
+        await hass.async_block_till_done()
+        assert start.await_count == 1
+        hass.states.async_set("climate.test", "cool")  # a manual start is not blocked
+        await _advance_to(hass, freezer, _at(_SATURDAY, 13, 0, 1))
+        assert stop.await_count == 1
+        await _advance_to(hass, freezer, _at(_SATURDAY, 13, 1, 2))
+        assert stop.await_count == 2
+    assert engine._retries == {}

@@ -15,6 +15,7 @@ from .const import (
     CONF_ENABLE_BRIGHTNESS,
     CONF_ENABLE_FADE_IN,
     CONF_OUTDOOR_TEMPERATURE_ENTITY,
+    CONF_SKIP_LATE_CLIMATE_STARTS,
     CONF_WEEKDAY_DAYS,
     CONF_WEEKEND_DAYS,
     CONF_WORKING_HOURS_END,
@@ -195,6 +196,10 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_ENABLE_FADE_IN,
                     default=options.get(CONF_ENABLE_FADE_IN, DEFAULT_ENABLE_FADE_IN),
+                ): selector.BooleanSelector(),
+                vol.Required(
+                    CONF_SKIP_LATE_CLIMATE_STARTS,
+                    default=options.get(CONF_SKIP_LATE_CLIMATE_STARTS) is True,
                 ): selector.BooleanSelector(),
                 # Optional and without a default, so it can be cleared;
                 # suggested_value pre-fills the current choice.

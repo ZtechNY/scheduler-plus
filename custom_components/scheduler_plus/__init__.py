@@ -11,7 +11,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_OUTDOOR_TEMPERATURE_ENTITY, DOMAIN, PLATFORMS
+from .const import (
+    CONF_OUTDOOR_TEMPERATURE_ENTITY,
+    CONF_SKIP_LATE_CLIMATE_STARTS,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import SchedulerPlusCoordinator
 from .report_branding import async_remove_site_logo
 from .report_view import SchedulerPlusReportPdfView
@@ -88,6 +93,7 @@ async def async_setup_entry(
         hass,
         coordinator,
         outdoor_temperature_entity=entry.options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY),
+        skip_late_climate_starts=entry.options.get(CONF_SKIP_LATE_CLIMATE_STARTS) is True,
     )
     await engine.async_start()
 
@@ -102,10 +108,13 @@ async def async_setup_entry(
 async def _async_options_updated(
     hass: HomeAssistant, entry: SchedulerPlusConfigEntry
 ) -> None:
-    """Apply a changed outdoor temperature sensor without reloading.
+    """Apply changed engine options without reloading.
 
     The other options are read fresh by the websocket API on every request.
     """
+    entry.runtime_data.engine.async_set_skip_late_climate_starts(
+        entry.options.get(CONF_SKIP_LATE_CLIMATE_STARTS) is True
+    )
     entry.runtime_data.engine.async_set_outdoor_temperature_entity(
         entry.options.get(CONF_OUTDOOR_TEMPERATURE_ENTITY)
     )
