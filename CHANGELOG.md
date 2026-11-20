@@ -4,6 +4,26 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-11-20
+
+### Added
+
+- Give all PDF reports from this Home Assistant installation an optional logo
+  under **Settings → Devices & Services → Scheduler+ → Configure → Report branding**.
+  Every PDF page credits Ztech Solutions.
+
+### Changed
+
+- PDF reports show thermostat target changes before and after and label
+  measured room temperature separately, using the Home Assistant temperature unit.
+- Reports open with a recap, and long device tables repeat the device and column
+  headings on continuation pages.
+
+### Fixed
+
+- Keep the PDF download link available for the Home Assistant Android app to save.
+- Keep Scheduler+ settings usable on older Home Assistant options-flow versions.
+
 ## [0.6.1] - 2026-11-15
 
 ### Added
