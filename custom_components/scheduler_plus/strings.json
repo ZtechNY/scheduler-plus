@@ -10,6 +10,13 @@
   "options": {
     "step": {
       "init": {
+        "title": "Scheduler+ settings",
+        "menu_options": {
+          "scheduling_preferences": "Scheduling preferences",
+          "report_branding": "Report branding"
+        }
+      },
+      "scheduling_preferences": {
         "title": "Default scheduling preferences",
         "description": "The fallback used by the rule editor's quick-fill presets (Weekdays, Weekend, After hours) for anyone who hasn't set their own under My Preferences on the Scheduler+ card. This does not override a user's own choice.",
         "data": {
@@ -24,7 +31,23 @@
         "data_description": {
           "outdoor_temperature_entity": "Used by climate rules with an outdoor temperature condition. A temperature sensor (e.g. a thermostat's Outdoor temperature) or a weather entity."
         }
+      },
+      "report_branding": {
+        "title": "Report branding",
+        "description": "The organization logo appears on all Scheduler+ PDF reports from this Home Assistant site. Choose a file to set or replace it, or leave the form unchanged to keep the current logo.",
+        "data": {
+          "report_logo_file": "Organization logo",
+          "remove_report_logo": "Remove current logo"
+        },
+        "data_description": {
+          "report_logo_file": "Choose a PNG or JPEG up to 1 MB and 2,048 pixels on either side. The image is resized to fit."
+        }
       }
+    },
+    "error": {
+      "choose_one_logo_action": "Choose a file or remove the current logo, not both.",
+      "invalid_report_logo": "Choose a valid, still PNG or JPEG up to 1 MB and 2,048 pixels on either side.",
+      "report_logo_save_failed": "The logo could not be saved. Choose the file again and retry."
     }
   },
   "entity": {

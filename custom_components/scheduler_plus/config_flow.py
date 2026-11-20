@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 
 from .const import (
@@ -27,6 +28,10 @@ from .const import (
     DOMAIN,
 )
 from .models import Weekday
+from .report_branding import InvalidReportLogo, read_report_logo_upload, report_logo_store
+
+_LOGO_FILE: Final = "report_logo_file"
+_REMOVE_LOGO: Final = "remove_report_logo"
 
 _WEEKDAY_LABELS: Final[dict[Weekday, str]] = {
     Weekday.MONDAY: "Monday",
@@ -75,7 +80,7 @@ class SchedulerPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class SchedulerPlusOptionsFlow(OptionsFlow):
-    """Handle Scheduler+'s options: scheduling preferences and feature toggles.
+    """Handle scheduling preferences, feature toggles and site PDF branding.
 
     Reachable via Settings > Devices & Services > Scheduler+ > Configure.
     The weekday/weekend/working-hours fields power the frontend rule
@@ -86,10 +91,55 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
     at all for light rules.
     """
 
-    async def async_step_init(
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Keep branding separate from existing scheduling preferences."""
+        return self.async_show_menu(
+            step_id="init", menu_options=["scheduling_preferences", "report_branding"],
+        )
+
+    async def async_step_report_branding(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the single options step."""
+        """Set, replace or remove an image using Home Assistant's native file selector."""
+        store = report_logo_store(self.hass, self.config_entry.entry_id)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            file_id = user_input.get(_LOGO_FILE)
+            remove = user_input.get(_REMOVE_LOGO, False)
+            if file_id and remove:
+                errors["base"] = "choose_one_logo_action"
+            else:
+                try:
+                    if file_id:
+                        logo = await self.hass.async_add_executor_job(
+                            read_report_logo_upload, self.hass, file_id,
+                        )
+                        await store.async_replace(logo)
+                    elif remove:
+                        await store.async_replace(None)
+                except InvalidReportLogo:
+                    errors[_LOGO_FILE] = "invalid_report_logo"
+                except (HomeAssistantError, OSError):
+                    errors["base"] = "report_logo_save_failed"
+                else:
+                    # No config entry option mutations, listeners or reloads.
+                    return self.async_create_entry(data=dict(self.config_entry.options))
+
+        return self.async_show_form(
+            step_id="report_branding",
+            data_schema=vol.Schema({
+                vol.Optional(_LOGO_FILE): selector.FileSelector(
+                    selector.FileSelectorConfig(accept="image/png,image/jpeg")
+                ),
+                vol.Optional(_REMOVE_LOGO, default=False): selector.BooleanSelector(),
+            }),
+            errors=errors,
+        )
+
+    async def async_step_scheduling_preferences(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the original scheduling preferences form."""
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
@@ -161,4 +211,4 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
                 ),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="scheduling_preferences", data_schema=schema)

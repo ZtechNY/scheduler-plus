@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_OUTDOOR_TEMPERATURE_ENTITY, DOMAIN, PLATFORMS
 from .coordinator import SchedulerPlusCoordinator
+from .report_branding import async_remove_site_logo
 from .report_view import SchedulerPlusReportPdfView
 from .scheduler import SchedulerEngine
 from .services import async_register_services
@@ -118,3 +119,8 @@ async def async_unload_entry(
     if unload_ok:
         entry.runtime_data.engine.async_stop()
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SchedulerPlusConfigEntry) -> None:
+    """Remove this entry's private PDF logo when the integration is deleted."""
+    await async_remove_site_logo(hass, entry.entry_id)

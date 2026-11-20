@@ -45,6 +45,20 @@ A separate card for reviewing entity history: pick any set of entities and a dat
 type: custom:scheduler-plus-report-card
 ```
 
+To brand every Scheduler+ PDF for the organization, sign in as a Home Assistant
+administrator and go to **Settings → Devices & Services → Scheduler+ → Configure**
+(the gear beside the Scheduler+ entry), then open **Report branding**. Choose a
+PNG or JPEG (up to 1 MB and 2,048 pixels on either side) and submit. Uploading a
+new image replaces the current one; turn on **Remove current logo** to clear it.
+The setting applies to all Report cards on this Home Assistant installation;
+logos are not shared or synced across installations. Nothing changes on a
+physical device, in schedule settings, or in the on-screen report preview.
+
+The logo fits into each PDF page's header without changing the report data or
+pagination. Every page says **Powered by Ztech Solutions** at the bottom, even
+when no logo is set. The logo is stored privately on this site; anyone who can
+download a report can see it in the PDF. Remote image URLs are not used.
+
 ## Basic usage
 
 1. Open the Scheduler+ card and create a schedule.

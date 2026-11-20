@@ -12,7 +12,6 @@ never disagree about what a report contains.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
@@ -20,6 +19,7 @@ from typing import Any
 from aiohttp import web
 from fpdf import FPDF
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
+from PIL import Image
 
 from .report import (
     ReportData,
@@ -28,8 +28,7 @@ from .report import (
     ReportRangeError,
     async_build_report,
 )
-
-_LOGGER = logging.getLogger(__name__)
+from .report_branding import async_get_site_logo, decode_report_logo
 
 # fpdf2 column widths (mm), landscape A4 (297mm) minus 16mm margins each side.
 _COLUMN_WIDTHS = (40, 28, 118, 79)
@@ -70,20 +69,31 @@ def _state_color(state: str) -> tuple[int, int, int]:
 
 
 class _ReportPdf(FPDF):
-    """FPDF subclass adding a page-number footer to every page automatically.
+    """Draw a scoped logo and a fixed footer without shifting the tables."""
 
-    fpdf2 calls footer() once per page on its own; this is the idiomatic way
-    to get consistent page chrome without re-invoking it manually per
-    add_page() call (the previous version's footer only ever appeared once,
-    at the very end, regardless of how many pages the report spanned).
-    """
+    def __init__(self, logo: Image.Image | None) -> None:
+        super().__init__(orientation="L", format="A4")
+        self.report_logo = logo
+
+    def header(self) -> None:
+        """Fit the logo on the right of the title, or in the continuation margin."""
+        logo = self.report_logo
+        if logo is None:
+            return
+        first_page = self.page_no() == 1
+        max_width, max_height = (46, 14) if first_page else (36, 9)
+        scale = min(max_width / logo.width, max_height / logo.height)
+        width, height = logo.width * scale, logo.height * scale
+        center_y = self.t_margin + 8 if first_page else self.t_margin / 2
+        self.image(logo, x=self.w - self.r_margin - width, y=center_y - height / 2,
+                   w=width, h=height)
 
     def footer(self) -> None:
-        """Draw a small centered page-number line near the bottom margin."""
+        """Draw the same attribution on every page, including unbranded reports."""
         self.set_y(-12)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(*_TEXT_MUTED)
-        self.cell(0, 8, f"Scheduler+  ·  Page {self.page_no()}", align="C")
+        self.cell(0, 8, f"Powered by Ztech Solutions  ·  Page {self.page_no()}", align="C")
 
 
 class SchedulerPlusReportPdfView(HomeAssistantView):
@@ -99,7 +109,7 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
     # own frontend authenticates its /api/* calls.
 
     async def get(self, request: web.Request) -> web.Response:
-        """Handle GET /api/scheduler_plus/report/pdf?entities=a,b&start=YYYY-MM-DD&end=YYYY-MM-DD."""
+        """Download report data through the existing authenticated endpoint."""
         hass = request.app[KEY_HASS]
 
         entity_ids = [e for e in request.query.get("entities", "").split(",") if e]
@@ -125,7 +135,8 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
         except ReportError as err:
             return web.Response(status=503, text=str(err))
 
-        pdf_bytes = await hass.async_add_executor_job(_render_pdf, report)
+        logo = await async_get_site_logo(hass)
+        pdf_bytes = await hass.async_add_executor_job(_render_pdf, report, logo)
 
         filename = (
             f"scheduler-plus-report-{report.start_date.isoformat()}"
@@ -134,7 +145,10 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
         return web.Response(
             body=bytes(pdf_bytes),
             content_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+            },
         )
 
 
@@ -259,13 +273,13 @@ def _draw_table_header(pdf: FPDF) -> None:
     pdf.ln(7.5)
 
 
-def _render_pdf(report: ReportData) -> bytearray:
+def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
     """Render a clean, readable landscape PDF: hairline row separators and
     color-coded text (not colored cell fills - see this module's palette
     comment for why) rather than a busy full grid, one small header/footer
     per page, and a compact title block up front.
     """
-    pdf = _ReportPdf(orientation="L", format="A4")
+    pdf = _ReportPdf(decode_report_logo(logo) if logo else None)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(16, 16, 16)
     pdf.add_page()
