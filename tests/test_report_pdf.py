@@ -16,6 +16,7 @@ from homeassistant.components.config.config_entries import (
     OptionManagerFlowResourceView,
 )
 from homeassistant.setup import async_setup_component
+from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_test_home_assistant
 
 from custom_components.scheduler_plus import report_view
@@ -299,3 +300,120 @@ def test_optional_pdf_recap_and_wrapped_continuation(monkeypatch):
     assert report.to_dict() == before
     assert b"Hidden duplicate" not in pdf
     assert pdf.count(_FOOTER) == len(re.findall(rb"/Type /Page\b", pdf))
+
+
+def _climate_history(points: list[ReportPoint], entity_id: str = "climate.example") -> EntityReport:
+    return EntityReport(
+        entity_id=entity_id, domain="climate", friendly_name="Example thermostat", points=points,
+    )
+
+
+def test_pdf_climate_targets_use_adjacent_history_and_highlight_only_changes(monkeypatch):
+    details = []
+
+    class InspectPdf(report_view._ReportPdf):
+        def __init__(self, logo):
+            super().__init__(logo)
+            self.set_compression(False)
+
+        def multi_cell(self, w, h, text="", *args, **kwargs):
+            if w == report_view._COLUMN_WIDTHS[2]:
+                details.append((text, self.font_style))
+            return super().multi_cell(w, h, text, *args, **kwargs)
+
+    monkeypatch.setattr(report_view, "_ReportPdf", InspectPdf)
+    start = datetime(2026, 1, 12, 19, 47, tzinfo=timezone.utc)
+    rows = [
+        ("cool", 68.0, 69.5, "idle"),
+        ("cool", 68, 70, "idle"),  # Room-only drift is not a PDF row.
+        ("cool", 72, 70.5, "cooling"),
+        ("heat", 72, 70.5, "heating"),  # Mode change, unchanged target.
+        ("off", 72, 70.5, None),
+        ("cool", 69.5, None, None),
+        ("unavailable", 79, None, None),
+        ("cool", 70.5, None, None),
+        ("cool", None, 71.5, None),  # No recorded target; resets comparison.
+        ("cool", 74, None, None),
+    ]
+    points = [
+        ReportPoint(
+            at=start + timedelta(minutes=i), state=state,
+            attributes={"temperature": target, "current_temperature": room, "hvac_action": action},
+            source="rule" if i == 2 else "other", rule_name="Evening cool" if i == 2 else None,
+        ) for i, (state, target, room, action) in enumerate(rows)
+    ]
+    report = _report(1)
+    report.entities.extend([
+        _climate_history(points),
+        _climate_history([points[0]], "climate.other_example"),
+    ])
+    before = report.to_dict()
+    pdf = report_view._render_pdf(report, temperature_unit="°F")
+    assert report.to_dict() == before
+    assert details == [
+        ("Brightness 60%", ""),
+        ("Target 68°F · Room 69.5°F · Idle", ""),
+        ("Target 68°F to 72°F · Room 70.5°F · Cooling", "B"),
+        ("Target 72°F · Room 70.5°F · Heating", ""),
+        ("Room 70.5°F", ""),
+        ("Target 69.5°F", ""),
+        ("", ""),
+        ("Target 70.5°F", ""),
+        ("Room 71.5°F", ""),
+        ("Target 74°F", ""),
+        ("Target 68°F · Room 69.5°F · Idle", ""),  # New device, no prior target.
+    ]
+    assert b"History rows shown: 11" in pdf and b"Schedule matches: 1" in pdf
+    assert b"7:48 PM" not in pdf and b"Jan 12, 2026  7:49 PM" in pdf
+    assert all(text in pdf for text in (b"Cool", b"Off", b"Unavailable", b"Evening cool", b"Other"))
+    assert b"Manual" not in pdf
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), -float("inf"), True, "72"])
+def test_invalid_climate_readings_display_nothing_and_break_the_target_chain(bad_value):
+    at = datetime(2026, 1, 12, 19, 49, tzinfo=timezone.utc)
+    invalid = ReportPoint(at=at, state="cool", attributes={
+        "temperature": bad_value, "current_temperature": bad_value,
+    }, source="other")
+    valid = ReportPoint(at=at, state="cool", attributes={"temperature": 72}, source="other")
+    assert report_view._describe_attributes("climate", invalid, valid, "°F") == ("", False)
+    assert report_view._describe_attributes("climate", valid, invalid, "°F") == ("Target 72°F", False)
+
+
+@pytest.fixture
+def unit_label_report(monkeypatch) -> ReportData:
+    class UncompressedPdf(report_view._ReportPdf):
+        def __init__(self, logo):
+            super().__init__(logo)
+            self.set_compression(False)
+
+    monkeypatch.setattr(report_view, "_ReportPdf", UncompressedPdf)
+    start = datetime(2026, 1, 12, 19, 48, tzinfo=timezone.utc)
+    return ReportData(start_date=_DAY, end_date=_DAY, entities=[_climate_history([
+        ReportPoint(at=start, state="heat", attributes={"temperature": 20}, source="other"),
+        ReportPoint(at=start + timedelta(minutes=1), state="heat", attributes={
+            "temperature": 21.5, "current_temperature": 19.5,
+        }, source="other"),
+    ])])
+
+
+@pytest.mark.parametrize("unit_system, suffix", [(METRIC_SYSTEM, "°C"), (US_CUSTOMARY_SYSTEM, "°F")])
+async def test_climate_pdf_download_uses_configured_ha_units(
+    pdf_client, hass, unit_label_report, unit_system, suffix,
+):
+    client, _, build, _ = pdf_client
+    hass.config.units = unit_system
+    build.return_value = unit_label_report
+    path = _URL.replace("light.example", "climate.example")
+    pdf = await _get_pdf(client, path)
+    assert f"Target 20{suffix} to 21.5{suffix} · Room 19.5{suffix}".encode("latin-1") in pdf
+    assert b"Temperature units not available" not in pdf
+    build.assert_awaited_once_with(hass, ["climate.example"], _DAY, _DAY)
+
+
+@pytest.mark.parametrize("temperature_unit", [None, "", "unknown"])
+def test_climate_pdf_without_verified_units_never_guesses(unit_label_report, temperature_unit):
+    pdf = report_view._render_pdf(unit_label_report, temperature_unit=temperature_unit)
+    assert b"Temperature units not available" in pdf
+    assert "Target 20 to 21.5 · Room 19.5".encode("latin-1") in pdf
+    assert b"\xb0C" not in pdf and b"\xb0F" not in pdf

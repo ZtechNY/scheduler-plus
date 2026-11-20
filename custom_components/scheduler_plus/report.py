@@ -179,7 +179,7 @@ async def async_build_report(
     invalid/over-limit request, or if recorder isn't set up at all.
 
     Shared by websocket.py's generate_report command and report_view.py's
-    PDF endpoint, so the two outputs can never diverge.
+    PDF endpoint, so both format the same recorded points.
     """
     validate_report_bounds(entity_ids, start_date, end_date)
 

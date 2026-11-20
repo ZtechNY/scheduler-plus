@@ -6,19 +6,21 @@ Registered once via `hass.http.register_view` from `__init__.py`'s
 `async_setup` (the same one-time-per-run lifecycle as the websocket
 commands - see websocket.py's own registration-timing docstring), and
 reuses `report.async_build_report` so the PDF and the on-screen,
-websocket-driven report (websocket.py's `generate_report` command) can
-never disagree about what a report contains.
+websocket-driven report (websocket.py's `generate_report` command) use
+the same recorded history. The PDF formats those readings for print.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, datetime
+from math import isfinite
 from typing import Any
 
 from aiohttp import web
 from fpdf import FPDF
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
+from homeassistant.const import UnitOfTemperature
 from PIL import Image
 
 from .report import (
@@ -57,6 +59,9 @@ _SOURCE_OTHER = (140, 148, 158)
 
 _ACTIVE_STATES = {"on", "open", "playing", "heat", "cool", "heat_cool", "auto", "dry", "fan_only"}
 _INACTIVE_STATES = {"off", "closed", "idle"}
+# Climate mode, not hvac_action: e.g. an idle thermostat in Cool mode
+# still has a setpoint, but an Off or Unavailable device does not.
+_TARGET_MODES = {"heat", "cool", "heat_cool", "auto"}
 
 
 def _state_color(state: str) -> tuple[int, int, int]:
@@ -137,7 +142,12 @@ class SchedulerPlusReportPdfView(HomeAssistantView):
             return web.Response(status=503, text=str(err))
 
         logo = await async_get_site_logo(hass)
-        pdf_bytes = await hass.async_add_executor_job(_render_pdf, report, logo)
+        # HA's ClimateEntity publishes both temperature attributes in the
+        # configured HA units, not the device's native unit. Do not reconvert.
+        temperature_unit = getattr(hass.config.units, "temperature_unit", None)
+        pdf_bytes = await hass.async_add_executor_job(
+            _render_pdf, report, logo, temperature_unit
+        )
 
         filename = (
             f"scheduler-plus-report-{report.start_date.isoformat()}"
@@ -186,8 +196,23 @@ def _humanize_word(value: str) -> str:
     return spaced[:1].upper() + spaced[1:] if spaced else spaced
 
 
-def _format_temp(value: float) -> str:
-    return f"{round(value, 1)}°"
+def _finite_temp(value: object) -> int | float | None:
+    """Use only numeric, finite recorder readings (not bools or strings)."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, float) and isfinite(value):
+        return value
+    return None
+
+
+def _active_target(point: ReportPoint | None) -> int | float | None:
+    if point is None or point.state not in _TARGET_MODES:
+        return None
+    return _finite_temp(point.attributes.get("temperature"))
+
+
+def _format_temp(value: int | float, unit: str) -> str:
+    return f"{str(value).removesuffix('.0')}{unit}"
 
 
 def _format_pdf_time(at: datetime) -> str:
@@ -201,35 +226,34 @@ def _format_pdf_time(at: datetime) -> str:
     return f"{at:%b} {at.day}, {at.year}  {hour12}:{at:%M %p}"
 
 
-def _describe_attributes(domain: str, point: ReportPoint) -> str:
-    """A domain-aware, human-readable summary of a point's tracked attributes.
-
-    Mirrors frontend/src/report-card.ts's describeAttributes exactly, so
-    the PDF and the on-screen report never disagree about what a row means -
-    see this module's own docstring for why the two must stay in sync. Raw
-    "current_temperature=70, temperature=69" key=value text (the original
-    version of this column) meant nothing to someone just reading the
-    report; light's brightness=200 is even less legible without converting
-    HA's raw 0-255 scale to a percentage.
-    """
+def _describe_attributes(
+    domain: str, point: ReportPoint, previous: ReportPoint | None, unit: str
+) -> tuple[str, bool]:
+    """Format PDF details and flag true changes between adjacent active targets."""
     if domain == "climate":
         parts: list[str] = []
-        target = point.attributes.get("temperature")
-        current = point.attributes.get("current_temperature")
+        target = _active_target(point)
+        prior_target = _active_target(previous)
+        current = _finite_temp(point.attributes.get("current_temperature"))
         action = point.attributes.get("hvac_action")
-        if isinstance(target, (int, float)):
-            parts.append(f"Target {_format_temp(target)}")
-        if isinstance(current, (int, float)):
-            parts.append(f"Room {_format_temp(current)}")
+        changed = False
+        if target is not None:
+            new_value = _format_temp(target, unit)
+            if prior_target is not None and prior_target != target:
+                parts.append(f"Target {_format_temp(prior_target, unit)} to {new_value}")
+                changed = True
+            else:
+                parts.append(f"Target {new_value}")
+        if current is not None:
+            parts.append(f"Room {_format_temp(current, unit)}")
         if isinstance(action, str) and action:
             parts.append(_humanize_word(action))
-        return " · ".join(parts)
+        return " · ".join(parts), changed
     if domain == "light":
         brightness = point.attributes.get("brightness")
         if isinstance(brightness, (int, float)):
-            return f"Brightness {round(brightness / 255 * 100)}%"
-        return ""
-    return ""
+            return f"Brightness {round(brightness / 255 * 100)}%", False
+    return "", False
 
 
 # Per domain, which of a point's tracked attributes count as a "real" change
@@ -249,18 +273,20 @@ _LIST_SIGNIFICANT_KEY: dict[str, Callable[[ReportPoint], Any]] = {
 }
 
 
-def _significant_points(points: list[ReportPoint], domain: str) -> list[ReportPoint]:
-    """Collapse `points` to just the ones significant enough for a PDF row."""
+def _significant_rows(
+    points: list[ReportPoint], domain: str
+) -> list[tuple[ReportPoint, ReportPoint | None]]:
+    """Pair displayed points with their immediately preceding recorded point."""
     key_of = _LIST_SIGNIFICANT_KEY.get(domain)
-    if key_of is None:
-        return points
-    kept: list[ReportPoint] = []
+    kept: list[tuple[ReportPoint, ReportPoint | None]] = []
     last_key: Any = None
-    for point in points:
-        key = key_of(point)
-        if not kept or key != last_key:
-            kept.append(point)
+    for index, point in enumerate(points):
+        if key_of is not None:
+            key = key_of(point)
+            if kept and key == last_key:
+                continue
             last_key = key
+        kept.append((point, points[index - 1] if index else None))
     return kept
 
 
@@ -275,11 +301,11 @@ def _draw_table_header(pdf: FPDF) -> None:
 
 
 def _draw_report_summary(
-    pdf: FPDF, sections: list[tuple[EntityReport, list[ReportPoint]]]
+    pdf: FPDF, sections: list[tuple[EntityReport, list[tuple[ReportPoint, ReportPoint | None]]]]
 ) -> None:
     """Summarize displayed rows only; a rule match is not a success check."""
     shown = sum(len(rows) for _, rows in sections)
-    matched = sum(point.source == "rule" for _, rows in sections for point in rows)
+    matched = sum(point.source == "rule" for _, rows in sections for point, _ in rows)
     pdf.set_text_color(*_TEXT_DARK)
     pdf.set_font("Helvetica", "B", 9)
     pdf.cell(0, 6, f"Devices: {len(sections)}  ·  History rows shown: {shown}  ·  Schedule matches: {matched}",
@@ -307,7 +333,9 @@ def _draw_entity_heading(pdf: FPDF, entity: EntityReport, *, continued: bool = F
         pdf.ln(2)
 
 
-def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
+def _render_pdf(
+    report: ReportData, logo: bytes | None = None, temperature_unit: str | None = None
+) -> bytearray:
     """Render a clean, readable landscape PDF: hairline row separators and
     color-coded text (not colored cell fills - see this module's palette
     comment for why) rather than a busy full grid, one small header/footer
@@ -329,11 +357,20 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
         else f"{report.start_date.isoformat()} to {report.end_date.isoformat()}"
     )
     pdf.cell(0, 6, date_range, new_x="LMARGIN", new_y="NEXT")
+    unit = ""
+    if temperature_unit is not None and temperature_unit in (
+        UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT,
+    ):
+        unit = temperature_unit
     sections = [
-        (entity, [] if entity.no_data else _significant_points(entity.points, entity.domain))
+        (entity, [] if entity.no_data else _significant_rows(entity.points, entity.domain))
         for entity in report.entities
     ]
     _draw_report_summary(pdf, sections)
+    if not unit and any(entity.domain == "climate" and rows for entity, rows in sections):
+        pdf.set_text_color(*_TEXT_MUTED)
+        pdf.set_font("Helvetica", "", 8.5)
+        pdf.cell(0, 5, "Temperature units not available", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
     pdf.set_draw_color(*_ACCENT)
     pdf.set_line_width(0.8)
@@ -364,19 +401,21 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
 
         _draw_table_header(pdf)
 
-        for index, point in enumerate(rows):
-            details = _describe_attributes(entity.domain, point)
+        for index, (point, previous) in enumerate(rows):
+            details, target_changed = _describe_attributes(entity.domain, point, previous, unit)
             source_text = point.rule_name if point.source == "rule" else "Other"
             values = (
                 _format_pdf_time(point.at),
                 _humanize_word(point.state),
                 details,
-                source_text or "",
+                str(source_text or ""),
             )
-            row_height = max(
-                _line_count(pdf, str(value), width)
-                for value, width in zip(values, _COLUMN_WIDTHS)
-            ) * 5 + 2
+            styles = ("", "B", "B" if target_changed else "", "")
+            row_lines = 1
+            for width, value, style in zip(_COLUMN_WIDTHS, values, styles):
+                pdf.set_font("Helvetica", style, 8.5)
+                row_lines = max(row_lines, _line_count(pdf, value, width))
+            row_height = row_lines * 5 + 2
 
             if pdf.get_y() + row_height > pdf.page_break_trigger:
                 pdf.add_page()
@@ -390,16 +429,14 @@ def _render_pdf(report: ReportData, logo: bytes | None = None) -> bytearray:
 
             for column, (width, value) in enumerate(zip(_COLUMN_WIDTHS, values)):
                 pdf.set_xy(x, y + 1.2)
+                pdf.set_font("Helvetica", styles[column], 8.5)
                 if column == 1:
                     pdf.set_text_color(*_state_color(point.state))
-                    pdf.set_font("Helvetica", "B", 8.5)
                 elif column == 3:
                     pdf.set_text_color(*(_SOURCE_RULE if point.source == "rule" else _SOURCE_OTHER))
-                    pdf.set_font("Helvetica", "", 8.5)
                 else:
                     pdf.set_text_color(*_TEXT_DARK)
-                    pdf.set_font("Helvetica", "", 8.5)
-                pdf.multi_cell(width, 5, _safe_text(str(value)), border=0, align="L")
+                pdf.multi_cell(width, 5, _safe_text(value), border=0, align="L")
                 x += width
 
             pdf.set_draw_color(*_ROW_BORDER)
