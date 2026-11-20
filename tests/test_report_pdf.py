@@ -15,6 +15,7 @@ from homeassistant.components.config.config_entries import (
     OptionManagerFlowIndexView,
     OptionManagerFlowResourceView,
 )
+from homeassistant.config_entries import OptionsFlow
 from homeassistant.setup import async_setup_component
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_test_home_assistant
@@ -150,6 +151,14 @@ async def _get_pdf(client, path=_URL):
     return data
 
 
+@pytest.fixture(params=("current-ha", "legacy-ha"))
+def options_flow_api(request, monkeypatch):
+    if request.param == "legacy-ha":
+        # Home Assistant 2024.8 has OptionsFlow but not its config_entry property.
+        monkeypatch.delattr(OptionsFlow, "config_entry", raising=False)
+
+
+@pytest.mark.usefixtures("options_flow_api")
 async def test_native_branding_set_replace_clear_and_report_routes(pdf_client, hass):
     client, entry, build, report = pdf_client
     runtime = entry.runtime_data
@@ -206,6 +215,7 @@ async def test_invalid_native_upload_keeps_current_logo(pdf_client, hass, bad_fi
     assert b"/Width 80" in await _get_pdf(client)
 
 
+@pytest.mark.usefixtures("options_flow_api")
 async def test_scheduling_preferences_still_available_and_save(pdf_client):
     client, entry, _, _ = pdf_client
     root = await client.post(_SETTINGS, json={"handler": entry.entry_id})

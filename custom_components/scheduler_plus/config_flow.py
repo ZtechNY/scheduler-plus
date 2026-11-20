@@ -76,7 +76,7 @@ class SchedulerPlusConfigFlow(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> SchedulerPlusOptionsFlow:
         """Return Scheduler+'s options flow."""
-        return SchedulerPlusOptionsFlow()
+        return SchedulerPlusOptionsFlow(config_entry)
 
 
 class SchedulerPlusOptionsFlow(OptionsFlow):
@@ -91,6 +91,10 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
     at all for light rules.
     """
 
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        # Older supported HA versions do not expose OptionsFlow.config_entry.
+        self._entry = config_entry
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Keep branding separate from existing scheduling preferences."""
         return self.async_show_menu(
@@ -101,7 +105,7 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Set, replace or remove an image using Home Assistant's native file selector."""
-        store = report_logo_store(self.hass, self.config_entry.entry_id)
+        store = report_logo_store(self.hass, self._entry.entry_id)
         errors: dict[str, str] = {}
         if user_input is not None:
             file_id = user_input.get(_LOGO_FILE)
@@ -123,7 +127,7 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
                     errors["base"] = "report_logo_save_failed"
                 else:
                     # No config entry option mutations, listeners or reloads.
-                    return self.async_create_entry(data=dict(self.config_entry.options))
+                    return self.async_create_entry(data=dict(self._entry.options))
 
         return self.async_show_form(
             step_id="report_branding",
@@ -143,7 +147,7 @@ class SchedulerPlusOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        options = self.config_entry.options
+        options = self._entry.options
         schema = vol.Schema(
             {
                 vol.Required(
