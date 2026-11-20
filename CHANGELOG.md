@@ -4,6 +4,15 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-11-20
+
+### Changed
+
+- Title PDF exports **Device Activity Report**, with a larger report logo and
+  dates in MM/DD/YYYY format.
+- Show friendly device labels in PDF tables without raw entity IDs. Keep
+  devices with identical display names distinguishable.
+
 ## [0.6.2] - 2026-11-20
 
 ### Added

@@ -12,13 +12,15 @@ the same recorded history. The PDF formats those readings for print.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from datetime import date, datetime
 from math import isfinite
 from typing import Any
 
 from aiohttp import web
 from fpdf import FPDF
+from fpdf.enums import MethodReturnValue
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.const import UnitOfTemperature
 from PIL import Image
@@ -36,6 +38,12 @@ from .report_branding import async_get_site_logo, decode_report_logo
 # fpdf2 column widths (mm), landscape A4 (297mm) minus 16mm margins each side.
 _COLUMN_WIDTHS = (40, 28, 118, 79)
 _COLUMN_HEADERS = ("Time", "State", "Details", "Source")
+_TABLE_HEADER_HEIGHT = 7.5
+_TRUNCATION_NOTE_HEIGHT = 7  # 1mm gap and a 6mm note.
+_REPORT_TITLE = "Device Activity Report"
+_COVER_LOGO_BOX = (64, 20)
+_CONTINUATION_LOGO_BOX = (48, 11)
+_COVER_LOGO_GUTTER = 8
 
 # Color palette (RGB 0-255) - a single small set reused throughout, rather
 # than picking colors ad hoc per element, so the PDF reads as one design
@@ -81,13 +89,18 @@ class _ReportPdf(FPDF):
         super().__init__(orientation="L", format="A4")
         self.report_logo = logo
 
+    @property
+    def cover_text_width(self) -> float:
+        """Keep even wrapped cover text clear of the largest possible logo."""
+        return self.epw - (_COVER_LOGO_BOX[0] + _COVER_LOGO_GUTTER if self.report_logo else 0)
+
     def header(self) -> None:
         """Fit the logo on the right of the title, or in the continuation margin."""
         logo = self.report_logo
         if logo is None:
             return
         first_page = self.page_no() == 1
-        max_width, max_height = (46, 14) if first_page else (36, 9)
+        max_width, max_height = _COVER_LOGO_BOX if first_page else _CONTINUATION_LOGO_BOX
         scale = min(max_width / logo.width, max_height / logo.height)
         width, height = logo.width * scale, logo.height * scale
         center_y = self.t_margin + 8 if first_page else self.t_margin / 2
@@ -215,15 +228,73 @@ def _format_temp(value: int | float, unit: str) -> str:
     return f"{str(value).removesuffix('.0')}{unit}"
 
 
-def _format_pdf_time(at: datetime) -> str:
-    """e.g. "Aug 24, 2026  3:05 PM" - no leading zeros, without relying on
+def _format_pdf_date(day: date) -> str:
+    """Zero-padded US dates, without changing the date or timezone received."""
+    return f"{day.month:02d}/{day.day:02d}/{day.year:04d}"
 
-    %-d/%-I: those "no leading zero" strftime flags are a glibc extension
-    (Windows' C runtime raises ValueError for them), so day/hour are built
-    from plain ints instead of leaning on a platform-specific format flag.
-    """
-    hour12 = at.hour % 12 or 12
-    return f"{at:%b} {at.day}, {at.year}  {hour12}:{at:%M %p}"
+
+def _format_pdf_time(at: datetime) -> str:
+    """Keep the recorded wall time and 12-hour clock, e.g. 01/02/2026  3:05 PM."""
+    return f"{_format_pdf_date(at)}  {at.hour % 12 or 12}:{at:%M %p}"
+
+
+def _humanize_entity_id(entity_id: str) -> str:
+    object_id = entity_id.partition(".")[2] or entity_id
+    return " ".join(object_id.replace("_", " ").split()).title() or "Device"
+
+
+def _entity_reference_formatter(entity_ids: Iterable[str]) -> Callable[[str], str]:
+    """Humanize exact known ID tokens, without altering other words or underscores."""
+    names = {entity_id.casefold(): _humanize_entity_id(entity_id) for entity_id in entity_ids}
+    if not names:
+        return lambda text: text
+    alternatives = "|".join(re.escape(entity_id) for entity_id in names)
+    tokens = re.compile(rf"(?<![\w.])(?:{alternatives})(?!\w|\.\w)", re.IGNORECASE)
+
+    def display_refs(text: str) -> str:
+        return tokens.sub(lambda match: names.get(match[0].casefold(), match[0]), text)
+
+    return display_refs
+
+
+def _entity_labels(
+    entities: list[EntityReport], display_refs: Callable[[str], str]
+) -> dict[str, str]:
+    """Keep friendly names, with a readable and stable suffix only on collisions."""
+    labels: dict[str, str] = {}
+    for entity in entities:
+        friendly = entity.friendly_name.strip() if isinstance(entity.friendly_name, str) else ""
+        object_id = entity.entity_id.partition(".")[2]
+        if not friendly or ("_" in object_id and friendly.casefold() == object_id):
+            friendly = _humanize_entity_id(entity.entity_id)
+        labels[entity.entity_id] = _safe_text(display_refs(friendly))
+
+    groups: dict[str, list[str]] = {}
+    for entity_id in sorted(labels):
+        groups.setdefault(labels[entity_id].casefold(), []).append(entity_id)
+    taken = set(groups)
+    for ids in groups.values():
+        if len(ids) < 2:
+            continue
+        number = 1
+        for entity_id in ids:
+            base = labels[entity_id]
+            while (label := f"{base} ({number})").casefold() in taken:
+                number += 1
+            labels[entity_id] = label
+            taken.add(label.casefold())
+            number += 1
+    return labels
+
+
+def _source_label(point: ReportPoint, display_refs: Callable[[str], str]) -> str:
+    """Print the rule (or schedule) as recorded; a nameless match is not 'Other'."""
+    if point.source != "rule":
+        return "Other"
+    for name in (point.rule_name, point.schedule_name):
+        if isinstance(name, str) and name.strip():
+            return display_refs(name)
+    return "Schedule match"
 
 
 def _describe_attributes(
@@ -296,20 +367,23 @@ def _draw_table_header(pdf: FPDF) -> None:
     pdf.set_text_color(*_HEADER_TEXT)
     pdf.set_font("Helvetica", "B", 8.5)
     for width, header in zip(_COLUMN_WIDTHS, _COLUMN_HEADERS):
-        pdf.cell(width, 7.5, header.upper(), fill=True)
-    pdf.ln(7.5)
+        pdf.cell(width, _TABLE_HEADER_HEIGHT, header.upper(), fill=True)
+    pdf.ln(_TABLE_HEADER_HEIGHT)
 
 
 def _draw_report_summary(
-    pdf: FPDF, sections: list[tuple[EntityReport, list[tuple[ReportPoint, ReportPoint | None]]]]
+    pdf: _ReportPdf, sections: list[tuple[EntityReport, list[tuple[ReportPoint, ReportPoint | None]]]]
 ) -> None:
     """Summarize displayed rows only; a rule match is not a success check."""
     shown = sum(len(rows) for _, rows in sections)
     matched = sum(point.source == "rule" for _, rows in sections for point, _ in rows)
     pdf.set_text_color(*_TEXT_DARK)
     pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(0, 6, f"Devices: {len(sections)}  ·  History rows shown: {shown}  ·  Schedule matches: {matched}",
-             new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(
+        pdf.cover_text_width, 6,
+        f"Devices: {len(sections)}  ·  History rows shown: {shown}  ·  Schedule matches: {matched}",
+        align="L", new_x="LMARGIN", new_y="NEXT",
+    )
     no_history = sum(entity.no_data for entity, _ in sections)
     truncated = sum(entity.truncated for entity, _ in sections)
     caveats = []
@@ -323,14 +397,36 @@ def _draw_report_summary(
         pdf.cell(0, 5, "  ·  ".join(caveats), new_x="LMARGIN", new_y="NEXT")
 
 
-def _draw_entity_heading(pdf: FPDF, entity: EntityReport, *, continued: bool = False) -> None:
+def _draw_entity_heading(
+    pdf: FPDF, label: str, *, continued: bool = False, measure: bool = False
+) -> float:
     """Wrap long device names inside the page margins."""
     pdf.set_text_color(*_TEXT_DARK)
     pdf.set_font("Helvetica", "B", 11 if continued else 13)
-    title = _safe_text(entity.friendly_name) + (" (continued)" if continued else "")
-    pdf.multi_cell(0, 6 if continued else 7, title, align="L", new_x="LMARGIN", new_y="NEXT")
-    if continued:
-        pdf.ln(2)
+    title = label + (" (continued)" if continued else "")
+    line_height, gap = (6, 2) if continued else (7, 3)
+    if measure:
+        return pdf.multi_cell(0, line_height, title, dry_run=True, output=MethodReturnValue.HEIGHT) + gap
+    pdf.multi_cell(0, line_height, title, align="L", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(gap)
+    return 0
+
+
+def _layout_row(
+    pdf: FPDF, entity: EntityReport, point: ReportPoint, previous: ReportPoint | None,
+    unit: str, display_refs: Callable[[str], str],
+) -> tuple[tuple[str, ...], tuple[str, ...], float]:
+    details, target_changed = _describe_attributes(entity.domain, point, previous, unit)
+    values = (
+        _format_pdf_time(point.at), _humanize_word(point.state), details,
+        _source_label(point, display_refs),
+    )
+    styles = ("", "B", "B" if target_changed else "", "")
+    row_lines = 1
+    for width, value, style in zip(_COLUMN_WIDTHS, values, styles):
+        pdf.set_font("Helvetica", style, 8.5)
+        row_lines = max(row_lines, _line_count(pdf, value, width))
+    return values, styles, row_lines * 5 + 2
 
 
 def _render_pdf(
@@ -344,19 +440,20 @@ def _render_pdf(
     pdf = _ReportPdf(decode_report_logo(logo) if logo else None)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(16, 16, 16)
+    pdf.set_title(_REPORT_TITLE)
     pdf.add_page()
 
     pdf.set_text_color(*_TEXT_DARK)
     pdf.set_font("Helvetica", "B", 20)
-    pdf.cell(0, 10, "Scheduler+ Report", new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(pdf.cover_text_width, 10, _REPORT_TITLE, align="L", new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*_TEXT_MUTED)
     pdf.set_font("Helvetica", "", 10.5)
     date_range = (
-        report.start_date.isoformat()
+        _format_pdf_date(report.start_date)
         if report.start_date == report.end_date
-        else f"{report.start_date.isoformat()} to {report.end_date.isoformat()}"
+        else f"{_format_pdf_date(report.start_date)} to {_format_pdf_date(report.end_date)}"
     )
-    pdf.cell(0, 6, date_range, new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(pdf.cover_text_width, 6, date_range, align="L", new_x="LMARGIN", new_y="NEXT")
     unit = ""
     if temperature_unit is not None and temperature_unit in (
         UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT,
@@ -377,20 +474,23 @@ def _render_pdf(
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(7)
 
+    display_refs = _entity_reference_formatter(entity.entity_id for entity, _ in sections)
+    labels = _entity_labels(report.entities, display_refs)
     total_width = sum(_COLUMN_WIDTHS)
     for entity_index, (entity, rows) in enumerate(sections):
-        if entity_index > 0:
-            # Keep a new device heading with a header and its first history row.
-            if pdf.will_page_break(42):
-                pdf.add_page()
-            else:
-                pdf.ln(7)
-
-        _draw_entity_heading(pdf, entity)
-        pdf.set_text_color(*_TEXT_MUTED)
-        pdf.set_font("Helvetica", "", 8.5)
-        pdf.cell(0, 5, entity.entity_id, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(3)
+        label = labels[entity.entity_id]
+        first_row = _layout_row(pdf, entity, *rows[0], unit, display_refs) if rows else None
+        content_height = 6 if entity.no_data else _TABLE_HEADER_HEIGHT + (first_row[2] if first_row else 0)
+        if entity.truncated and not entity.no_data and len(rows) <= 1:
+            content_height += _TRUNCATION_NOTE_HEIGHT
+        gap = 7 if entity_index > 0 else 0
+        # Measure the actual wrapped friendly heading so it stays with the table
+        # header and first row, even when the previous device nearly fills a page.
+        if pdf.will_page_break(gap + _draw_entity_heading(pdf, label, measure=True) + content_height):
+            pdf.add_page()
+        else:
+            pdf.ln(gap)
+        _draw_entity_heading(pdf, label)
 
         if entity.no_data:
             pdf.set_text_color(*_TEXT_MUTED)
@@ -402,24 +502,13 @@ def _render_pdf(
         _draw_table_header(pdf)
 
         for index, (point, previous) in enumerate(rows):
-            details, target_changed = _describe_attributes(entity.domain, point, previous, unit)
-            source_text = point.rule_name if point.source == "rule" else "Other"
-            values = (
-                _format_pdf_time(point.at),
-                _humanize_word(point.state),
-                details,
-                str(source_text or ""),
+            values, styles, row_height = first_row if index == 0 else _layout_row(
+                pdf, entity, point, previous, unit, display_refs,
             )
-            styles = ("", "B", "B" if target_changed else "", "")
-            row_lines = 1
-            for width, value, style in zip(_COLUMN_WIDTHS, values, styles):
-                pdf.set_font("Helvetica", style, 8.5)
-                row_lines = max(row_lines, _line_count(pdf, value, width))
-            row_height = row_lines * 5 + 2
-
-            if pdf.get_y() + row_height > pdf.page_break_trigger:
+            closing_note = _TRUNCATION_NOTE_HEIGHT if entity.truncated and index == len(rows) - 1 else 0
+            if pdf.will_page_break(row_height + closing_note):
                 pdf.add_page()
-                _draw_entity_heading(pdf, entity, continued=True)
+                _draw_entity_heading(pdf, label, continued=True)
                 _draw_table_header(pdf)
 
             x, y = pdf.get_x(), pdf.get_y()

@@ -55,7 +55,9 @@ def _png(width: int, height: int, color: str) -> bytes:
 
 
 @pytest.mark.parametrize("row_count, page_count", [(3, 1), (57, 3)])
-@pytest.mark.parametrize("size", [None, (360, 90), (50, 100)])
+@pytest.mark.parametrize("size", [
+    None, (360, 90), (50, 100), (12, 4), (384, 128), (384, 24), (12, 128),
+])
 def test_layout_footer_and_logo(monkeypatch, row_count, page_count, size) -> None:
     placed = []
 
@@ -76,7 +78,9 @@ def test_layout_footer_and_logo(monkeypatch, row_count, page_count, size) -> Non
     assert report.to_dict() == before
     assert len(re.findall(rb"/Type /Page\b", pdf)) == page_count
     assert pdf.count(_FOOTER) == page_count
-    assert b"Scheduler+ Report" in pdf and b"Example hall" in pdf
+    assert b"Device Activity Report" in pdf and b"Example hall" in pdf
+    assert b"(01/12/2026)" in pdf and b"01/12/2026  8:00 AM" in pdf
+    assert b"light.example" not in pdf and b"Scheduler+ Report" not in pdf
     if size is None:
         assert not placed and b"/Subtype /Image" not in pdf
     else:
@@ -86,7 +90,12 @@ def test_layout_footer_and_logo(monkeypatch, row_count, page_count, size) -> Non
             assert width / height == pytest.approx(size[0] / size[1])
             assert x + width == pytest.approx(297 - 16, abs=0.02)
             assert y > 0
-            assert y + height <= (32 if page == 1 else 16)
+            assert y + height <= (36 if page == 1 else 16)
+            old_w, old_h = (46, 14) if page == 1 else (36, 9)
+            old_scale = min(old_w / size[0], old_h / size[1])
+            assert width > old_scale * size[0] and height > old_scale * size[1]
+            if page == 1:
+                assert x >= 16 + (297 - 32 - 64 - 8) + 8 - 0.02
 
 
 @pytest.fixture
@@ -294,7 +303,7 @@ def test_optional_pdf_recap_and_wrapped_continuation(monkeypatch):
             self.set_compression(False)
 
         def multi_cell(self, w, h, text="", *args, **kwargs):
-            if text.startswith("Temperature and monitoring"):
+            if text.startswith("Temperature and monitoring") and not kwargs.get("output"):
                 headings.append((self.page_no(), self.get_x(), w, text))
             return super().multi_cell(w, h, text, *args, **kwargs)
 
@@ -374,7 +383,7 @@ def test_pdf_climate_targets_use_adjacent_history_and_highlight_only_changes(mon
         ("Target 68°F · Room 69.5°F · Idle", ""),  # New device, no prior target.
     ]
     assert b"History rows shown: 11" in pdf and b"Schedule matches: 1" in pdf
-    assert b"7:48 PM" not in pdf and b"Jan 12, 2026  7:49 PM" in pdf
+    assert b"7:48 PM" not in pdf and b"01/12/2026  7:49 PM" in pdf
     assert all(text in pdf for text in (b"Cool", b"Off", b"Unavailable", b"Evening cool", b"Other"))
     assert b"Manual" not in pdf
 
@@ -427,3 +436,106 @@ def test_climate_pdf_without_verified_units_never_guesses(unit_label_report, tem
     assert b"Temperature units not available" in pdf
     assert "Target 20 to 21.5 · Room 19.5".encode("latin-1") in pdf
     assert b"\xb0C" not in pdf and b"\xb0F" not in pdf
+
+
+def _uncompressed(monkeypatch):
+    class InspectPdf(report_view._ReportPdf):
+        def __init__(self, logo):
+            super().__init__(logo)
+            self.set_compression(False)
+
+    monkeypatch.setattr(report_view, "_ReportPdf", InspectPdf)
+
+
+@pytest.mark.parametrize("day_offset, hour, utc_offset, time_text", [
+    (1, 0, 14, b"01/02/2026  12:05 AM"),  # Local date is ahead of UTC.
+    (2, 12, -5, b"01/03/2026  12:05 PM"),
+    (2, 23, -5, b"01/03/2026  11:05 PM"),  # Local date is behind UTC.
+])
+def test_pdf_dates_keep_range_and_recorded_wall_time(monkeypatch, day_offset, hour, utc_offset, time_text):
+    _uncompressed(monkeypatch)
+    at = datetime(2026, 1, 1 + day_offset, hour, 5, tzinfo=timezone(timedelta(hours=utc_offset)))
+    report = ReportData(start_date=date(2026, 1, 1), end_date=date(2026, 1, 3), entities=[
+        _climate_history([ReportPoint(at=at, state="off", attributes={}, source="other")]),
+    ])
+    start = report.to_dict()
+    pdf = report_view._render_pdf(report, temperature_unit="°F")
+    assert b"01/01/2026 to 01/03/2026" in pdf and time_text in pdf
+    assert b"2026-01-" not in pdf and b"Jan " not in pdf
+    assert report.to_dict() == start
+
+
+def test_pdf_friendly_labels_and_continuations_are_distinct_and_display_only(monkeypatch):
+    _uncompressed(monkeypatch)
+    report = _report(57)
+    original = report.entities[0]
+    original.friendly_name = "Example Hall"
+    report.entities.extend([
+        EntityReport(entity_id="light.west_annex", domain="light", friendly_name="example hall", no_data=True),
+        EntityReport(entity_id="light.family_rooms", domain="light", friendly_name="Example Hall (1)", no_data=True),
+        EntityReport(entity_id="climate.unit_4", domain="climate", friendly_name="climate.unit_4", no_data=True),
+        EntityReport(entity_id="switch.side_door", domain="switch", friendly_name="  ", no_data=True),
+        EntityReport(entity_id="climate.unit_5", domain="climate", friendly_name="UNIT 5", no_data=True),
+        EntityReport(entity_id="switch.lobby_power", domain="switch", friendly_name="lobby_power", no_data=True),
+    ])
+    before = report.to_dict()
+    pdf = report_view._render_pdf(report)
+    for marker in [
+        rb"(Example Hall \(2\))", rb"(Example Hall \(2\) \(continued\))", rb"(example hall \(3\))",
+        rb"(Example Hall \(1\))", b"(Unit 4)", b"(Side Door)", b"(UNIT 5)", b"(Lobby Power)",
+    ]:
+        assert marker in pdf
+    assert all(entity.entity_id.encode() not in pdf for entity in report.entities)
+    assert b"lobby_power" not in pdf
+    assert report.to_dict() == before
+
+    # Distinguish different IDs without renumbering them when card selection order changes.
+    report.entities.reverse()
+    reversed_pdf = report_view._render_pdf(report)
+    assert rb"(Example Hall \(2\))" in reversed_pdf
+    assert rb"(example hall \(3\))" in reversed_pdf
+
+
+def test_pdf_source_fallback_does_not_show_entity_ids_or_erase_real_rule_names(monkeypatch):
+    _uncompressed(monkeypatch)
+    at = datetime(2026, 1, 12, 8, tzinfo=timezone.utc)
+    report = ReportData(start_date=_DAY, end_date=_DAY, entities=[EntityReport(
+        entity_id="switch.studio_power", domain="switch", friendly_name="Studio Main (switch.studio_power)",
+        points=[ReportPoint(
+            at=at + timedelta(minutes=i), state="on" if i % 2 else "off", attributes={},
+            source="rule", rule_name=rule, schedule_name=schedule,
+        ) for i, (rule, schedule) in enumerate([
+            ("Evening_Prayer v2.5 / Hall - 10 PM", "Not shown when the rule is named"),
+            ("Relay switch.studio_power after closing", None),
+            (None, "Special case: switch.studio_power"),
+            ("", None),
+        ])],
+    )])
+    before = report.to_dict()
+    pdf = report_view._render_pdf(report)
+    assert all(text in pdf for text in (
+        b"Studio Main", b"Evening_Prayer v2.5 / Hall - 10 PM", b"Relay Studio Power after closing",
+        b"Special case: Studio Power", b"(Schedule match)", b"Schedule matches: 4",
+    ))
+    assert b"switch.studio_power" not in pdf and b"Not shown when the rule is named" not in pdf
+    assert report.to_dict() == before
+
+
+def test_pdf_wrapped_device_title_stays_with_first_row_near_page_bottom(monkeypatch):
+    _uncompressed(monkeypatch)
+    report = _report(12)
+    report.entities.append(EntityReport(
+        entity_id="light.gallery", domain="light",
+        friendly_name=("Gallery Reception - " + ("West Wing Entrance and Exhibition Reception " * 9)).strip(),
+        points=[ReportPoint(at=datetime(2026, 1, 12, 22, 15, tzinfo=timezone.utc), state="on",
+                            source="rule", rule_name="After-hours walkthrough", attributes={"brightness": 255})],
+        truncated=True,
+    ))
+    pdf = report_view._render_pdf(report, _png(384, 128, "teal"))
+    tables = [stream for stream in re.findall(rb"\nstream\n(.*?)\nendstream", pdf, re.S) if _FOOTER in stream]
+    assert len(tables) == 2
+    assert b"Gallery Reception" not in tables[0]
+    assert all(text in tables[1] for text in (
+        b"Gallery Reception", b"(TIME)", b"(01/12/2026  10:15 PM)", b"(After-hours walkthrough)", b"(Truncated -",
+    ))
+    assert b"(continued)" not in tables[1]
