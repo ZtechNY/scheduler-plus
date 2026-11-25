@@ -1,4 +1,4 @@
-import { mdiDelete, mdiPencil } from "@mdi/js";
+import { mdiChevronDown, mdiChevronUp, mdiDelete, mdiDragVertical, mdiPencil } from "@mdi/js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 
@@ -123,6 +123,10 @@ export class SchedulerPlusScheduleEditor extends LitElement {
 
   @state() private _rules: RuleInput[] = [];
 
+  private _draggedRuleIndex: number | null = null;
+
+  @state() private _dropTargetIndex: number | null = null;
+
   /** Seasonal active window - see Schedule.is_active_on's docstring in models.py. */
   @state() private _activeDateMode: RuleDateMode = "always";
 
@@ -147,6 +151,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   private _templateEditor?: SchedulerPlusTemplateEditor;
 
   public showDialog(schedule?: Schedule): void {
+    this._draggedRuleIndex = null;
+    this._dropTargetIndex = null;
     this._schedule = schedule;
     this._name = schedule?.name ?? "";
     this._deviceType = schedule?.device_type ?? "light_switch";
@@ -170,6 +176,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
    * rules already take when a rule is added from scratch).
    */
   public showDialogDuplicate(schedule: Schedule): void {
+    this._draggedRuleIndex = null;
+    this._dropTargetIndex = null;
     this._schedule = undefined;
     this._name = `Copy of ${schedule.name}`;
     this._deviceType = schedule.device_type;
@@ -198,6 +206,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
    * being applied sight-unseen.
    */
   public showDialogFromTemplate(template: ScheduleTemplate): void {
+    this._draggedRuleIndex = null;
+    this._dropTargetIndex = null;
     this._schedule = undefined;
     this._name = template.name;
     this._deviceType = template.device_type;
@@ -217,6 +227,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
   }
 
   private _closeDialog = (): void => {
+    this._draggedRuleIndex = null;
+    this._dropTargetIndex = null;
     this._open = false;
   };
 
@@ -280,6 +292,30 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       return;
     }
     this._rules = this._rules.filter((_, i) => i !== index);
+  };
+
+  private _moveRule = (from: number, to: number): void => {
+    if (from === to || from < 0 || to < 0 || to >= this._rules.length) return;
+    const rules = [...this._rules];
+    const [rule] = rules.splice(from, 1);
+    if (!rule) return;
+    rules.splice(to, 0, rule);
+    this._rules = rules;
+  };
+
+  private _startRuleDrag = (event: DragEvent, index: number): void => {
+    this._draggedRuleIndex = index;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(index));
+    }
+  };
+
+  private _dropRule = (event: DragEvent, index: number): void => {
+    event.preventDefault();
+    if (this._draggedRuleIndex !== null) this._moveRule(this._draggedRuleIndex, index);
+    this._draggedRuleIndex = null;
+    this._dropTargetIndex = null;
   };
 
   /**
@@ -637,7 +673,29 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             ? ` · only ${filterParts.join(", ")}`
             : "";
     return html`
-      <li class="rule ${rule.enabled ? "" : "disabled"}">
+      <li
+        class="rule ${rule.enabled ? "" : "disabled"} ${this._dropTargetIndex === index ? "drop-target" : ""}"
+        @dragover=${(event: DragEvent) => {
+          if (this._draggedRuleIndex !== null) {
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+            if (this._dropTargetIndex !== index) this._dropTargetIndex = index;
+          }
+        }}
+        @drop=${(event: DragEvent) => this._dropRule(event, index)}
+      >
+        <span
+          class="drag-handle"
+          draggable="true"
+          role="img"
+          aria-label="Drag to move ${rule.name}"
+          title="Drag to reorder"
+          @dragstart=${(event: DragEvent) => this._startRuleDrag(event, index)}
+          @dragend=${() => {
+            this._draggedRuleIndex = null;
+            this._dropTargetIndex = null;
+          }}
+        ><ha-svg-icon .path=${mdiDragVertical}></ha-svg-icon></span>
         <ha-switch
           .checked=${rule.enabled}
           @change=${() => this._toggleRuleEnabled(index)}
@@ -652,6 +710,18 @@ export class SchedulerPlusScheduleEditor extends LitElement {
             : nothing}
         </div>
         <div class="row-actions">
+          <ha-icon-button
+            .path=${mdiChevronUp}
+            label="Move ${rule.name} up"
+            ?disabled=${index === 0}
+            @click=${() => this._moveRule(index, index - 1)}
+          ></ha-icon-button>
+          <ha-icon-button
+            .path=${mdiChevronDown}
+            label="Move ${rule.name} down"
+            ?disabled=${index === this._rules.length - 1}
+            @click=${() => this._moveRule(index, index + 1)}
+          ></ha-icon-button>
           <ha-icon-button
             .path=${mdiPencil}
             label="Edit rule"
@@ -832,12 +902,28 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     .rule {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 12px;
       padding: 8px 0;
       border-bottom: 1px solid var(--divider-color);
     }
+    .rule.drop-target {
+      box-shadow: inset 0 2px var(--primary-color);
+    }
     .rule ha-switch {
       flex: none;
+    }
+    .drag-handle {
+      display: flex;
+      align-items: center;
+      color: var(--secondary-text-color);
+      cursor: grab;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    .drag-handle ha-svg-icon {
+      --mdc-icon-size: 20px;
     }
     .rule:last-child {
       border-bottom: none;
@@ -849,7 +935,7 @@ export class SchedulerPlusScheduleEditor extends LitElement {
       display: flex;
       flex-direction: column;
       flex: 1;
-      min-width: 0;
+      min-width: 120px;
     }
     .rule-name {
       font-weight: 500;
@@ -860,6 +946,8 @@ export class SchedulerPlusScheduleEditor extends LitElement {
     }
     .row-actions {
       display: flex;
+      flex: none;
+      margin-left: auto;
     }
   `;
 }

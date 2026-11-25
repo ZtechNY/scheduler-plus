@@ -4,6 +4,13 @@ All notable changes to Scheduler+ are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.6] - 2026-11-25
+
+### Added
+
+- Rearrange rules within a schedule by dragging them or using up and down
+  buttons. The chosen order is saved with the schedule.
+
 ## [0.6.5] - 2026-11-20
 
 ### Fixed
